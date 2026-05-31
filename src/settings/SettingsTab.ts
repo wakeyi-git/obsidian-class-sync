@@ -180,6 +180,27 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(c)
+			.setName("첨부파일 동기화")
+			.setDesc("이미지·PDF 등 비markdown 파일도 동기화 (기술문서 §8.2).")
+			.addToggle((t) =>
+				t.setValue(s.syncAssets).onChange(async (v) => {
+					s.syncAssets = v;
+					await this.host.saveSettings();
+				}),
+			);
+
+		new Setting(c)
+			.setName("첨부 최대 크기 (MB)")
+			.setDesc("이 크기를 넘는 첨부는 동기화하지 않습니다(모바일 보호). 0=무제한.")
+			.addText((t) =>
+				t.setValue(String(s.maxAttachmentMB)).onChange(async (v) => {
+					const n = parseInt(v, 10);
+					s.maxAttachmentMB = Number.isFinite(n) && n >= 0 ? n : 20;
+					await this.host.saveSettings();
+				}),
+			);
+
+		new Setting(c)
 			.setName("삭제 정책")
 			.setDesc("삭제·이름변경 시 상대 vault의 옛 파일 처리. 기술문서 §15.")
 			.addDropdown((dd) =>

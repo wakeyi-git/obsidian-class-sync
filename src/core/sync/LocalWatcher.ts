@@ -47,8 +47,7 @@ export class LocalWatcher {
 		if (!(file instanceof TFile)) return;
 		const localPath = file.path;
 
-		// 빠른 1차 필터(상세 필터는 Uploader가 재확인)
-		if (!this.ctx.isMarkdown(localPath)) return;
+		// 빠른 1차 필터(md/asset 공통, 상세 필터는 Uploader가 재확인)
 		if (this.ctx.isExcluded(localPath)) return;
 		const dbPath = this.ctx.toDbPath(localPath);
 		if (dbPath == null) return; // localRoot 밖
@@ -61,13 +60,22 @@ export class LocalWatcher {
 	 * 진짜 사용자 편집만 pending 표시 + 업로드 예약 → 디바운스 동안 원격 적용이 덮지 못하게.
 	 */
 	private async maybeSchedule(localPath: string, dbPath: string): Promise<void> {
-		const content = await this.ctx.readVaultFile(localPath);
-		if (content == null) return;
-		const hash = await sha256(content);
+		const hash = await this.currentHash(localPath);
+		if (hash == null) return;
 		if (this.ctx.guard.shouldIgnore(localPath, hash)) return; // applier echo → 무시 (§16.2)
 
 		this.ctx.markPending(dbPath);
 		this.scheduleUpload(localPath, dbPath);
+	}
+
+	/** 현재 파일 콘텐츠 해시(markdown=텍스트, 그 외=바이너리). */
+	private async currentHash(localPath: string): Promise<string | null> {
+		if (this.ctx.isMarkdown(localPath)) {
+			const c = await this.ctx.readVaultFile(localPath);
+			return c == null ? null : await sha256(c);
+		}
+		const b = await this.ctx.readVaultBinary(localPath);
+		return b == null ? null : await sha256(b);
 	}
 
 	/**
@@ -83,14 +91,14 @@ export class LocalWatcher {
 
 	private async handleRename(oldPath: string, newPath: string): Promise<void> {
 		try {
-			// 옛 경로가 동기화 범위 안 markdown이면 tombstone
+			// 옛 경로가 동기화 범위 안이면 tombstone(md/asset 공통)
 			const oldDb = this.ctx.toDbPath(oldPath);
-			if (oldDb != null && this.ctx.isMarkdown(oldPath) && !this.ctx.isExcluded(oldPath)) {
+			if (oldDb != null && !this.ctx.isExcluded(oldPath)) {
 				await this.uploader.tombstonePath(oldDb);
 			}
-			// 새 경로가 범위 안 markdown이면 업로드
+			// 새 경로가 범위 안이면 업로드(md/asset 공통)
 			const newDb = this.ctx.toDbPath(newPath);
-			if (newDb != null && this.ctx.isMarkdown(newPath) && !this.ctx.isExcluded(newPath)) {
+			if (newDb != null && !this.ctx.isExcluded(newPath)) {
 				this.ctx.markPending(newDb);
 				try {
 					await this.uploader.uploadPath(newPath);
@@ -112,7 +120,6 @@ export class LocalWatcher {
 		if (!(file instanceof TFile)) return;
 		const localPath = file.path;
 		if (this.ctx.isStructuralSuppressed(localPath)) return; // applier가 일으킨 삭제/이동 echo
-		if (!this.ctx.isMarkdown(localPath)) return;
 
 		// .deleted/ 안에서 삭제 → purge
 		const archivedDb = this.ctx.archiveDbPath(localPath);

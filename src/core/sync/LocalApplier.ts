@@ -31,6 +31,8 @@ export class LocalApplier {
 						await this.applier.applyPurge(change.id);
 					} else if (change.doc && (change.doc as any).type === "note") {
 						await this.applier.applyDoc(change.doc);
+					} else if (change.doc && (change.doc as any).type === "asset") {
+						await this.applier.applyAsset(change.doc as any);
 					}
 				} catch (e) {
 					this.ctx.logger.error(`로컬 변경 적용 실패: ${change.id} — ${e instanceof Error ? e.message : String(e)}`);

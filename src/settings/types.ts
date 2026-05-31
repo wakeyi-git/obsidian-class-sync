@@ -62,6 +62,12 @@ export interface ClassSyncSettings {
 	/** 자동 동기화(로컬 watch + 원격 구독) 활성 여부. */
 	autoSync: boolean;
 
+	/** 첨부파일(비markdown) 동기화 여부. 기술문서 §8.2 / §24.6. */
+	syncAssets: boolean;
+
+	/** 첨부파일 최대 크기(MB). 초과 시 동기화 생략(모바일 보호). 0=무제한. */
+	maxAttachmentMB: number;
+
 	/** 편집 중 업로드 debounce(ms). 기술문서 §11.3. */
 	debounceMs: number;
 
@@ -96,6 +102,8 @@ export const DEFAULT_SETTINGS: ClassSyncSettings = {
 	archiveFolder: "_삭제됨",
 	conflictFolder: "_충돌",
 	autoSync: true,
+	syncAssets: true,
+	maxAttachmentMB: 20,
 	debounceMs: 2000,
 	lastSeqByDb: {},
 	conflictPolicy: "preserve-local",

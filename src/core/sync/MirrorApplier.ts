@@ -1,7 +1,15 @@
 import { MirrorContext } from "./MirrorContext";
 import { ConflictManager } from "./ConflictManager";
-import { NoteDoc } from "../model/types";
+import { NoteDoc, AssetDoc, assetId } from "../model/types";
 import { sha256 } from "../hash/hash";
+
+/** 삭제(tombstone) 적용에 필요한 최소 형태(note/asset 공통). */
+type DeletableDoc = {
+	path: string;
+	deleted: boolean;
+	lastModifiedDeviceId: string;
+	deleteMode?: "archive" | "propagate-delete" | "ignore-delete";
+};
 
 export type ApplyResult =
 	| "applied"
@@ -99,8 +107,10 @@ export class MirrorApplier {
 	 */
 	async applyPurge(id: string): Promise<void> {
 		const ctx = this.ctx;
-		if (!id.startsWith("note:")) return;
-		const dbPath = id.slice("note:".length);
+		let dbPath: string;
+		if (id.startsWith("note:")) dbPath = id.slice("note:".length);
+		else if (id.startsWith("asset:")) dbPath = id.slice("asset:".length);
+		else return;
 		const archivePath = ctx.archiveLocalPath(dbPath);
 		const file = ctx.getFile(archivePath);
 		if (!file) return;
@@ -109,8 +119,46 @@ export class MirrorApplier {
 		ctx.logger.info(`purge 전파: 아카이브 정리 ${archivePath}`);
 	}
 
+	/**
+	 * asset(첨부파일) 적용. applyDoc의 바이너리 버전. 충돌은 보존(로컬 유지)만, 비교/해소 UI는 없음.
+	 */
+	async applyAsset(doc: AssetDoc & { _conflicts?: string[] }): Promise<ApplyResult> {
+		const ctx = this.ctx;
+		if (!ctx.isValidDbPath(doc.path)) return "skipped-nonmd";
+		if (doc.deleted) return await this.applyDeletion(doc);
+		if (!ctx.settings.syncAssets) return "skipped-nonmd";
+		if (ctx.isPending(doc.path)) return "skipped-pending";
+
+		const localPath = ctx.toLocalPath(doc.path);
+		const local = await ctx.readVaultBinary(localPath);
+		const localHash = local == null ? null : await sha256(local);
+		if (localHash === doc.contentHash) return "skipped-same";
+
+		const hasConflict = !!doc._conflicts && doc._conflicts.length > 0;
+		if (hasConflict) {
+			if (!this.loggedConflicts.has(doc.path)) {
+				this.loggedConflicts.add(doc.path);
+				ctx.logger.warn(`첨부 충돌 보류(preserve-local): ${localPath} — 로컬 유지. (바이너리는 수동 정리)`, true);
+			}
+			return "conflict";
+		}
+		if (doc.lastModifiedDeviceId === ctx.settings.deviceId) return "skipped-self";
+
+		const data = await ctx.pouch.getAssetBinary(assetId(doc.path));
+		if (data == null) {
+			ctx.logger.warn(`첨부 데이터 없음(전파 대기?): ${doc.path}`);
+			return "skipped-nonmd";
+		}
+		ctx.guard.mark(localPath, doc.contentHash);
+		await ctx.writeVaultBinary(localPath, data);
+		ctx.guard.releaseAfterDelay(localPath);
+		ctx.status.lastDownloadAt = Date.now();
+		ctx.logger.ok(`원격→로컬 적용(첨부): ${localPath}`);
+		return "applied";
+	}
+
 	/** tombstone 적용: 정책(archive/propagate-delete/ignore-delete)대로 로컬 파일 처리. */
-	private async applyDeletion(doc: DocWithConflicts): Promise<ApplyResult> {
+	private async applyDeletion(doc: DeletableDoc): Promise<ApplyResult> {
 		const ctx = this.ctx;
 
 		// 내가 만든 tombstone의 에코 → 무시 (내 vault는 이미 처리됨)

@@ -52,7 +52,17 @@ export class FullSync {
 			const res = await this.applier.applyDoc(fresh ?? doc);
 			if (res === "applied") applied++;
 		}
-		ctx.logger.info(`다운로드 정합: ${notes.length}개 문서 중 ${applied}개 적용.`);
+		// 첨부파일
+		let assetCount = 0;
+		if (ctx.settings.syncAssets) {
+			const assets = await ctx.pouch.allAssets();
+			assetCount = assets.length;
+			for (const doc of assets) {
+				const res = await this.applier.applyAsset(doc as any);
+				if (res === "applied") applied++;
+			}
+		}
+		ctx.logger.info(`다운로드 정합: 문서 ${notes.length} + 첨부 ${assetCount} 중 ${applied}개 적용.`);
 	}
 
 	private async upload(): Promise<void> {
@@ -66,10 +76,11 @@ export class FullSync {
 		ctx.logger.info(`업로드 정합: ${files.length}개 파일 중 ${uploaded}개 업로드.`);
 	}
 
-	/** localRoot 아래, excludeFolders 제외 markdown 파일 목록. */
+	/** localRoot 아래, excludeFolders 제외 동기화 대상 파일(markdown + 첨부). */
 	private localFiles(): TFile[] {
 		const ctx = this.ctx;
-		return ctx.app.vault.getMarkdownFiles().filter((f) => {
+		const all = ctx.settings.syncAssets ? ctx.app.vault.getFiles() : ctx.app.vault.getMarkdownFiles();
+		return all.filter((f) => {
 			if (ctx.toDbPath(f.path) == null) return false; // localRoot 밖
 			if (ctx.isExcluded(f.path)) return false;
 			return true;

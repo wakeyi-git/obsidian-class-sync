@@ -1,7 +1,7 @@
 import { TFile, normalizePath as obsidianNormalize } from "obsidian";
 import { CoreServices } from "../CoreServices";
 import { PouchService } from "../couch/PouchService";
-import { NoteDoc } from "../model/types";
+import { NoteDoc, AssetDoc, assetId } from "../model/types";
 import { sha256 } from "../hash/hash";
 import { dbPathToLocal, localPathToDb, normalizePath, validateVaultPath } from "../path/path";
 
@@ -214,6 +214,21 @@ export class MirrorContext {
 		}
 	}
 
+	// --- 바이너리(첨부파일) 입출력 ---
+
+	async readVaultBinary(localPath: string): Promise<ArrayBuffer | null> {
+		const file = this.app.vault.getAbstractFileByPath(localPath);
+		if (file instanceof TFile) return await this.app.vault.readBinary(file);
+		return null;
+	}
+
+	async writeVaultBinary(localPath: string, data: ArrayBuffer): Promise<void> {
+		await this.ensureParentFolder(localPath);
+		const existing = this.app.vault.getAbstractFileByPath(localPath);
+		if (existing instanceof TFile) await this.app.vault.modifyBinary(existing, data);
+		else await this.app.vault.createBinary(localPath, data);
+	}
+
 	// --- 문서 빌드 ---
 
 	/** 로컬 내용으로 NoteDoc 빌드(업로드용). 기술문서 §8.1. */
@@ -239,8 +254,55 @@ export class MirrorContext {
 		};
 	}
 
+	/** asset(첨부파일) 문서 빌드. 바이너리는 PouchService가 attachment로 저장. 기술문서 §8.2. */
+	async buildAssetDoc(dbPath: string, data: ArrayBuffer, prevVersion = 0): Promise<AssetDoc> {
+		const s = this.settings;
+		const now = Date.now();
+		return {
+			_id: assetId(dbPath),
+			type: "asset",
+			schemaVersion: 1,
+			classId: s.classId,
+			studentId: this.studentId,
+			path: dbPath,
+			mime: mimeFor(dbPath),
+			size: data.byteLength,
+			contentHash: await sha256(data),
+			mtime: now,
+			deleted: false,
+			version: prevVersion + 1,
+			lastModifiedBy: s.userId,
+			lastModifiedRole: s.role,
+			lastModifiedDeviceId: s.deviceId,
+			updatedAt: new Date(now).toISOString(),
+		};
+	}
+
 	/** DB path 유효성(§9.1). */
 	isValidDbPath(dbPath: string): boolean {
 		return validateVaultPath(dbPath);
 	}
+}
+
+/** 확장자 → MIME. 미상은 octet-stream. */
+function mimeFor(path: string): string {
+	const ext = (path.split(".").pop() ?? "").toLowerCase();
+	const map: Record<string, string> = {
+		png: "image/png",
+		jpg: "image/jpeg",
+		jpeg: "image/jpeg",
+		gif: "image/gif",
+		webp: "image/webp",
+		svg: "image/svg+xml",
+		bmp: "image/bmp",
+		pdf: "application/pdf",
+		mp3: "audio/mpeg",
+		mp4: "video/mp4",
+		webm: "video/webm",
+		zip: "application/zip",
+		json: "application/json",
+		txt: "text/plain",
+		csv: "text/csv",
+	};
+	return map[ext] ?? "application/octet-stream";
 }

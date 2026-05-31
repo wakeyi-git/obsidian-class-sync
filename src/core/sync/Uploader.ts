@@ -1,59 +1,89 @@
 import { MirrorContext } from "./MirrorContext";
-import { NoteDoc, noteId } from "../model/types";
+import { NoteDoc, AssetDoc, noteId, assetId } from "../model/types";
 import { sha256 } from "../hash/hash";
 
-export type UploadResult = "uploaded" | "skipped-same" | "skipped-outside" | "skipped-excluded" | "skipped-nonmd" | "skipped-missing";
+export type UploadResult =
+	| "uploaded"
+	| "skipped-same"
+	| "skipped-outside"
+	| "skipped-excluded"
+	| "skipped-asset-off"
+	| "skipped-toolarge"
+	| "skipped-missing";
 
 /**
- * 로컬 vault 파일 → 로컬 PouchDB upsert. 기술문서 §11.2 / §18.2.
+ * 로컬 vault 파일 → 로컬 PouchDB upsert. 기술문서 §11.2 / §18.2 / §8.2.
  *
- * 로컬 DB에 쓰면 live replication이 원격으로 전파한다(오프라인이면 큐에 쌓였다 재연결 시 전파).
- * 동일 contentHash면 생략(§18.2). 업로드 문서는 lastModifiedDeviceId=내 deviceId라,
- * 로컬 changes로 되돌아와도 Applier가 무시한다(루프 차단).
- * LocalWatcher와 FullSync(up)가 공유한다.
+ * markdown은 note 문서, 그 외 파일은 asset 문서(+PouchDB attachment)로 올린다.
+ * 동일 contentHash면 생략(§18.2). lastModifiedDeviceId=내 deviceId라 에코는 Applier가 무시.
  */
 export class Uploader {
 	constructor(private ctx: MirrorContext) {}
 
 	async uploadPath(localPath: string): Promise<UploadResult> {
 		const ctx = this.ctx;
-
-		if (!ctx.isMarkdown(localPath)) return "skipped-nonmd";
 		if (ctx.isExcluded(localPath)) return "skipped-excluded";
-
 		const dbPath = ctx.toDbPath(localPath);
 		if (dbPath == null || !ctx.isValidDbPath(dbPath)) return "skipped-outside";
 
+		return ctx.isMarkdown(localPath) ? this.uploadNote(localPath, dbPath) : this.uploadAsset(localPath, dbPath);
+	}
+
+	private async uploadNote(localPath: string, dbPath: string): Promise<UploadResult> {
+		const ctx = this.ctx;
 		const content = await ctx.readVaultFile(localPath);
 		if (content == null) return "skipped-missing";
-
 		const newHash = await sha256(content);
 
-		// 로컬 DB 현재 문서와 동일하면 생략 (§18.2).
-		// 단, 기존이 tombstone(deleted)이면 같은 해시여도 부활(업로드)시킨다.
+		// 동일하면 생략. 단 tombstone이면 같은 해시여도 부활.
 		const existing = await ctx.pouch.get<NoteDoc>(noteId(dbPath));
 		if (existing && !existing.deleted && existing.contentHash === newHash) return "skipped-same";
 
 		const doc = await ctx.buildNoteDoc(dbPath, content, existing?.version ?? 0);
 		await ctx.pouch.put(doc);
-		ctx.status.lastUploadAt = Date.now();
-		ctx.status.lastError = undefined;
-		ctx.logger.ok(`로컬→원격 업로드: ${dbPath}`);
+		this.markUploaded(dbPath);
 		return "uploaded";
 	}
 
-	/**
-	 * 파일 삭제/이름변경 시 옛 경로를 tombstone 처리(기술문서 §8.3 / §10.3).
-	 * 내용은 보존(복구 가능), deleted=true로 표시해 상대 vault가 정책대로 처리하게 한다.
-	 */
+	private async uploadAsset(localPath: string, dbPath: string): Promise<UploadResult> {
+		const ctx = this.ctx;
+		if (!ctx.settings.syncAssets) return "skipped-asset-off";
+
+		const data = await ctx.readVaultBinary(localPath);
+		if (data == null) return "skipped-missing";
+
+		const maxBytes = (ctx.settings.maxAttachmentMB || 0) * 1024 * 1024;
+		if (maxBytes > 0 && data.byteLength > maxBytes) {
+			ctx.logger.warn(`첨부 크기 초과로 생략: ${dbPath} (${(data.byteLength / 1024 / 1024).toFixed(1)}MB)`);
+			return "skipped-toolarge";
+		}
+
+		const newHash = await sha256(data);
+		const existing = await ctx.pouch.get<AssetDoc>(assetId(dbPath));
+		if (existing && !existing.deleted && existing.contentHash === newHash) return "skipped-same";
+
+		const doc = await ctx.buildAssetDoc(dbPath, data, existing?.version ?? 0);
+		await ctx.pouch.putAsset(doc, data);
+		this.markUploaded(dbPath);
+		return "uploaded";
+	}
+
+	private markUploaded(dbPath: string): void {
+		this.ctx.status.lastUploadAt = Date.now();
+		this.ctx.status.lastError = undefined;
+		this.ctx.logger.ok(`로컬→원격 업로드: ${dbPath}`);
+	}
+
+	/** 삭제/이름변경 시 옛 경로를 tombstone 처리(note/asset 공통). 기술문서 §8.3 / §10.3. */
 	async tombstonePath(dbPath: string): Promise<"tombstoned" | "skipped"> {
 		const ctx = this.ctx;
 		const s = ctx.settings;
-		const existing = await ctx.pouch.get<NoteDoc>(noteId(dbPath));
-		if (!existing || existing.deleted) return "skipped"; // 없거나 이미 tombstone
+		const id = ctx.isMarkdown(dbPath) ? noteId(dbPath) : assetId(dbPath);
+		const existing = await ctx.pouch.get<NoteDoc | AssetDoc>(id);
+		if (!existing || existing.deleted) return "skipped";
 
 		const now = Date.now();
-		const doc: NoteDoc = {
+		const doc: any = {
 			...existing,
 			deleted: true,
 			deletedAt: new Date(now).toISOString(),
@@ -67,20 +97,19 @@ export class Uploader {
 			lastModifiedDeviceId: s.deviceId,
 			updatedAt: new Date(now).toISOString(),
 		};
+		delete doc._attachments; // tombstone은 바이너리 불필요
 		await ctx.pouch.put(doc);
 		ctx.logger.ok(`tombstone(삭제 표시): ${dbPath}`);
 		return "tombstoned";
 	}
 
-	/**
-	 * DB 문서 영구 제거(purge). 사용자가 .deleted/에서 파일을 지웠을 때 호출.
-	 * PouchDB hard-remove → replication이 원격·타 클라이언트의 문서까지 제거한다.
-	 */
+	/** DB 문서 영구 제거(purge, note/asset 공통). .deleted/에서 지웠을 때. */
 	async purgePath(dbPath: string): Promise<"purged" | "skipped"> {
 		const ctx = this.ctx;
-		const existing = await ctx.pouch.get<NoteDoc>(noteId(dbPath));
+		const id = ctx.isMarkdown(dbPath) ? noteId(dbPath) : assetId(dbPath);
+		const existing = await ctx.pouch.get<NoteDoc | AssetDoc>(id);
 		if (!existing || !existing._rev) return "skipped";
-		await ctx.pouch.removeRev(noteId(dbPath), existing._rev);
+		await ctx.pouch.removeRev(id, existing._rev);
 		ctx.logger.ok(`DB에서 영구 삭제(purge): ${dbPath}`);
 		return "purged";
 	}

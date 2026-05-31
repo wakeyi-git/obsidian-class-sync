@@ -1,5 +1,5 @@
 import PouchDB from "pouchdb-browser";
-import { NoteDoc, PouchDocBase } from "../model/types";
+import { NoteDoc, AssetDoc, PouchDocBase } from "../model/types";
 import { createObsidianFetch } from "./obsidianFetch";
 
 /**
@@ -196,6 +196,55 @@ export class PouchService {
 		return String(info.update_seq ?? "0");
 	}
 
+	// --- 첨부파일(asset) ---
+
+	/** asset 문서 + 바이너리 첨부 upsert. 기술문서 §8.2. */
+	async putAsset(doc: AssetDoc, data: ArrayBuffer): Promise<void> {
+		const db = this.localDb();
+		const existing = await this.get<AssetDoc>(doc._id);
+		const full: any = {
+			...doc,
+			...(existing?._rev ? { _rev: existing._rev } : {}),
+			_attachments: { data: { content_type: doc.mime, data: abToBase64(data) } },
+		};
+		try {
+			await db.put(full);
+		} catch (e: any) {
+			if (e?.status === 409) {
+				const cur = await this.get<AssetDoc>(doc._id);
+				await db.put({ ...full, _rev: cur?._rev });
+			} else throw e;
+		}
+	}
+
+	/** asset 첨부 바이너리 조회. */
+	async getAssetBinary(id: string): Promise<ArrayBuffer | null> {
+		try {
+			const blob: any = await this.localDb().getAttachment(id, "data");
+			if (!blob) return null;
+			if (typeof blob.arrayBuffer === "function") return await blob.arrayBuffer(); // Blob
+			return blob as ArrayBuffer;
+		} catch (e: any) {
+			if (e?.status === 404) return null;
+			throw e;
+		}
+	}
+
+	/** asset 문서 전체(메타데이터). */
+	async allAssets(): Promise<AssetDoc[]> {
+		const res = await this.localDb().allDocs({
+			include_docs: true,
+			startkey: "asset:",
+			endkey: "asset:￿",
+		});
+		const out: AssetDoc[] = [];
+		for (const row of res.rows) {
+			const d = (row as any).doc;
+			if (d) out.push(d as AssetDoc);
+		}
+		return out;
+	}
+
 	// --- 로컬 ↔ 원격 live replication ---
 
 	/** 1회성 양방향 동기화(push 후 pull). 자동 동기화가 꺼진 상태의 수동 전체 동기화에 사용. */
@@ -261,6 +310,17 @@ export class PouchService {
 			this.local = null;
 		}
 	}
+}
+
+/** ArrayBuffer → base64 (청크 처리로 대용량 스택오버플로 방지). */
+function abToBase64(buf: ArrayBuffer): string {
+	const bytes = new Uint8Array(buf);
+	const chunk = 0x8000;
+	let binary = "";
+	for (let i = 0; i < bytes.length; i += chunk) {
+		binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+	}
+	return btoa(binary);
 }
 
 function describeError(e: any): string {
