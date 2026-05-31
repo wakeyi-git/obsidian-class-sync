@@ -14,7 +14,7 @@ export class TeacherMode implements ClassSyncMode {
 
 	constructor(private core: CoreServices) {
 		this.syncs = core.settings.students.map(
-			(st) => new MirrorSync(core, st.studentId, st.localRoot, st.remoteDb),
+			(st) => new MirrorSync(core, st.studentId, st.studentName, st.localRoot, st.remoteDb),
 		);
 	}
 
@@ -35,5 +35,9 @@ export class TeacherMode implements ClassSyncMode {
 
 	async fullSync(direction: SyncDirection): Promise<void> {
 		for (const sync of this.syncs) await sync.fullSync(direction);
+	}
+
+	getSyncs(): MirrorSync[] {
+		return this.syncs;
 	}
 }

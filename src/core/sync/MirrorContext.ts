@@ -5,6 +5,11 @@ import { NoteDoc } from "../model/types";
 import { sha256 } from "../hash/hash";
 import { dbPathToLocal, localPathToDb, normalizePath, validateVaultPath } from "../path/path";
 
+/** 파일명에 쓸 수 없는 문자를 _로 치환. */
+function sanitizeFileLabel(s: string): string {
+	return (s || "").replace(/[\\/:*?"<>|.]/g, "_").trim() || "상대방";
+}
+
 /**
  * 하나의 student↔mirror 링크의 컨텍스트 + 공유 헬퍼. 기술문서 §9 / §16 / §14.2.
  *
@@ -16,6 +21,7 @@ export class MirrorContext {
 	constructor(
 		public readonly core: CoreServices,
 		public readonly studentId: string,
+		public readonly studentName: string,
 		public readonly localRoot: string,
 		public readonly remoteDb: string,
 		public readonly pouch: PouchService,
@@ -55,6 +61,8 @@ export class MirrorContext {
 		const p = normalizePath(localPath);
 		const archiveRoot = normalizePath(dbPathToLocal(this.localRoot, this.settings.archiveFolder));
 		if (archiveRoot !== "" && (p === archiveRoot || p.startsWith(archiveRoot + "/"))) return true;
+		const conflictRoot = normalizePath(dbPathToLocal(this.localRoot, this.settings.conflictFolder));
+		if (conflictRoot !== "" && (p === conflictRoot || p.startsWith(conflictRoot + "/"))) return true;
 		return this.settings.excludeFolders.some((f) => {
 			const folder = normalizePath(f);
 			return folder !== "" && (p === folder || p.startsWith(folder + "/"));
@@ -105,6 +113,30 @@ export class MirrorContext {
 	/** archive 대상 경로: localRoot/<archiveFolder>/<dbPath>. 기술문서 §10.4 / §15.1. */
 	archiveLocalPath(dbPath: string): string {
 		return obsidianNormalize(dbPathToLocal(this.localRoot, `${this.settings.archiveFolder}/${dbPath}`));
+	}
+
+	/**
+	 * 충돌 원격본 경로: localRoot/<conflictFolder>/<dbPath의 .md 앞에 .<상대방>>. 결정적 이름.
+	 * 교사 vault에서 여러 학생 충돌을 구분할 수 있도록 상대방(학생 이름/교사)을 파일명에 넣는다.
+	 */
+	conflictLocalPath(dbPath: string): string {
+		const label = sanitizeFileLabel(this.conflictPeerLabel());
+		const withTag = dbPath.replace(/\.md$/i, `.${label}.md`);
+		const tagged = withTag === dbPath ? `${dbPath}.${label}.md` : withTag;
+		return obsidianNormalize(dbPathToLocal(this.localRoot, `${this.settings.conflictFolder}/${tagged}`));
+	}
+
+	/** 충돌 원격본의 상대방 라벨: 교사 입장=학생 이름, 학생 입장=교사. */
+	conflictPeerLabel(): string {
+		if (this.settings.role === "teacher") return this.studentName || this.studentId || "학생";
+		return "교사";
+	}
+
+	/** 내 편집 백업 경로: 상대가 충돌을 해소해 내 편집이 덮일 때 보존. _충돌/<base>.내편집.md */
+	localBackupPath(dbPath: string): string {
+		const withTag = dbPath.replace(/\.md$/i, ".내편집.md");
+		const tagged = withTag === dbPath ? `${dbPath}.내편집.md` : withTag;
+		return obsidianNormalize(dbPathToLocal(this.localRoot, `${this.settings.conflictFolder}/${tagged}`));
 	}
 
 	/**

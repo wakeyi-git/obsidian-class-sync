@@ -150,6 +150,24 @@ export class PouchService {
 		return res.rows.map((r) => r.doc).filter((d): d is NoteDoc & PouchDB.Core.IdMeta & PouchDB.Core.RevisionIdMeta => !!d);
 	}
 
+	/** _conflicts(리비전 충돌)가 있는 note 문서 목록. 충돌 해소 UI용. 기술문서 §14. */
+	async listConflicts(): Promise<Array<{ doc: NoteDoc; winnerRev: string; conflictRevs: string[] }>> {
+		const res = await this.localDb().allDocs<NoteDoc>({
+			include_docs: true,
+			conflicts: true,
+			startkey: "note:",
+			endkey: "note:￿",
+		});
+		const out: Array<{ doc: NoteDoc; winnerRev: string; conflictRevs: string[] }> = [];
+		for (const row of res.rows) {
+			const doc = row.doc as (NoteDoc & { _rev?: string; _conflicts?: string[] }) | undefined;
+			if (doc && Array.isArray(doc._conflicts) && doc._conflicts.length > 0) {
+				out.push({ doc, winnerRev: doc._rev ?? "", conflictRevs: doc._conflicts });
+			}
+		}
+		return out;
+	}
+
 	/** 로컬 변경 구독(라이브). conflicts:true로 충돌 정보를 함께 받는다. */
 	localChanges<T = any>(
 		onChange: (change: ChangeEvent<T>) => void,

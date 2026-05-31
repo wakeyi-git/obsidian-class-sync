@@ -25,6 +25,19 @@
 	padding-top: 4px;
 }
 
+/* 충돌 카드 */
+.class-sync-conflict-card {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 4px 12px;
+	margin: 10px 0;
+	background: var(--background-secondary);
+}
+
+.class-sync-conflict-card .setting-item {
+	border-top: none;
+}
+
 /* 초대 모달: QR + 코드 */
 .class-sync-qr {
 	display: flex;

@@ -205,6 +205,16 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(c)
+			.setName("충돌 폴더")
+			.setDesc("충돌 시 원격 버전이 꺼내지는 폴더(동기화 제외). '충돌 목록 열기' 명령으로 해소합니다.")
+			.addText((t) =>
+				t.setPlaceholder("_충돌").setValue(s.conflictFolder).onChange(async (v) => {
+					s.conflictFolder = v.trim() || "_충돌";
+					await this.host.saveSettings();
+				}),
+			);
+
+		new Setting(c)
 			.setName("제외 폴더")
 			.setDesc("동기화에서 제외할 폴더(쉼표로 구분). 기술문서 §11.1.")
 			.addText((t) =>

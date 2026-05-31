@@ -56,6 +56,9 @@ export interface ClassSyncSettings {
 	 */
 	archiveFolder: string;
 
+	/** 충돌 시 원격 버전을 꺼내 두는 보이는 폴더. 동기화 대상에서 제외된다. 기술문서 §14.3. */
+	conflictFolder: string;
+
 	/** 자동 동기화(로컬 watch + 원격 구독) 활성 여부. */
 	autoSync: boolean;
 
@@ -91,6 +94,7 @@ export const DEFAULT_SETTINGS: ClassSyncSettings = {
 
 	excludeFolders: [".obsidian", ".trash"],
 	archiveFolder: "_삭제됨",
+	conflictFolder: "_충돌",
 	autoSync: true,
 	debounceMs: 2000,
 	lastSeqByDb: {},

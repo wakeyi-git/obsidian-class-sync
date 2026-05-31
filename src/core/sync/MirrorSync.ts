@@ -2,6 +2,7 @@ import { CoreServices } from "../CoreServices";
 import { PouchService } from "../couch/PouchService";
 import { MirrorContext } from "./MirrorContext";
 import { MirrorApplier } from "./MirrorApplier";
+import { ConflictManager, ConflictInfo, ResolveChoice } from "./ConflictManager";
 import { Uploader } from "./Uploader";
 import { LocalWatcher } from "./LocalWatcher";
 import { LocalApplier } from "./LocalApplier";
@@ -22,19 +23,41 @@ import { FullSync, SyncDirection } from "./FullSync";
 export class MirrorSync {
 	readonly ctx: MirrorContext;
 	private readonly applier: MirrorApplier;
+	private readonly conflicts: ConflictManager;
 	private readonly uploader: Uploader;
 	private readonly watcher: LocalWatcher;
 	private readonly localApplier: LocalApplier;
 	private readonly fullSyncRunner: FullSync;
 	private started = false;
 
-	constructor(core: CoreServices, studentId: string, localRoot: string, remoteDb: string, pouch?: PouchService) {
-		this.ctx = new MirrorContext(core, studentId, localRoot, remoteDb, pouch ?? core.createPouch(remoteDb));
-		this.applier = new MirrorApplier(this.ctx);
+	constructor(
+		core: CoreServices,
+		studentId: string,
+		studentName: string,
+		localRoot: string,
+		remoteDb: string,
+		pouch?: PouchService,
+	) {
+		this.ctx = new MirrorContext(core, studentId, studentName, localRoot, remoteDb, pouch ?? core.createPouch(remoteDb));
+		this.conflicts = new ConflictManager(this.ctx);
+		this.applier = new MirrorApplier(this.ctx, this.conflicts);
 		this.uploader = new Uploader(this.ctx);
 		this.watcher = new LocalWatcher(this.ctx, this.uploader);
 		this.localApplier = new LocalApplier(this.ctx, this.applier);
 		this.fullSyncRunner = new FullSync(this.ctx, this.applier, this.uploader);
+	}
+
+	/** 이 링크의 라벨(학생 식별). */
+	get label(): string {
+		return this.ctx.studentId || this.ctx.remoteDb;
+	}
+
+	listConflicts(): Promise<ConflictInfo[]> {
+		return this.conflicts.list();
+	}
+
+	resolveConflict(dbPath: string, choice: ResolveChoice): Promise<void> {
+		return this.conflicts.resolve(dbPath, choice);
 	}
 
 	async start(): Promise<void> {

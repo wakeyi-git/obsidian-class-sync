@@ -1,4 +1,5 @@
 import { MirrorContext } from "./MirrorContext";
+import { ConflictManager } from "./ConflictManager";
 import { NoteDoc } from "../model/types";
 import { sha256 } from "../hash/hash";
 
@@ -26,7 +27,10 @@ type DocWithConflicts = NoteDoc & { _conflicts?: string[] };
 export class MirrorApplier {
 	private loggedConflicts = new Set<string>();
 
-	constructor(private ctx: MirrorContext) {}
+	constructor(
+		private ctx: MirrorContext,
+		private conflicts: ConflictManager,
+	) {}
 
 	async applyDoc(doc: DocWithConflicts): Promise<ApplyResult> {
 		const ctx = this.ctx;
@@ -43,18 +47,20 @@ export class MirrorApplier {
 		const local = await ctx.readVaultFile(localPath);
 		const localHash = local == null ? null : await sha256(local);
 
-		// 이미 동일 내용
+		// 이미 동일 내용 (충돌이 해소되어 양쪽이 같아졌을 수 있으니 남은 원격본 정리)
 		if (localHash === doc.contentHash) {
+			await this.conflicts.cleanupCopy(doc.path);
 			return "skipped-same";
 		}
 
 		const hasConflict = !!doc._conflicts && doc._conflicts.length > 0;
 		if (hasConflict) {
-			// 양쪽이 서로 다르게 편집 → 로컬 유지(preserve-local), 보류
+			// 양쪽이 서로 다르게 편집 → 로컬 유지(preserve-local) + 원격본을 _충돌/에 꺼내 둠
+			await this.conflicts.materialize(doc);
 			if (!this.loggedConflicts.has(doc.path)) {
 				this.loggedConflicts.add(doc.path);
 				ctx.logger.warn(
-					`충돌 보류(preserve-local): ${localPath} — 양쪽이 분기 편집됨. 로컬 유지. (해소 UI는 Phase 3)`,
+					`충돌 보류(preserve-local): ${localPath} — 양쪽 분기 편집. 로컬 유지, 원격본을 _충돌/에 저장. '충돌 목록'에서 해소하세요.`,
 					true,
 				);
 			}
@@ -66,8 +72,19 @@ export class MirrorApplier {
 			return "skipped-self";
 		}
 
+		// 충돌이 있던 경로인데 로컬이 원격과 다르면, 상대가 해소해 내 편집이 곧 덮일 차례.
+		// 흔적 없이 잃지 않도록 내 버전을 먼저 보존한다. (데이터 손실 방지)
+		if (local != null && this.conflicts.hadConflict(doc.path)) {
+			await this.conflicts.preserveLocal(doc.path, local);
+			ctx.logger.warn(
+				`상대가 충돌을 해소함 — 내 편집이 덮어써집니다. 내 버전을 '${ctx.localBackupPath(doc.path)}'에 보관했습니다.`,
+				true,
+			);
+		}
+
 		// 충돌 없는 원격 갱신 → 적용 (guard로 에코 차단)
 		this.loggedConflicts.delete(doc.path);
+		await this.conflicts.cleanupCopy(doc.path); // 해소 전파로 들어온 갱신이면 남은 원격본 정리
 		ctx.guard.mark(localPath, doc.contentHash);
 		await ctx.writeVaultFile(localPath, doc.content);
 		ctx.guard.releaseAfterDelay(localPath);

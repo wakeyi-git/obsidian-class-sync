@@ -6,9 +6,12 @@ import { CoreServices } from "./core/CoreServices";
 import { ClassSyncMode } from "./modes/ClassSyncMode";
 import { StudentMode } from "./modes/student/StudentMode";
 import { TeacherMode } from "./modes/teacher/TeacherMode";
+import { TFile } from "obsidian";
 import { LogView, LOG_VIEW_TYPE } from "./ui/LogView";
 import { RoleSetupModal } from "./ui/RoleSetupModal";
 import { InviteModal } from "./ui/InviteModal";
+import { ConflictModal, ConflictRow, ConflictHost } from "./ui/ConflictModal";
+import { ResolveChoice } from "./core/sync/ConflictManager";
 import { testConnection } from "./core/sync/connectionTest";
 import { CouchAdmin } from "./core/couch/CouchAdmin";
 import { InvitePayload, INVITE_ACTION, genPassword, parseInvite } from "./core/invite/invite";
@@ -19,7 +22,7 @@ import { InvitePayload, INVITE_ACTION, genPassword, parseInvite } from "./core/i
  * 역할은 최초 1회 선택 후 잠긴다(기술문서 §5.4 보강). 실행 시 저장된 last_seq부터 증분 재개하고,
  * 전체 동기화는 최초 1회와 수동 명령에서만 수행한다.
  */
-export default class ClassSyncPlugin extends Plugin implements SettingsHost {
+export default class ClassSyncPlugin extends Plugin implements SettingsHost, ConflictHost {
 	settings!: ClassSyncSettings;
 	private logger = new Logger();
 	private core!: CoreServices;
@@ -233,6 +236,33 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost {
 		for (const db of dbs) await testConnection(this.core, db);
 	}
 
+	// --- 충돌 해소 (ConflictHost) ---
+	async listConflicts(): Promise<ConflictRow[]> {
+		const rows: ConflictRow[] = [];
+		for (const sync of this.mode?.getSyncs() ?? []) {
+			try {
+				const infos = await sync.listConflicts();
+				for (const info of infos) rows.push({ sync, info });
+			} catch (e) {
+				this.logger.error(`충돌 목록 조회 실패(${sync.label}): ${e instanceof Error ? e.message : String(e)}`);
+			}
+		}
+		return rows;
+	}
+
+	async resolveConflict(row: ConflictRow, choice: ResolveChoice): Promise<void> {
+		await this.activateLogView();
+		await row.sync.resolveConflict(row.info.dbPath, choice);
+	}
+
+	async openConflictFiles(row: ConflictRow): Promise<void> {
+		const local = this.app.vault.getAbstractFileByPath(row.info.localPath);
+		const conflict = this.app.vault.getAbstractFileByPath(row.info.conflictPath);
+		if (local instanceof TFile) await this.app.workspace.getLeaf(false).openFile(local);
+		if (conflict instanceof TFile) await this.app.workspace.getLeaf("split").openFile(conflict);
+		else this.logger.warn(`원격본 파일이 없습니다: ${row.info.conflictPath}`, true);
+	}
+
 	/** 연결/경로 설정 변경을 실행 중 엔진에 반영(재시작). 설정 탭 '적용' 버튼. */
 	async restartMode(): Promise<void> {
 		if (!this.settings.setupComplete) return;
@@ -266,6 +296,11 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost {
 			id: "class-sync-reset-local",
 			name: "로컬 캐시 초기화 (서버에서 다시 받기)",
 			callback: () => this.resetLocalCache(),
+		});
+		this.addCommand({
+			id: "class-sync-conflicts",
+			name: "충돌 목록 열기",
+			callback: () => new ConflictModal(this.app, this).open(),
 		});
 	}
 

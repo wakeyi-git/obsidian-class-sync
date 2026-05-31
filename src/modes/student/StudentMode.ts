@@ -14,7 +14,7 @@ export class StudentMode implements ClassSyncMode {
 
 	constructor(private core: CoreServices) {
 		const s = core.settings;
-		this.sync = new MirrorSync(core, s.userId, s.localRoot, s.remoteDb);
+		this.sync = new MirrorSync(core, s.userId, s.displayName, s.localRoot, s.remoteDb);
 	}
 
 	async start(): Promise<void> {
@@ -33,5 +33,9 @@ export class StudentMode implements ClassSyncMode {
 
 	fullSync(direction: SyncDirection): Promise<void> {
 		return this.sync.fullSync(direction);
+	}
+
+	getSyncs(): MirrorSync[] {
+		return [this.sync];
 	}
 }
