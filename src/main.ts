@@ -6,13 +6,15 @@ import { CoreServices } from "./core/CoreServices";
 import { ClassSyncMode } from "./modes/ClassSyncMode";
 import { StudentMode } from "./modes/student/StudentMode";
 import { TeacherMode } from "./modes/teacher/TeacherMode";
-import { TFile } from "obsidian";
+import { TFile, TFolder } from "obsidian";
 import { LogView, LOG_VIEW_TYPE } from "./ui/LogView";
 import { RoleSetupModal } from "./ui/RoleSetupModal";
 import { InviteModal } from "./ui/InviteModal";
 import { ConflictModal, ConflictRow, ConflictHost } from "./ui/ConflictModal";
 import { ResolveChoice } from "./core/sync/ConflictManager";
 import { DashboardView, DASHBOARD_VIEW_TYPE, DashboardRow, DashboardHost } from "./ui/DashboardView";
+import { BulkCopyModal } from "./ui/BulkCopyModal";
+import { BulkCopy, CopyOptions } from "./modes/teacher/BulkCopy";
 import { testConnection } from "./core/sync/connectionTest";
 import { CouchAdmin } from "./core/couch/CouchAdmin";
 import { InvitePayload, INVITE_ACTION, genPassword, parseInvite } from "./core/invite/invite";
@@ -310,6 +312,44 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			name: "대시보드 열기",
 			callback: () => this.activateDashboard(),
 		});
+		this.addCommand({
+			id: "class-sync-copy-file",
+			name: "현재 파일을 학생에게 복사",
+			callback: () => this.openBulkCopy("file"),
+		});
+		this.addCommand({
+			id: "class-sync-copy-folder",
+			name: "현재 폴더를 학생에게 복사",
+			callback: () => this.openBulkCopy("folder"),
+		});
+	}
+
+	// --- 교사 편의: 학생에게 복사 (기술문서 §12.5 / §20) ---
+	private openBulkCopy(kind: "file" | "folder"): void {
+		if (this.settings.role !== "teacher") {
+			new Notice("Class Sync: 교사 모드에서만 사용할 수 있습니다.");
+			return;
+		}
+		if (this.settings.students.length === 0) {
+			new Notice("Class Sync: 학생이 없습니다. 설정에서 학생을 추가하세요.");
+			return;
+		}
+		const file = this.app.workspace.getActiveFile();
+		if (!file) {
+			new Notice("Class Sync: 복사할 파일을 먼저 여세요.");
+			return;
+		}
+		const source = kind === "folder" ? file.parent : file;
+		if (!source || (kind === "folder" && !(source instanceof TFolder))) {
+			new Notice("Class Sync: 대상을 찾을 수 없습니다.");
+			return;
+		}
+		const bulk = new BulkCopy(this.app, this.settings);
+		new BulkCopyModal(this.app, source, {
+			students: this.settings.students,
+			run: (targets, opts: CopyOptions) =>
+				source instanceof TFolder ? bulk.copyFolder(source, targets, opts) : bulk.copyFile(source as TFile, targets, opts),
+		}).open();
 	}
 
 	// --- 대시보드 (DashboardHost) ---
