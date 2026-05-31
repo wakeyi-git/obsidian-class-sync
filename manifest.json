@@ -1,0 +1,9 @@
+{
+	"id": "class-sync",
+	"name": "Class Sync for Obsidian",
+	"version": "0.0.1",
+	"minAppVersion": "1.4.0",
+	"description": "교사용 vault의 학생별 폴더와 학생 개인 vault를 CouchDB mirror DB로 양방향 동기화합니다. (Phase 0 POC)",
+	"author": "wakeyi",
+	"isDesktopOnly": false
+}

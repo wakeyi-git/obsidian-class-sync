@@ -1,0 +1,41 @@
+/* Class Sync — Phase 0 POC */
+
+.class-sync-log-toolbar {
+	padding: 6px 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.class-sync-log-view {
+	padding: 8px 12px;
+	font-family: var(--font-monospace);
+	font-size: 12px;
+	line-height: 1.5;
+	white-space: pre-wrap;
+	overflow-y: auto;
+	height: 100%;
+}
+
+.class-sync-log-view .csl-line {
+	margin: 0;
+}
+
+.class-sync-log-view .csl-info {
+	color: var(--text-normal);
+}
+
+.class-sync-log-view .csl-ok {
+	color: var(--text-success);
+}
+
+.class-sync-log-view .csl-warn {
+	color: var(--text-warning);
+}
+
+.class-sync-log-view .csl-error {
+	color: var(--text-error);
+}
+
+.class-sync-log-view .csl-ts {
+	color: var(--text-faint);
+	margin-right: 6px;
+}
