@@ -28,8 +28,7 @@ export class MirrorSync {
 	private readonly fullSyncRunner: FullSync;
 	private started = false;
 
-	constructor(core: CoreServices, studentId: string, localRoot: string, pouch?: PouchService) {
-		const remoteDb = core.settings.remoteDb;
+	constructor(core: CoreServices, studentId: string, localRoot: string, remoteDb: string, pouch?: PouchService) {
 		this.ctx = new MirrorContext(core, studentId, localRoot, remoteDb, pouch ?? core.createPouch(remoteDb));
 		this.applier = new MirrorApplier(this.ctx);
 		this.uploader = new Uploader(this.ctx);
@@ -66,7 +65,18 @@ export class MirrorSync {
 		// 로컬 ↔ 원격 live replication (오프라인 큐·재연결·충돌)
 		this.ctx.pouch.startReplication({
 			onPaused: () => this.ctx.logger.info(`동기화 따라잡음(idle): ${this.ctx.remoteDb}`),
-			onError: (e) => this.ctx.logger.error(`replication 오류: ${e.message}`),
+			onError: (e) => {
+				// 인증 실패면 재시도를 멈춘다(계속 두드리면 서버가 계정을 잠금).
+				if (isAuthError(e.message)) {
+					this.ctx.pouch.stopReplication();
+					this.ctx.logger.error(
+						`인증 실패로 동기화 중지: ${this.ctx.remoteDb} — ${e.message}. 자격증명/초대를 확인 후 '설정 적용'으로 재시작하세요.`,
+						true,
+					);
+				} else {
+					this.ctx.logger.error(`replication 오류: ${e.message}`);
+				}
+			},
 		});
 		// vault 변경 감시
 		this.watcher.start();
@@ -84,4 +94,9 @@ export class MirrorSync {
 	fullSync(direction: SyncDirection = "both"): Promise<void> {
 		return this.fullSyncRunner.run(direction);
 	}
+}
+
+/** 인증/계정잠금 류 오류 판별(재시도 폭주 방지). */
+function isAuthError(message: string): boolean {
+	return /unauthorized|name or password|password is incorrect|forbidden|locked|\b401\b|\b403\b/i.test(message);
 }

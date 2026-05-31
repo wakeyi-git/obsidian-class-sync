@@ -1,5 +1,5 @@
-import { Plugin, WorkspaceLeaf } from "obsidian";
-import { ClassSyncSettings, DEFAULT_SETTINGS, Role } from "./settings/types";
+import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
+import { ClassSyncSettings, DEFAULT_SETTINGS, Role, StudentConfig } from "./settings/types";
 import { ClassSyncSettingTab, SettingsHost } from "./settings/SettingsTab";
 import { Logger } from "./core/log/Logger";
 import { CoreServices } from "./core/CoreServices";
@@ -8,7 +8,10 @@ import { StudentMode } from "./modes/student/StudentMode";
 import { TeacherMode } from "./modes/teacher/TeacherMode";
 import { LogView, LOG_VIEW_TYPE } from "./ui/LogView";
 import { RoleSetupModal } from "./ui/RoleSetupModal";
+import { InviteModal } from "./ui/InviteModal";
 import { testConnection } from "./core/sync/connectionTest";
+import { CouchAdmin } from "./core/couch/CouchAdmin";
+import { InvitePayload, INVITE_ACTION, genPassword, parseInvite } from "./core/invite/invite";
 
 /**
  * Class Sync for Obsidian — Phase 1 진입점.
@@ -33,6 +36,11 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost {
 		this.addRibbonIcon("refresh-cw", "Class Sync 로그 열기", () => this.activateLogView());
 		this.registerCommands();
 
+		// 학생 초대 딥링크: 폰 카메라로 QR 스캔 → obsidian://class-sync-invite?d=... → 자동 설정
+		this.registerObsidianProtocolHandler(INVITE_ACTION, (params) => {
+			void this.ingestInvite(params.d ?? "");
+		});
+
 		if (!this.settings.setupComplete) {
 			// 최초 실행: 역할 선택 후 시작
 			this.promptRoleSetup();
@@ -40,7 +48,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost {
 			await this.startMode();
 		}
 
-		this.logger.info(`Class Sync 로드됨 [Phase 1] (role=${this.settings.role}, setup=${this.settings.setupComplete}).`);
+		this.logger.info(`Class Sync 로드됨 [Phase 2] (role=${this.settings.role}, setup=${this.settings.setupComplete}).`);
 	}
 
 	async onunload(): Promise<void> {
@@ -69,32 +77,160 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost {
 		await this.mode.start();
 	}
 
-	/** 최초 실행 역할 선택 모달 → 역할 잠금 + 모드 시작. */
+	/** 최초 실행 역할 선택 모달 → 역할 잠금 + 모드 시작. 학생은 초대 코드로 바로 설정 가능. */
 	private promptRoleSetup(): void {
-		new RoleSetupModal(this.app, async (role) => {
-			this.settings.role = role;
-			this.settings.setupComplete = true;
-			await this.saveSettings();
-			this.logger.ok(`역할 설정 완료: ${role}. 설정에서 CouchDB 연결 정보를 입력하세요.`, true);
-			await this.startMode();
-		}).open();
+		new RoleSetupModal(
+			this.app,
+			async (role) => {
+				this.settings.role = role;
+				this.settings.setupComplete = true;
+				if (role === "teacher") {
+					this.settings.userId = "teacher";
+					if (this.settings.displayName === "학생A") this.settings.displayName = "교사";
+				}
+				await this.saveSettings();
+				this.logger.ok(
+					role === "teacher"
+						? "Teacher Mode 설정 완료. 설정에서 관리자 계정 입력 후 학생을 추가하세요."
+						: "Student Mode 설정 완료. 교사 초대(QR/코드)로 연결하세요.",
+					true,
+				);
+				await this.startMode();
+			},
+			(code) => void this.ingestInvite(code),
+		).open();
 	}
 
-	/** 역할 재설정(데이터 초기화). 설정 탭에서 호출. */
+	/** 역할 재설정(데이터 초기화). 설정 탭에서 호출. 로컬 캐시까지 비운다. */
 	async resetSetup(): Promise<void> {
 		await this.mode?.stop();
 		this.mode = null;
+		await this.destroyLocalCaches();
 		this.settings.setupComplete = false;
 		this.settings.lastSeqByDb = {};
 		await this.saveSettings();
-		this.logger.warn("역할/동기화 상태를 초기화했습니다. 역할을 다시 선택하세요.", true);
+		this.logger.warn("역할/동기화 상태/로컬 캐시를 초기화했습니다. 역할을 다시 선택하세요.", true);
 		this.promptRoleSetup();
 	}
 
-	// --- 연결 테스트 (설정 버튼) — 항상 최신 설정으로 검사 ---
+	/** 현재 역할의 모든 mirror DB 로컬 캐시(IndexedDB)를 삭제. */
+	private async destroyLocalCaches(): Promise<void> {
+		const dbs =
+			this.settings.role === "teacher"
+				? this.settings.students.map((s) => s.remoteDb).filter((d) => d)
+				: [this.settings.remoteDb].filter((d) => d);
+		for (const db of dbs) {
+			try {
+				const p = this.core.createPouch(db);
+				await p.destroyLocal();
+				await p.close();
+				this.logger.ok(`로컬 캐시 삭제: ${db}`);
+			} catch (e) {
+				this.logger.error(`로컬 캐시 삭제 실패(${db}): ${e instanceof Error ? e.message : String(e)}`);
+			}
+		}
+	}
+
+	/** 로컬 캐시 초기화 후 서버에서 다시 받기. 명령에서 호출. */
+	async resetLocalCache(): Promise<void> {
+		await this.activateLogView();
+		await this.mode?.stop();
+		this.mode = null;
+		await this.destroyLocalCaches();
+		this.settings.lastSeqByDb = {};
+		await this.saveSettings();
+		if (this.settings.setupComplete) await this.startMode();
+		this.logger.ok("로컬 캐시를 초기화했습니다. 서버에서 다시 동기화합니다.", true);
+	}
+
+	// --- 학생 프로비저닝 + 초대 (Teacher) ---
+	async inviteStudent(student: StudentConfig): Promise<void> {
+		await this.activateLogView();
+		const s = this.settings;
+		if (!s.couchdbUrl || !s.username || !s.password) {
+			this.logger.warn("관리자 계정(CouchDB URL/사용자/비밀번호)을 먼저 입력하세요.", true);
+			return;
+		}
+		if (!student.studentId) {
+			this.logger.warn("학생 ID를 입력하세요.", true);
+			return;
+		}
+		// 기본값 보정
+		if (!student.username) student.username = student.studentId;
+		if (!student.remoteDb) student.remoteDb = `mirror_${student.studentId}`;
+		if (!student.localRoot) student.localRoot = student.studentName || student.studentId;
+		if (!student.password) student.password = genPassword();
+
+		this.logger.info(`학생 프로비저닝: ${student.studentId} → ${student.remoteDb}`);
+		const admin = new CouchAdmin(s.couchdbUrl, s.username, s.password);
+		const res = await admin.provisionStudent({
+			username: student.username,
+			password: student.password,
+			remoteDb: student.remoteDb,
+		});
+		if (!res.ok) {
+			this.logger.error(`프로비저닝 실패: ${res.error}`, true);
+			return;
+		}
+		student.provisioned = true;
+		await this.saveSettings();
+		this.logger.ok(`프로비저닝 완료: ${student.studentId} (계정/DB/권한)`, true);
+
+		const payload: InvitePayload = {
+			v: 1,
+			couchdbUrl: s.couchdbUrl,
+			classId: s.classId,
+			studentId: student.studentId,
+			studentName: student.studentName,
+			remoteDb: student.remoteDb,
+			username: student.username,
+			password: student.password,
+		};
+		new InviteModal(this.app, payload).open();
+	}
+
+	// --- 학생 온보딩: 초대 코드/딥링크로 자동 설정 ---
+	async ingestInvite(input: string): Promise<void> {
+		const payload = parseInvite(input);
+		if (!payload) {
+			new Notice("Class Sync: 초대 코드를 해석할 수 없습니다.");
+			this.logger.error("초대 코드 파싱 실패.");
+			return;
+		}
+		await this.mode?.stop();
+		this.mode = null;
+
+		const s = this.settings;
+		s.role = "student";
+		s.setupComplete = true;
+		s.couchdbUrl = payload.couchdbUrl;
+		s.classId = payload.classId;
+		s.userId = payload.studentId;
+		s.displayName = payload.studentName;
+		s.username = payload.username;
+		s.password = payload.password;
+		s.remoteDb = payload.remoteDb;
+		s.localRoot = ""; // 학생 vault 전체
+		s.lastSeqByDb = {};
+		await this.saveSettings();
+
+		await this.activateLogView();
+		this.logger.ok(`초대 적용 완료: ${payload.studentName} (${payload.remoteDb}). 동기화를 시작합니다.`, true);
+		await this.startMode();
+	}
+
+	// --- 연결 테스트 (설정 버튼) — 항상 최신 설정으로, 역할별 DB 전체 검사 ---
 	async testConnection(): Promise<void> {
 		await this.activateLogView();
-		await testConnection(this.core);
+		const dbs =
+			this.settings.role === "teacher"
+				? this.settings.students.map((s) => s.remoteDb).filter((d) => d)
+				: [this.settings.remoteDb];
+		if (dbs.length === 0) {
+			this.logger.warn("테스트할 mirror DB가 없습니다. (교사: 학생을 추가하세요)", true);
+			return;
+		}
+		for (const db of dbs) await testConnection(this.core, db);
 	}
 
 	/** 연결/경로 설정 변경을 실행 중 엔진에 반영(재시작). 설정 탭 '적용' 버튼. */
@@ -107,7 +243,10 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost {
 
 	// --- 명령 등록 ---
 	private registerCommands(): void {
-		const sync = () => this.mode?.sync;
+		const fullSync = async (dir: "both" | "up" | "down") => {
+			await this.activateLogView();
+			await this.mode?.fullSync(dir);
+		};
 
 		this.addCommand({ id: "class-sync-open-log", name: "로그 패널 열기", callback: () => this.activateLogView() });
 		this.addCommand({
@@ -115,34 +254,18 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost {
 			name: "연결/권한 테스트",
 			callback: () => this.testConnection(),
 		});
-		this.addCommand({
-			id: "class-sync-full-sync",
-			name: "전체 동기화",
-			callback: async () => {
-				await this.activateLogView();
-				await sync()?.fullSync("both");
-			},
-		});
-		this.addCommand({
-			id: "class-sync-upload-only",
-			name: "업로드만 실행",
-			callback: async () => {
-				await this.activateLogView();
-				await sync()?.fullSync("up");
-			},
-		});
-		this.addCommand({
-			id: "class-sync-download-only",
-			name: "다운로드만 실행",
-			callback: async () => {
-				await this.activateLogView();
-				await sync()?.fullSync("down");
-			},
-		});
+		this.addCommand({ id: "class-sync-full-sync", name: "전체 동기화", callback: () => fullSync("both") });
+		this.addCommand({ id: "class-sync-upload-only", name: "업로드만 실행", callback: () => fullSync("up") });
+		this.addCommand({ id: "class-sync-download-only", name: "다운로드만 실행", callback: () => fullSync("down") });
 		this.addCommand({
 			id: "class-sync-toggle-autosync",
 			name: "자동 동기화 켜기/끄기",
 			callback: () => this.toggleAutoSync(),
+		});
+		this.addCommand({
+			id: "class-sync-reset-local",
+			name: "로컬 캐시 초기화 (서버에서 다시 받기)",
+			callback: () => this.resetLocalCache(),
 		});
 	}
 

@@ -15,7 +15,8 @@
 	"author": "wakeyi",
 	"license": "MIT",
 	"dependencies": {
-		"pouchdb-browser": "^9.0.0"
+		"pouchdb-browser": "^9.0.0",
+		"qrcode-generator": "^1.5.2"
 	},
 	"devDependencies": {
 		"@types/node": "^20.11.0",

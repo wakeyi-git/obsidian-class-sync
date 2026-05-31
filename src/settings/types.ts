@@ -5,6 +5,17 @@ export type ConflictPolicy = "preserve-local";
 /** 삭제/이름변경 시 상대 vault 처리. 기술문서 §15. */
 export type DeletePolicy = "archive" | "propagate-delete" | "ignore-delete";
 
+/** 교사가 관리하는 학생 1명. 기술문서 §12.1. */
+export interface StudentConfig {
+	studentId: string;
+	studentName: string;
+	remoteDb: string; // 기본 mirror_<studentId>
+	localRoot: string; // 교사 vault 내 학생 폴더 (예: 학생A)
+	username: string; // 학생 CouchDB 계정명. 기본 studentId
+	password?: string; // 프로비저닝 시 생성 (교사 기기 한정 비밀)
+	provisioned?: boolean; // CouchDB 계정/DB/권한 생성 완료 여부
+}
+
 /**
  * Class Sync 설정. 기술문서 §5.1 / §11.1 / §12.1.
  * Phase 1(단일 학생 양방향 미러)에 필요한 필드. Teacher의 다중 학생 배열(§12.1 students[])은
@@ -21,15 +32,20 @@ export interface ClassSyncSettings {
 	deviceId: string;
 
 	couchdbUrl: string;
+	/** Teacher: 관리자 계정 / Student: 초대로 받은 학생 계정. */
 	username: string;
 	password: string;
+	/** Student 전용: 자기 mirror DB. Teacher는 students[]가 구동. */
 	remoteDb: string;
 
 	/**
 	 * Student Mode: vault root 기준 동기화 root ("" = vault 전체)
-	 * Teacher Mode: 대상 학생 폴더 (예: "학생A")
+	 * Teacher Mode는 미사용(students[].localRoot 사용)
 	 */
 	localRoot: string;
+
+	/** Teacher Mode: 관리 학생 목록. 기술문서 §12.1. */
+	students: StudentConfig[];
 
 	/** 동기화 root 밖으로 취급해 제외할 폴더 (기술문서 §11.1). */
 	excludeFolders: string[];
@@ -71,6 +87,7 @@ export const DEFAULT_SETTINGS: ClassSyncSettings = {
 	remoteDb: "mirror_student_a",
 
 	localRoot: "",
+	students: [],
 
 	excludeFolders: [".obsidian", ".trash"],
 	archiveFolder: "_삭제됨",

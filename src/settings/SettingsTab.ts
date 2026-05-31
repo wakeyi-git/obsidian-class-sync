@@ -1,5 +1,5 @@
 import { App, Plugin, PluginSettingTab, Setting } from "obsidian";
-import { ClassSyncSettings } from "./types";
+import { ClassSyncSettings, StudentConfig } from "./types";
 
 /** SettingsTab가 의존하는 플러그인 동작 (순환 import 방지용 인터페이스). */
 export interface SettingsHost extends Plugin {
@@ -8,6 +8,8 @@ export interface SettingsHost extends Plugin {
 	testConnection(): Promise<void>;
 	restartMode(): Promise<void>;
 	resetSetup(): Promise<void>;
+	inviteStudent(student: StudentConfig): Promise<void>;
+	ingestInvite(code: string): Promise<void>;
 }
 
 export class ClassSyncSettingTab extends PluginSettingTab {
@@ -21,113 +23,163 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		containerEl.createEl("h2", { text: "Class Sync" });
+		this.renderRole(s);
 
-		// --- 역할 (최초 설정 후 잠금) ---
-		const roleLabel = s.role === "teacher" ? "Teacher Mode" : "Student Mode";
-		if (s.setupComplete) {
-			new Setting(containerEl)
-				.setName("역할")
-				.setDesc("역할은 최초 1회 설정 후 잠깁니다. 변경하려면 아래 '역할 재설정'을 사용하세요.")
-				.addText((t) => {
-					t.setValue(roleLabel).setDisabled(true);
-				});
-		} else {
-			new Setting(containerEl)
-				.setName("역할")
-				.setDesc("아직 역할이 설정되지 않았습니다. 플러그인을 다시 로드하면 역할 선택 화면이 표시됩니다.")
-				.addText((t) => t.setValue("(미설정)").setDisabled(true));
-		}
+		if (s.role === "teacher") this.renderTeacher(s);
+		else this.renderStudent(s);
 
-		// --- 식별 정보 ---
-		containerEl.createEl("h3", { text: "식별" });
+		this.renderSyncOptions(s);
+		this.renderApplyAndReset(s);
+	}
 
-		this.textSetting(containerEl, "학급 ID", "classId", "class_2026_1");
-		this.textSetting(containerEl, "사용자 ID", "userId", "student_a");
-		this.textSetting(containerEl, "표시 이름", "displayName", "학생A");
+	// --- 역할 (잠금) ---
+	private renderRole(s: ClassSyncSettings): void {
+		const roleLabel = s.role === "teacher" ? "Teacher Mode (교사)" : "Student Mode (학생)";
+		new Setting(this.containerEl)
+			.setName("역할")
+			.setDesc(
+				s.setupComplete
+					? "역할은 최초 1회 설정 후 잠깁니다. 변경하려면 아래 '역할 재설정'을 사용하세요."
+					: "아직 역할이 설정되지 않았습니다.",
+			)
+			.addText((t) => t.setValue(s.setupComplete ? roleLabel : "(미설정)").setDisabled(true));
+	}
 
-		new Setting(containerEl)
-			.setName("기기 ID")
-			.setDesc("동기화 루프 방지에 사용됩니다 (기술문서 §16.3). 자동 생성됨.")
-			.addText((t) =>
-				t.setValue(s.deviceId).onChange(async (v) => {
-					s.deviceId = v.trim();
-					await this.host.saveSettings();
-				}),
+	// --- Teacher Mode ---
+	private renderTeacher(s: ClassSyncSettings): void {
+		const c = this.containerEl;
+
+		c.createEl("h3", { text: "학급" });
+		this.textSetting("학급 ID", "classId", "class_2026_1");
+		this.textSetting("표시 이름", "displayName", "교사");
+
+		c.createEl("h3", { text: "관리자 계정" });
+		c.createEl("p", {
+			cls: "setting-item-description",
+			text: "CouchDB 관리자 자격증명. 학생 계정·DB·권한을 생성하는 데 쓰이며 이 기기에만 저장됩니다.",
+		});
+		this.textSetting("CouchDB URL", "couchdbUrl", "https://nas.example.com");
+		this.textSetting("관리자 사용자", "username", "admin");
+		this.passwordSetting();
+
+		new Setting(c)
+			.setName("연결 테스트")
+			.setDesc("모든 학생 mirror DB 접근/권한을 확인합니다.")
+			.addButton((b) =>
+				b.setButtonText("테스트 실행").setCta().onClick(() => this.runAsync(b, () => this.host.testConnection())),
 			);
 
-		// --- CouchDB 연결 ---
-		containerEl.createEl("h3", { text: "CouchDB 연결" });
+		// 학생 목록 (카드)
+		c.createEl("h3", { text: "학생 목록" });
+		if (s.students.length === 0) {
+			c.createEl("p", { cls: "setting-item-description", text: "아직 학생이 없습니다. 아래 '학생 추가'로 시작하세요." });
+		}
+		s.students.forEach((st, i) => this.renderStudentCard(st, i));
 
-		this.textSetting(containerEl, "CouchDB URL", "couchdbUrl", "https://nas.example.com/couchdb");
-		this.textSetting(containerEl, "사용자 이름", "username", "student_a");
+		new Setting(c).addButton((b) =>
+			b
+				.setButtonText("+ 학생 추가")
+				.setCta()
+				.onClick(async () => {
+					s.students.push({ studentId: "", studentName: "", remoteDb: "", localRoot: "", username: "" });
+					await this.host.saveSettings();
+					this.display();
+				}),
+		);
+	}
 
-		new Setting(containerEl)
-			.setName("비밀번호")
-			.addText((t) => {
-				t.setPlaceholder("********")
-					.setValue(s.password)
-					.onChange(async (v) => {
-						s.password = v;
-						await this.host.saveSettings();
-					});
-				t.inputEl.type = "password";
-				noAutoCorrect(t.inputEl);
-			});
+	private renderStudentCard(st: StudentConfig, index: number): void {
+		const card = this.containerEl.createDiv({ cls: "class-sync-student-card" });
 
-		this.textSetting(containerEl, "Mirror DB 이름", "remoteDb", "mirror_student_a");
-
-		new Setting(containerEl)
-			.setName("연결 테스트")
-			.setDesc("최신 설정으로 Mirror DB 접근/권한을 확인합니다 (기술문서 §22.3).")
+		new Setting(card)
+			.setName(st.studentName || st.studentId || `학생 ${index + 1}`)
+			.setHeading()
 			.addButton((b) =>
 				b
-					.setButtonText("테스트 실행")
+					.setButtonText(st.provisioned ? "초대 재발급" : "초대")
 					.setCta()
-					.onClick(async () => {
-						b.setDisabled(true);
-						try {
-							await this.host.testConnection();
-						} finally {
-							b.setDisabled(false);
-						}
-					}),
-			);
-
-		// --- 경로 ---
-		containerEl.createEl("h3", { text: "경로 매핑" });
-
-		new Setting(containerEl)
-			.setName(s.role === "teacher" ? "학생 폴더 (localRoot)" : "로컬 동기화 root (localRoot)")
-			.setDesc(
-				s.role === "teacher"
-					? "동기화할 학생 폴더 (예: 학생A). 기술문서 §9.3."
-					: "vault root 기준 동기화 root. 비우면 vault 전체. 기술문서 §9.2.",
+					.onClick(() => this.runAsync(b, async () => { await this.host.inviteStudent(st); this.display(); })),
 			)
-			.addText((t) =>
-				t
-					.setPlaceholder(s.role === "teacher" ? "학생A" : "(vault root)")
-					.setValue(s.localRoot)
-					.onChange(async (v) => {
-						s.localRoot = v.trim();
+			.addButton((b) =>
+				b
+					.setButtonText("삭제")
+					.setWarning()
+					.onClick(async () => {
+						this.host.settings.students.splice(index, 1);
 						await this.host.saveSettings();
+						this.display();
 					}),
 			);
 
-		// --- 동기화 옵션 ---
-		containerEl.createEl("h3", { text: "동기화" });
+		this.studentField(card, "이름", st, "studentName", "학생A");
+		this.studentField(card, "학생 ID", st, "studentId", "student_a");
+		// 비우면 초대 시점에 학생 ID로 자동 채움 (계정=ID, DB=mirror_<ID>, 폴더=이름/ID)
+		this.studentField(card, "Mirror DB (비우면 자동)", st, "remoteDb", "mirror_<학생ID>");
+		this.studentField(card, "폴더 localRoot (비우면 자동)", st, "localRoot", "<이름 또는 학생ID>");
 
-		new Setting(containerEl)
+		card.createEl("div", {
+			cls: "class-sync-student-status",
+			text: st.provisioned ? "상태: 프로비저닝됨 ✓" : "상태: 미프로비저닝 — '초대'를 누르면 계정/DB가 생성됩니다.",
+		});
+	}
+
+	// --- Student Mode ---
+	private renderStudent(s: ClassSyncSettings): void {
+		const c = this.containerEl;
+
+		c.createEl("h3", { text: "초대로 설정" });
+		c.createEl("p", {
+			cls: "setting-item-description",
+			text: "교사에게 받은 QR을 휴대폰 카메라로 스캔하면 자동 설정됩니다. 또는 초대 코드를 아래에 붙여넣으세요.",
+		});
+
+		let codeValue = "";
+		new Setting(c)
+			.setName("초대 코드")
+			.addText((t) => {
+				t.setPlaceholder("교사에게 받은 초대 코드 붙여넣기").onChange((v) => (codeValue = v));
+				noAutoCorrect(t.inputEl);
+			})
+			.addButton((b) =>
+				b
+					.setButtonText("적용")
+					.setCta()
+					.onClick(() => this.runAsync(b, async () => { await this.host.ingestInvite(codeValue); this.display(); })),
+			);
+
+		c.createEl("h3", { text: "연결 정보" });
+		c.createEl("p", { cls: "setting-item-description", text: "초대로 자동 설정됩니다." });
+		this.readonlySetting("학급 ID", s.classId);
+		this.readonlySetting("이름", s.displayName);
+		this.readonlySetting("CouchDB URL", s.couchdbUrl || "(미설정)");
+		this.readonlySetting("Mirror DB", s.remoteDb || "(미설정)");
+		this.readonlySetting("계정", s.username || "(미설정)");
+
+		new Setting(c)
+			.setName("연결 테스트")
+			.setDesc("내 mirror DB 접근/권한을 확인합니다.")
+			.addButton((b) =>
+				b.setButtonText("테스트 실행").setCta().onClick(() => this.runAsync(b, () => this.host.testConnection())),
+			);
+	}
+
+	// --- 공통: 동기화 옵션 ---
+	private renderSyncOptions(s: ClassSyncSettings): void {
+		const c = this.containerEl;
+		c.createEl("h3", { text: "동기화" });
+
+		new Setting(c)
 			.setName("자동 동기화")
-			.setDesc("켜면 로컬 변경 감시 + 원격 변경 구독이 활성화됩니다. 끄면 수동 동기화만 가능. 변경 시 즉시 적용됩니다.")
+			.setDesc("켜면 실시간 양방향 동기화. 끄면 수동 동기화만. 변경 시 즉시 적용됩니다.")
 			.addToggle((t) =>
 				t.setValue(s.autoSync).onChange(async (v) => {
 					s.autoSync = v;
 					await this.host.saveSettings();
-					await this.host.restartMode(); // 실행 중인 엔진에 즉시 반영
+					await this.host.restartMode();
 				}),
 			);
 
-		new Setting(containerEl)
+		new Setting(c)
 			.setName("삭제 정책")
 			.setDesc("삭제·이름변경 시 상대 vault의 옛 파일 처리. 기술문서 §15.")
 			.addDropdown((dd) =>
@@ -142,74 +194,64 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		new Setting(containerEl)
+		new Setting(c)
 			.setName("보관 폴더")
-			.setDesc("'보관 폴더로 이동' 정책일 때 삭제 파일이 모이는 폴더. 이 폴더에서 지우면 DB에서도 영구 삭제됩니다. (점으로 시작하면 Obsidian이 표시하지 않으니 보이는 이름 권장)")
+			.setDesc("'보관 폴더로 이동' 정책일 때 삭제 파일이 모이는 폴더. 이 폴더에서 지우면 DB에서도 영구 삭제됩니다.")
 			.addText((t) =>
-				t
-					.setPlaceholder("_삭제됨")
-					.setValue(s.archiveFolder)
-					.onChange(async (v) => {
-						s.archiveFolder = v.trim() || "_삭제됨";
-						await this.host.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("제외 폴더")
-			.setDesc("동기화에서 제외할 폴더(쉼표로 구분). 기술문서 §11.1.")
-			.addText((t) =>
-				t
-					.setValue(s.excludeFolders.join(", "))
-					.onChange(async (v) => {
-						s.excludeFolders = v
-							.split(",")
-							.map((x) => x.trim())
-							.filter((x) => x.length > 0);
-						await this.host.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName("설정 적용 (동기화 재시작)")
-			.setDesc("CouchDB 연결·경로·옵션 변경을 실행 중인 동기화에 반영합니다.")
-			.addButton((b) =>
-				b.setButtonText("적용").onClick(async () => {
-					b.setDisabled(true);
-					try {
-						await this.host.restartMode();
-					} finally {
-						b.setDisabled(false);
-					}
+				t.setPlaceholder("_삭제됨").setValue(s.archiveFolder).onChange(async (v) => {
+					s.archiveFolder = v.trim() || "_삭제됨";
+					await this.host.saveSettings();
 				}),
 			);
 
-		// --- 위험 구역: 역할 재설정 ---
+		new Setting(c)
+			.setName("제외 폴더")
+			.setDesc("동기화에서 제외할 폴더(쉼표로 구분). 기술문서 §11.1.")
+			.addText((t) =>
+				t.setValue(s.excludeFolders.join(", ")).onChange(async (v) => {
+					s.excludeFolders = v.split(",").map((x) => x.trim()).filter((x) => x.length > 0);
+					await this.host.saveSettings();
+				}),
+			);
+	}
+
+	private renderApplyAndReset(s: ClassSyncSettings): void {
+		const c = this.containerEl;
+		new Setting(c)
+			.setName("설정 적용 (동기화 재시작)")
+			.setDesc("연결·학생 목록·옵션 변경을 실행 중인 동기화에 반영합니다.")
+			.addButton((b) => b.setButtonText("적용").onClick(() => this.runAsync(b, () => this.host.restartMode())));
+
 		if (s.setupComplete) {
-			containerEl.createEl("h3", { text: "역할 재설정" });
-			new Setting(containerEl)
+			c.createEl("h3", { text: "역할 재설정" });
+			new Setting(c)
 				.setName("역할 재설정 (동기화 상태 초기화)")
-				.setDesc("역할을 다시 선택합니다. 동기화 체크포인트(last_seq)와 상태가 초기화되어 다음 시작 시 전체 동기화가 다시 수행됩니다. vault 파일은 삭제되지 않습니다.")
+				.setDesc("역할을 다시 선택합니다. 동기화 체크포인트가 초기화됩니다. vault 파일은 삭제되지 않습니다.")
 				.addButton((b) =>
-					b
-						.setButtonText("재설정")
-						.setWarning()
-						.onClick(async () => {
-							await this.host.resetSetup();
-							this.display();
-						}),
+					b.setButtonText("재설정").setWarning().onClick(async () => {
+						await this.host.resetSetup();
+						this.display();
+					}),
 				);
 		}
 	}
 
-	private textSetting(
-		containerEl: HTMLElement,
-		name: string,
-		key: keyof ClassSyncSettings,
-		placeholder: string,
-	): void {
+	// --- 헬퍼 ---
+	private studentField(card: HTMLElement, name: string, st: StudentConfig, key: keyof StudentConfig, placeholder: string): void {
+		new Setting(card).setName(name).addText((t) => {
+			t.setPlaceholder(placeholder)
+				.setValue(String(st[key] ?? ""))
+				.onChange(async (v) => {
+					(st[key] as unknown as string) = v.trim();
+					await this.host.saveSettings();
+				});
+			noAutoCorrect(t.inputEl);
+		});
+	}
+
+	private textSetting(name: string, key: keyof ClassSyncSettings, placeholder: string): void {
 		const s = this.host.settings;
-		new Setting(containerEl).setName(name).addText((t) => {
+		new Setting(this.containerEl).setName(name).addText((t) => {
 			t.setPlaceholder(placeholder)
 				.setValue(String(s[key] ?? ""))
 				.onChange(async (v) => {
@@ -218,6 +260,31 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 				});
 			noAutoCorrect(t.inputEl);
 		});
+	}
+
+	private passwordSetting(): void {
+		const s = this.host.settings;
+		new Setting(this.containerEl).setName("관리자 비밀번호").addText((t) => {
+			t.setPlaceholder("********").setValue(s.password).onChange(async (v) => {
+				s.password = v;
+				await this.host.saveSettings();
+			});
+			t.inputEl.type = "password";
+			noAutoCorrect(t.inputEl);
+		});
+	}
+
+	private readonlySetting(name: string, value: string): void {
+		new Setting(this.containerEl).setName(name).addText((t) => t.setValue(value).setDisabled(true));
+	}
+
+	private async runAsync(b: { setDisabled(v: boolean): unknown }, fn: () => Promise<void>): Promise<void> {
+		b.setDisabled(true);
+		try {
+			await fn();
+		} finally {
+			b.setDisabled(false);
+		}
 	}
 }
 

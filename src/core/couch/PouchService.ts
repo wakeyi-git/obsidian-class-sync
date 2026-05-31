@@ -200,6 +200,26 @@ export class PouchService {
 			.on("error", (e: any) => handlers.onError?.(e instanceof Error ? e : new Error(describeError(e)))) as any;
 	}
 
+	/** 로컬 PouchDB(IndexedDB)를 완전 삭제. 원격을 비운 뒤 깨끗이 다시 받기 위함. */
+	async destroyLocal(): Promise<void> {
+		this.stopReplication();
+		const db = this.localDb();
+		await db.destroy(); // IndexedDB 제거 + 닫힘
+		this.local = null;
+	}
+
+	/** live replication만 중지(로컬/원격 DB는 유지). 인증 실패 시 재시도 폭주를 막는 데 사용. */
+	stopReplication(): void {
+		if (this.replication) {
+			try {
+				this.replication.cancel();
+			} catch {
+				/* noop */
+			}
+			this.replication = null;
+		}
+	}
+
 	async close(): Promise<void> {
 		if (this.replication) {
 			try {
