@@ -31,7 +31,9 @@ TeacherVault/
 | 역할 기반 mode 전환 (Student ⇄ Teacher) | ✅ |
 | 모바일 동작 (`requestUrl` fetch shim으로 CORS 우회) | ✅ |
 
-아직 자동 동기화 엔진(파일 감지·자동 반영)은 **Phase 1**에서 구현됩니다. 현재는 검증용 수동 명령으로 동작합니다.
+**Phase 1(단일 학생 양방향 미러 MVP)**: 자동 동기화 엔진 구현 완료(기기 검증 대기).
+역할 최초 1회 설정 후 잠금, 로컬 변경 감시(create/modify) → 자동 업로드, 원격 changes 구독 →
+자동 반영, 증분 재개(last_seq 체크포인트), 수동 전체/업로드/다운로드 동기화, preserve-local 충돌 보호.
 
 ---
 
@@ -69,22 +71,25 @@ docker run -d --name couchdb -p 5984:5984 \
 
 ---
 
-## 사용 (Phase 0 POC 명령)
+## 사용
 
-설정 탭에서 역할 / CouchDB URL / 계정 / Mirror DB / localRoot 를 입력하고 **연결 테스트**를 누릅니다.
-이후 명령 팔레트(`Cmd/Ctrl+P`)에서 `Class Sync:` 로 검색하면 검증 명령이 나옵니다.
+**최초 실행 시** 역할 선택 화면(Student / Teacher)이 뜹니다. 역할은 한 번 선택하면 잠기며,
+변경하려면 설정의 '역할 재설정'을 사용합니다. 이후 설정 탭에서 CouchDB URL / 계정 / Mirror DB /
+localRoot 를 입력하고 **연결 테스트** → **설정 적용**을 누릅니다.
 
-| 명령 | 검증 내용 |
+자동 동기화가 켜져 있으면(기본값) 파일 생성·수정이 양방향으로 자동 반영됩니다.
+명령 팔레트(`Cmd/Ctrl+P`)에서 `Class Sync:` 로 검색:
+
+| 명령 | 동작 |
 |---|---|
-| 연결/권한 테스트 | CouchDB 연결과 인증 (HTTP 상태로 정직하게 판정) |
-| 문서 put/get 테스트 | 문서 왕복 및 contentHash 일치 |
-| changes feed 구독 시작/중지 | 원격 변경 실시간 수신 |
-| vault 파일 쓰기/읽기 테스트 | Obsidian 파일 입출력 |
-| 원격→로컬 적용 + guard 테스트 | 동기화 루프 차단 |
-| 로컬↔원격 sync 시작/중지 | PouchDB replication |
-| 역할 전환 (student ⇄ teacher) | mode 전환 |
+| 전체 동기화 | localRoot ↔ mirror DB 전체 정합 (업로드+다운로드) |
+| 업로드만 실행 | 로컬 파일을 원격으로 |
+| 다운로드만 실행 | 원격 문서를 로컬로 |
+| 연결/권한 테스트 | CouchDB 연결과 인증 확인 |
+| 자동 동기화 켜기/끄기 | 실시간 감시·구독 토글 |
+| 로그 패널 열기 | 동기화 로그 보기 |
 
-좌측 리본의 🔄 아이콘 또는 `Class Sync: 로그 패널 열기` 로 결과 로그를 볼 수 있습니다.
+좌측 리본의 🔄 아이콘으로도 로그 패널을 열 수 있습니다.
 
 ---
 
@@ -92,24 +97,32 @@ docker run -d --name couchdb -p 5984:5984 \
 
 ```
 src/
-├─ main.ts                     # 진입점, 역할 기반 mode 전환, 명령 등록
+├─ main.ts                     # 진입점, 최초 역할 설정, 명령 등록
 ├─ settings/                   # 설정 타입 + 설정 탭 UI
 ├─ core/
-│  ├─ couch/PouchService.ts    # PouchDB 래퍼 (ping/put/get/changes/sync)
+│  ├─ couch/PouchService.ts    # PouchDB 래퍼 (ping/put/get/changes/allNotes)
 │  ├─ couch/obsidianFetch.ts   # requestUrl 기반 fetch shim (모바일 CORS 우회)
 │  ├─ guard/RemoteApplyGuard.ts# 동기화 루프 차단
+│  ├─ sync/                    # 동기화 엔진
+│  │  ├─ MirrorContext.ts      # 링크별 경로/IO/상태 헬퍼
+│  │  ├─ MirrorApplier.ts      # 원격→로컬 적용 (guard, preserve-local)
+│  │  ├─ Uploader.ts           # 로컬→원격 업로드 (해시 dedupe)
+│  │  ├─ LocalWatcher.ts       # vault 변경 감시 (onLayoutReady, debounce)
+│  │  ├─ RemoteSubscriber.ts   # changes 구독 (last_seq 증분 재개)
+│  │  ├─ FullSync.ts           # 전체 정합 (up/down/both)
+│  │  └─ MirrorSync.ts         # 위를 엮은 링크 엔진
 │  ├─ path/  hash/  log/       # 경로 매핑 · contentHash · 로거
 │  └─ model/types.ts           # 문서 모델 (note 등)
-├─ modes/                      # ClassSyncMode / StudentMode / TeacherMode / PocTester
-└─ ui/LogView.ts               # 로그 패널
+├─ modes/                      # ClassSyncMode / StudentMode / TeacherMode
+└─ ui/                         # LogView · RoleSetupModal
 ```
 
 ---
 
 ## 로드맵 (기술문서 §24)
 
-- [x] **Phase 0** — 기술 검증 POC (현재)
-- [ ] **Phase 1** — 단일 학생 양방향 미러 MVP (자동 파일 감지·반영)
+- [x] **Phase 0** — 기술 검증 POC
+- [x] **Phase 1** — 단일 학생 양방향 미러 MVP (자동 파일 감지·반영) *(기기 검증 대기)*
 - [ ] **Phase 2** — 다중 학생 Teacher Mode
 - [ ] **Phase 3** — 이동/삭제/충돌 처리
 - [ ] **Phase 4** — 교사 편의 복사 명령

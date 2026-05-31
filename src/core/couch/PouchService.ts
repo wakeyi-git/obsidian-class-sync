@@ -1,15 +1,17 @@
 import PouchDB from "pouchdb-browser";
-import { PouchDocBase } from "../model/types";
+import { NoteDoc, PouchDocBase } from "../model/types";
 import { createObsidianFetch } from "./obsidianFetch";
 
 /**
  * PouchDB 기반 동기화 서비스. 기술문서 §23.4 CouchClient 역할을 대체한다.
  *
- * 각 학생 mirror DB는 원격 CouchDB의 한 데이터베이스에 대응한다.
- * PouchDB는 오프라인 큐 / 충돌 / changes / replication을 내장 제공하므로
- * 직접 구현할 필요가 없다. 모바일 CORS는 createObsidianFetch로 우회한다.
+ * 오프라인 우선 구조:
+ *  - 로컬 PouchDB(IndexedDB)에 읽고 쓴다.
+ *  - 로컬 ↔ 원격은 live sync(retry:true)가 자동으로 맞춘다(오프라인 큐·재연결·충돌 리비전).
+ *  - 따라서 네트워크가 끊겨도 로컬 쓰기는 큐에 쌓였다가 재연결 시 전파되고,
+ *    동시 편집은 PouchDB의 _conflicts(리비전 충돌)로 정확히 감지된다.
  *
- * Phase 0 POC 범위: ping / put(upsert) / get / changes(live) / 로컬↔원격 sync.
+ * 연결/권한 테스트(ping/rawInfo)만 원격을 직접 본다. 모바일 CORS는 createObsidianFetch로 우회.
  */
 
 export interface ChangeEvent<T = any> {
@@ -23,13 +25,18 @@ export interface LiveHandle {
 	cancel(): void;
 }
 
-export interface SyncHandle {
-	cancel(): void;
+export interface ReplicationHandlers {
+	onChange?: (direction: "push" | "pull", docs: number) => void;
+	onPaused?: (err?: unknown) => void;
+	onActive?: () => void;
+	onError?: (e: Error) => void;
+	onDenied?: (e: unknown) => void;
 }
 
 export class PouchService {
 	private remote: PouchDB.Database;
 	private local: PouchDB.Database | null = null;
+	private replication: PouchDB.Replication.Sync<{}> | null = null;
 	private readonly fetchImpl: typeof fetch;
 
 	constructor(
@@ -37,6 +44,7 @@ export class PouchService {
 		private dbName: string,
 		username: string,
 		password: string,
+		private localDbName: string,
 	) {
 		this.fetchImpl = createObsidianFetch(username, password);
 		this.remote = this.openRemote();
@@ -49,14 +57,19 @@ export class PouchService {
 
 	private openRemote(): PouchDB.Database {
 		return new PouchDB(this.remoteUrl(), {
-			// 표준 fetch 대신 requestUrl 기반 fetch 사용 (모바일 CORS 우회)
-			fetch: (url: string | Request, opts?: RequestInit) =>
-				this.fetchImpl(url as RequestInfo, opts),
-			skip_setup: true, // POC: 권한 없으면 자동 DB 생성 시도하지 않음
+			fetch: (url: string | Request, opts?: RequestInit) => this.fetchImpl(url as RequestInfo, opts),
+			skip_setup: true,
 		} as PouchDB.Configuration.RemoteDatabaseConfiguration);
 	}
 
-	/** 연결/권한 테스트. 기술문서 §22.3. 성공 시 db 정보 반환. */
+	/** 로컬 PouchDB(지연 생성). vault별로 이름이 달라 같은 기기 다중 vault에서도 충돌하지 않는다. */
+	private localDb(): PouchDB.Database {
+		if (!this.local) this.local = new PouchDB(this.localDbName);
+		return this.local;
+	}
+
+	// --- 연결/권한 테스트 (원격 직접) ---
+
 	async ping(): Promise<{ ok: boolean; info?: PouchDB.Core.DatabaseInfo; error?: string }> {
 		try {
 			const info = await this.remote.info();
@@ -66,105 +79,136 @@ export class PouchService {
 		}
 	}
 
-	/**
-	 * 진단용: 우리 fetch shim이 DB 루트(GET /{db})에서 실제로 받는 응답을 그대로 확인.
-	 * 본문이 비었는지/깨졌는지/정상 JSON인지 판별한다. (iOS 디버깅)
-	 */
 	async rawInfo(): Promise<{ status: number; length: number; snippet: string }> {
 		const resp = await this.fetchImpl(this.remoteUrl(), { method: "GET" });
 		const text = await resp.text();
 		return { status: resp.status, length: text.length, snippet: text.slice(0, 200) };
 	}
 
-	/** 문서 조회. 없으면 null. */
+	// --- 로컬 DB 읽기/쓰기 ---
+
 	async get<T extends PouchDocBase>(id: string): Promise<(T & PouchDB.Core.IdMeta & PouchDB.Core.GetMeta) | null> {
 		try {
-			return (await this.remote.get(id)) as unknown as T & PouchDB.Core.IdMeta & PouchDB.Core.GetMeta;
+			return (await this.localDb().get(id)) as unknown as T & PouchDB.Core.IdMeta & PouchDB.Core.GetMeta;
 		} catch (e: any) {
 			if (e?.status === 404) return null;
 			throw e;
 		}
 	}
 
-	/**
-	 * 문서 upsert. 기존 문서가 있으면 현재 _rev를 붙여 갱신한다.
-	 * PouchDB가 409(conflict)를 던지면 최신 _rev로 1회 재시도.
-	 */
+	/** _conflicts 포함 조회(충돌 감지용). */
+	async getWithConflicts<T extends PouchDocBase>(
+		id: string,
+	): Promise<(T & PouchDB.Core.IdMeta & PouchDB.Core.GetMeta & { _conflicts?: string[] }) | null> {
+		try {
+			return (await this.localDb().get(id, { conflicts: true })) as any;
+		} catch (e: any) {
+			if (e?.status === 404) return null;
+			throw e;
+		}
+	}
+
+	/** 특정 리비전 조회(충돌 사본 비교용). */
+	async getRev<T extends PouchDocBase>(id: string, rev: string): Promise<T | null> {
+		try {
+			return (await this.localDb().get(id, { rev })) as unknown as T;
+		} catch {
+			return null;
+		}
+	}
+
+	/** 로컬 upsert. 기존 _rev를 붙여 갱신, 409 시 1회 재시도. */
 	async put<T extends PouchDocBase>(doc: T): Promise<T & { _rev: string }> {
+		const db = this.localDb();
 		const existing = await this.get<T>(doc._id);
 		const toPut = existing ? { ...doc, _rev: existing._rev } : { ...doc };
 		try {
-			const res = await this.remote.put(toPut as any);
+			const res = await db.put(toPut as any);
 			return { ...doc, _rev: res.rev };
 		} catch (e: any) {
 			if (e?.status === 409) {
 				const current = await this.get<T>(doc._id);
-				const retry = { ...doc, _rev: current?._rev };
-				const res = await this.remote.put(retry as any);
+				const res = await db.put({ ...doc, _rev: current?._rev } as any);
 				return { ...doc, _rev: res.rev };
 			}
 			throw e;
 		}
 	}
 
-	/** 문서 삭제. */
-	async remove(id: string, rev: string): Promise<void> {
-		await this.remote.remove(id, rev);
+	/** 특정 리비전 제거(충돌 해소용). */
+	async removeRev(id: string, rev: string): Promise<void> {
+		await this.localDb().remove(id, rev);
 	}
 
-	/**
-	 * changes feed 구독 (live). 기술문서 §10. 새 변경마다 onChange 호출.
-	 * since="now"면 구독 시작 이후 변경만 받는다.
-	 */
-	changes<T = any>(
+	/** 로컬 note 문서 전체. */
+	async allNotes(): Promise<NoteDoc[]> {
+		const res = await this.localDb().allDocs<NoteDoc>({
+			include_docs: true,
+			startkey: "note:",
+			endkey: "note:￿",
+		});
+		return res.rows.map((r) => r.doc).filter((d): d is NoteDoc & PouchDB.Core.IdMeta & PouchDB.Core.RevisionIdMeta => !!d);
+	}
+
+	/** 로컬 변경 구독(라이브). conflicts:true로 충돌 정보를 함께 받는다. */
+	localChanges<T = any>(
 		onChange: (change: ChangeEvent<T>) => void,
-		opts: { since?: "now" | number | string; onError?: (e: Error) => void } = {},
+		opts: { since?: number | string; onError?: (e: Error) => void } = {},
 	): LiveHandle {
-		const feed = this.remote
+		const feed = this.localDb()
 			.changes({
 				live: true,
-				since: opts.since ?? "now",
+				since: opts.since ?? 0,
 				include_docs: true,
-				timeout: false as unknown as number,
+				conflicts: true,
+				return_docs: false,
 			})
 			.on("change", (change: any) => {
-				onChange({
-					id: change.id,
-					deleted: !!change.deleted,
-					doc: change.doc as T,
-					seq: change.seq,
-				});
+				onChange({ id: change.id, deleted: !!change.deleted, doc: change.doc as T, seq: change.seq });
 			})
 			.on("error", (e: any) => {
 				opts.onError?.(e instanceof Error ? e : new Error(describeError(e)));
 			});
-
 		return { cancel: () => feed.cancel() };
 	}
 
-	/**
-	 * 로컬 PouchDB와 원격을 양방향 live 동기화. PouchDB replication 검증용.
-	 * 로컬 DB 이름은 보통 mirror DB 이름과 동일하게 둔다.
-	 */
-	startSync(
-		localName: string,
-		handlers: {
-			onChange?: (info: any) => void;
-			onError?: (e: Error) => void;
-			onPaused?: () => void;
-		} = {},
-	): SyncHandle {
-		if (!this.local) this.local = new PouchDB(localName);
-		const sync = this.local
-			.sync(this.remote, { live: true, retry: true })
-			.on("change", (info: any) => handlers.onChange?.(info))
-			.on("paused", () => handlers.onPaused?.())
-			.on("error", (e: any) => handlers.onError?.(e instanceof Error ? e : new Error(describeError(e))));
-		return { cancel: () => sync.cancel() };
+	/** 로컬 changes 체크포인트(재시작 시 증분 적용용). */
+	async currentLocalSeq(): Promise<string> {
+		const info = await this.localDb().info();
+		return String(info.update_seq ?? "0");
 	}
 
-	/** 리소스 정리 (mode stop / plugin unload). */
+	// --- 로컬 ↔ 원격 live replication ---
+
+	/** 1회성 양방향 동기화(push 후 pull). 자동 동기화가 꺼진 상태의 수동 전체 동기화에 사용. */
+	async replicateOnce(): Promise<{ pushed: number; pulled: number }> {
+		const db = this.localDb();
+		const push = await db.replicate.to(this.remote);
+		const pull = await db.replicate.from(this.remote);
+		return { pushed: push?.docs_written ?? 0, pulled: pull?.docs_written ?? 0 };
+	}
+
+	/** 양방향 live 동기화 시작. retry:true로 오프라인/재연결을 자동 처리. */
+	startReplication(handlers: ReplicationHandlers = {}): void {
+		if (this.replication) return;
+		this.replication = this.localDb()
+			.sync(this.remote, { live: true, retry: true })
+			.on("change", (info: any) => handlers.onChange?.(info.direction, info.change?.docs_written ?? 0))
+			.on("paused", (err: any) => handlers.onPaused?.(err))
+			.on("active", () => handlers.onActive?.())
+			.on("denied", (e: any) => handlers.onDenied?.(e))
+			.on("error", (e: any) => handlers.onError?.(e instanceof Error ? e : new Error(describeError(e)))) as any;
+	}
+
 	async close(): Promise<void> {
+		if (this.replication) {
+			try {
+				this.replication.cancel();
+			} catch {
+				/* noop */
+			}
+			this.replication = null;
+		}
 		try {
 			await this.remote.close();
 		} catch {
@@ -176,6 +220,7 @@ export class PouchService {
 			} catch {
 				/* noop */
 			}
+			this.local = null;
 		}
 	}
 }

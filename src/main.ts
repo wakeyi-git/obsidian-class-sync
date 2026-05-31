@@ -7,43 +7,45 @@ import { ClassSyncMode } from "./modes/ClassSyncMode";
 import { StudentMode } from "./modes/student/StudentMode";
 import { TeacherMode } from "./modes/teacher/TeacherMode";
 import { LogView, LOG_VIEW_TYPE } from "./ui/LogView";
+import { RoleSetupModal } from "./ui/RoleSetupModal";
+import { testConnection } from "./core/sync/connectionTest";
 
 /**
- * Class Sync for Obsidian — Phase 0 POC 진입점.
+ * Class Sync for Obsidian — Phase 1 진입점.
  *
- * 기술문서 §5.2 / §5.3 패턴: 설정의 role에 따라 Student/Teacher mode를 활성화하고,
- * 역할 변경 시 기존 mode를 정지하고 새 mode를 시작한다.
- * POC 명령은 플러그인 레벨에 한 번 등록하고 현재 mode의 tester로 위임한다.
+ * 역할은 최초 1회 선택 후 잠긴다(기술문서 §5.4 보강). 실행 시 저장된 last_seq부터 증분 재개하고,
+ * 전체 동기화는 최초 1회와 수동 명령에서만 수행한다.
  */
 export default class ClassSyncPlugin extends Plugin implements SettingsHost {
 	settings!: ClassSyncSettings;
 	private logger = new Logger();
 	private core!: CoreServices;
-	private mode!: ClassSyncMode;
+	private mode: ClassSyncMode | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 
 		this.core = new CoreServices(this.app, this.settings, this.logger);
+		this.core.save = () => this.saveData(this.settings);
 
 		this.registerView(LOG_VIEW_TYPE, (leaf: WorkspaceLeaf) => new LogView(leaf, this.logger));
-
 		this.addSettingTab(new ClassSyncSettingTab(this.app, this));
-
 		this.addRibbonIcon("refresh-cw", "Class Sync 로그 열기", () => this.activateLogView());
-
 		this.registerCommands();
 
-		this.mode = this.createMode(this.settings.role);
-		await this.mode.start();
+		if (!this.settings.setupComplete) {
+			// 최초 실행: 역할 선택 후 시작
+			this.promptRoleSetup();
+		} else {
+			await this.startMode();
+		}
 
-		this.logger.info(
-			`Class Sync 로드됨 [build: ios-auth-fix] (role=${this.settings.role}). 명령 팔레트에서 "Class Sync:" 검색.`,
-		);
+		this.logger.info(`Class Sync 로드됨 [Phase 1] (role=${this.settings.role}, setup=${this.settings.setupComplete}).`);
 	}
 
 	async onunload(): Promise<void> {
 		await this.mode?.stop();
+		await this.core?.flushPersist();
 		this.core?.dispose();
 	}
 
@@ -54,92 +56,108 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost {
 
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
-		// 연결 관련 설정이 바뀌었을 수 있으므로 다음 사용 때 PouchService를 새로 만들도록
-		await this.mode?.tester.resetPouch();
 	}
 
-	// --- 역할 전환 (기술문서 §5.3) ---
-	async switchRole(nextRole: Role): Promise<void> {
-		if (this.mode?.role === nextRole) return;
-		await this.mode?.stop();
-		this.settings.role = nextRole;
-		await this.saveData(this.settings);
-		this.core.settings = this.settings;
-		this.mode = this.createMode(nextRole);
-		await this.mode.start();
-		this.logger.ok(`역할 전환 완료: ${nextRole}`, true);
-	}
-
+	// --- 모드 시작/정지 ---
 	private createMode(role: Role): ClassSyncMode {
 		return role === "teacher" ? new TeacherMode(this.core) : new StudentMode(this.core);
 	}
 
-	// --- 연결 테스트 (설정 탭 버튼) ---
-	async testConnection(): Promise<void> {
-		await this.activateLogView();
-		await this.mode.tester.testConnection();
+	private async startMode(): Promise<void> {
+		this.core.settings = this.settings;
+		this.mode = this.createMode(this.settings.role);
+		await this.mode.start();
 	}
 
-	// --- POC 명령 등록 ---
-	private registerCommands(): void {
-		const tester = () => this.mode.tester;
+	/** 최초 실행 역할 선택 모달 → 역할 잠금 + 모드 시작. */
+	private promptRoleSetup(): void {
+		new RoleSetupModal(this.app, async (role) => {
+			this.settings.role = role;
+			this.settings.setupComplete = true;
+			await this.saveSettings();
+			this.logger.ok(`역할 설정 완료: ${role}. 설정에서 CouchDB 연결 정보를 입력하세요.`, true);
+			await this.startMode();
+		}).open();
+	}
 
-		this.addCommand({
-			id: "class-sync-open-log",
-			name: "로그 패널 열기",
-			callback: () => this.activateLogView(),
-		});
+	/** 역할 재설정(데이터 초기화). 설정 탭에서 호출. */
+	async resetSetup(): Promise<void> {
+		await this.mode?.stop();
+		this.mode = null;
+		this.settings.setupComplete = false;
+		this.settings.lastSeqByDb = {};
+		await this.saveSettings();
+		this.logger.warn("역할/동기화 상태를 초기화했습니다. 역할을 다시 선택하세요.", true);
+		this.promptRoleSetup();
+	}
+
+	// --- 연결 테스트 (설정 버튼) — 항상 최신 설정으로 검사 ---
+	async testConnection(): Promise<void> {
+		await this.activateLogView();
+		await testConnection(this.core);
+	}
+
+	/** 연결/경로 설정 변경을 실행 중 엔진에 반영(재시작). 설정 탭 '적용' 버튼. */
+	async restartMode(): Promise<void> {
+		if (!this.settings.setupComplete) return;
+		await this.mode?.stop();
+		await this.startMode();
+		this.logger.ok("설정을 적용해 동기화를 재시작했습니다.", true);
+	}
+
+	// --- 명령 등록 ---
+	private registerCommands(): void {
+		const sync = () => this.mode?.sync;
+
+		this.addCommand({ id: "class-sync-open-log", name: "로그 패널 열기", callback: () => this.activateLogView() });
 		this.addCommand({
 			id: "class-sync-test-connection",
 			name: "연결/권한 테스트",
+			callback: () => this.testConnection(),
+		});
+		this.addCommand({
+			id: "class-sync-full-sync",
+			name: "전체 동기화",
 			callback: async () => {
 				await this.activateLogView();
-				await tester().testConnection();
+				await sync()?.fullSync("both");
 			},
 		});
 		this.addCommand({
-			id: "class-sync-test-putget",
-			name: "문서 put/get 테스트",
-			callback: () => tester().testPutGet(),
+			id: "class-sync-upload-only",
+			name: "업로드만 실행",
+			callback: async () => {
+				await this.activateLogView();
+				await sync()?.fullSync("up");
+			},
 		});
 		this.addCommand({
-			id: "class-sync-changes-start",
-			name: "changes feed 구독 시작",
-			callback: () => tester().startChanges(),
+			id: "class-sync-download-only",
+			name: "다운로드만 실행",
+			callback: async () => {
+				await this.activateLogView();
+				await sync()?.fullSync("down");
+			},
 		});
 		this.addCommand({
-			id: "class-sync-changes-stop",
-			name: "changes feed 구독 중지",
-			callback: () => tester().stopChanges(),
-		});
-		this.addCommand({
-			id: "class-sync-test-filerw",
-			name: "vault 파일 쓰기/읽기 테스트",
-			callback: () => tester().testFileRW(),
-		});
-		this.addCommand({
-			id: "class-sync-test-guard",
-			name: "원격→로컬 적용 + guard 테스트",
-			callback: () => tester().testRemoteApplyWithGuard(),
-		});
-		this.addCommand({
-			id: "class-sync-sync-start",
-			name: "로컬↔원격 sync 시작",
-			callback: () => tester().startSync(),
-		});
-		this.addCommand({
-			id: "class-sync-sync-stop",
-			name: "로컬↔원격 sync 중지",
-			callback: () => tester().stopSync(),
-		});
-		this.addCommand({
-			id: "class-sync-switch-role",
-			name: "역할 전환 (student ⇄ teacher)",
-			callback: () => this.switchRole(this.settings.role === "teacher" ? "student" : "teacher"),
+			id: "class-sync-toggle-autosync",
+			name: "자동 동기화 켜기/끄기",
+			callback: () => this.toggleAutoSync(),
 		});
 	}
 
-	// --- 로그 뷰 활성화 ---
+	/** autoSync 토글 — 모드를 재시작해 감시/구독을 켜거나 끈다. */
+	private async toggleAutoSync(): Promise<void> {
+		this.settings.autoSync = !this.settings.autoSync;
+		await this.saveSettings();
+		this.logger.info(`자동 동기화: ${this.settings.autoSync ? "켜짐" : "꺼짐"}`, true);
+		if (this.settings.setupComplete) {
+			await this.mode?.stop();
+			await this.startMode();
+		}
+	}
+
+	// --- 로그 뷰 ---
 	private async activateLogView(): Promise<void> {
 		const existing = this.app.workspace.getLeavesOfType(LOG_VIEW_TYPE);
 		if (existing.length > 0) {

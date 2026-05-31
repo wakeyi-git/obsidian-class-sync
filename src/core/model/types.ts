@@ -4,7 +4,7 @@ export interface PouchDocBase {
 	_rev?: string;
 }
 
-/** note 문서. 기술문서 §8.1 (POC 필수 필드만). */
+/** note 문서. 기술문서 §8.1 / 삭제 시 tombstone(§8.3). */
 export interface NoteDoc extends PouchDocBase {
 	type: "note";
 	schemaVersion: number;
@@ -20,6 +20,12 @@ export interface NoteDoc extends PouchDocBase {
 	lastModifiedRole: "student" | "teacher";
 	lastModifiedDeviceId: string;
 	updatedAt: string;
+
+	// tombstone 메타데이터 (deleted=true일 때, 기술문서 §8.3)
+	deletedAt?: string;
+	deletedBy?: string;
+	deletedByRole?: "student" | "teacher";
+	deleteMode?: "archive" | "propagate-delete" | "ignore-delete";
 }
 
 export function noteId(dbPath: string): string {

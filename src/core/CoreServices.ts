@@ -7,23 +7,65 @@ import { PouchService } from "./couch/PouchService";
 /**
  * 역할 공통 core 서비스. 기술문서 §3 / §23.2.
  * mode들이 공유하는 logger, guard, 그리고 현재 설정으로 PouchService를 만드는 팩토리를 제공한다.
+ * 동기화 엔진의 체크포인트(lastSeq)를 data.json에 throttle 저장하는 통로도 제공한다.
  */
 export class CoreServices {
-	readonly guard = new RemoteApplyGuard();
+	/** 원격 적용 가드. release 지연은 업로드 debounce보다 길어야 에코를 확실히 무시한다. */
+	readonly guard: RemoteApplyGuard;
+
+	/** 실제 영속 함수. main이 주입한다(this.saveData(this.settings)). */
+	save: () => Promise<void> = async () => {};
+
+	private persistTimer: ReturnType<typeof setTimeout> | null = null;
+	private readonly persistDelayMs = 1500;
 
 	constructor(
 		public readonly app: App,
 		public settings: ClassSyncSettings,
 		public readonly logger: Logger,
-	) {}
+	) {
+		this.guard = new RemoteApplyGuard(Math.max(5000, settings.debounceMs + 3000));
+	}
 
 	/** 현재 설정 기준으로 mirror DB(PouchService)를 생성. */
 	createPouch(dbName?: string): PouchService {
 		const s = this.settings;
-		return new PouchService(s.couchdbUrl, dbName ?? s.remoteDb, s.username, s.password);
+		const db = dbName ?? s.remoteDb;
+		return new PouchService(s.couchdbUrl, db, s.username, s.password, this.localDbName(db));
+	}
+
+	/**
+	 * 로컬 PouchDB 이름. 같은 origin(app://obsidian.md)에서 IndexedDB가 vault 간 공유될 수 있으므로
+	 * vault 식별자를 포함해 충돌을 막는다(같은 기기에서 학생/교사 vault를 동시에 띄우는 경우 등).
+	 */
+	private localDbName(db: string): string {
+		const vaultKey = (this.app as any).appId ?? this.app.vault.getName();
+		return `classsync_${vaultKey}_${db}`;
+	}
+
+	/** 잦은 체크포인트 갱신을 모아 저장(과도한 디스크 쓰기 방지). */
+	requestPersist(): void {
+		if (this.persistTimer) return;
+		this.persistTimer = setTimeout(() => {
+			this.persistTimer = null;
+			void this.save();
+		}, this.persistDelayMs);
+	}
+
+	/** 대기 중인 저장을 즉시 반영(stop/unload 시). */
+	async flushPersist(): Promise<void> {
+		if (this.persistTimer) {
+			clearTimeout(this.persistTimer);
+			this.persistTimer = null;
+		}
+		await this.save();
 	}
 
 	dispose(): void {
+		if (this.persistTimer) {
+			clearTimeout(this.persistTimer);
+			this.persistTimer = null;
+		}
 		this.guard.dispose();
 	}
 }
