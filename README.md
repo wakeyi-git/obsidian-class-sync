@@ -10,30 +10,28 @@ TeacherVault/
 └─ 학생C/  ⇄  mirror_student_c  ⇄  StudentC Vault/
 ```
 
-하나의 플러그인을 배포하고, 사용자는 설정에서 **Student Mode** 또는 **Teacher Mode** 역할을 선택합니다.
+하나의 플러그인을 배포하고, 최초 실행 시 **Student Mode** 또는 **Teacher Mode** 역할을 선택합니다.
 학생은 자기 vault에서 평소처럼 노트를 작성하고, 교사는 하나의 vault에서 학생별 폴더를 관리합니다.
-학생별 데이터 격리는 CouchDB의 데이터베이스별 권한(`_security`)으로 서버에서 강제됩니다.
+
+핵심 특징:
+- **오프라인 우선** — 로컬 PouchDB ↔ 원격 CouchDB live replication. 끊겨도 큐에 쌓였다 재연결 시 전파.
+- **QR/코드 초대** — 교사가 학생을 초대하면 학생은 admin 자격증명 없이 **자기 mirror DB만 접근**하는 최소 권한 계정으로 자동 설정.
+- **서버 강제 격리** — 학생별 데이터는 CouchDB 데이터베이스별 권한(`_security`)으로 서버에서 격리.
 
 > 전체 설계는 [`기술문서.md`](기술문서.md)를 참고하세요.
 
 ---
 
-## 현재 상태: Phase 0 (기술 검증 POC) ✅
+## 현재 상태
 
-핵심 동기화 메커니즘이 **Mac · iOS** Obsidian에서 실제 CouchDB 서버를 상대로 검증되었습니다.
-
-| 검증 항목 | 상태 |
-|---|:---:|
-| Obsidian vault 파일 읽기/쓰기 | ✅ |
-| CouchDB 문서 put/get | ✅ |
-| changes feed 실시간 수신 | ✅ |
-| remote apply guard (동기화 루프 차단) | ✅ |
-| 역할 기반 mode 전환 (Student ⇄ Teacher) | ✅ |
-| 모바일 동작 (`requestUrl` fetch shim으로 CORS 우회) | ✅ |
-
-**Phase 1(단일 학생 양방향 미러 MVP)**: 자동 동기화 엔진 구현 완료(기기 검증 대기).
-역할 최초 1회 설정 후 잠금, 로컬 변경 감시(create/modify) → 자동 업로드, 원격 changes 구독 →
-자동 반영, 증분 재개(last_seq 체크포인트), 수동 전체/업로드/다운로드 동기화, preserve-local 충돌 보호.
+| Phase | 내용 | 상태 |
+|---|---|---|
+| **0** | 기술 검증 POC (연결·put/get·changes·guard·모바일) | ✅ Mac·iOS 검증 |
+| **1** | 단일 학생 양방향 미러 + 이름변경/삭제/purge + 오프라인 충돌(preserve-local) | ✅ 검증 |
+| **2** | 다중 학생 Teacher Mode + 보안 초대(QR) + 자동 프로비저닝 | ✅ 검증 |
+| 3 | 충돌 해소 UI(.conflicts) / 학생 상태 대시보드 | ⬜ 예정 |
+| 5 | 첨부파일 동기화 | ⬜ 예정 |
+| 6 | Yjs 기반 실시간 공동 편집 | ⬜ 예정 |
 
 ---
 
@@ -46,7 +44,7 @@ npm install
 npm run build      # main.js 생성 (개발 중에는 npm run dev 로 watch)
 ```
 
-빌드 산출물 **`main.js` · `manifest.json` · `styles.css`** 세 파일을 테스트 vault의
+빌드 산출물 **`main.js` · `manifest.json` · `styles.css`** 세 파일을 vault의
 `<vault>/.obsidian/plugins/class-sync/` 에 복사한 뒤, Obsidian 설정 → 커뮤니티 플러그인에서
 **Class Sync** 를 활성화합니다.
 
@@ -62,34 +60,40 @@ docker run -d --name couchdb -p 5984:5984 \
   -e COUCHDB_USER=admin -e COUCHDB_PASSWORD='****' couchdb:3
 ```
 
-1. 학생별 mirror DB 생성 — 예: `mirror_student_a`
-2. HTTPS 권장 (시놀로지 리버스 프록시 + Let's Encrypt)
+1. HTTPS 권장 (시놀로지 리버스 프록시 + Let's Encrypt)
+2. 학생 계정·mirror DB·권한은 **교사가 플러그인에서 자동 생성**하므로 수동 작업 불필요
+   (교사 Teacher Mode의 관리자 계정으로 `_users` 계정 + `mirror_*` DB + `_security`를 프로비저닝).
 3. CORS는 **선택 사항**입니다. 이 플러그인은 Obsidian `requestUrl`로 CORS를 우회하므로 없어도
    동작하지만, Fauxton 등 브라우저 도구를 쓰려면 켜두면 편합니다. Obsidian origin:
    - `app://obsidian.md` (데스크톱) · `capacitor://localhost` (iOS) · `http://localhost` (Android)
-4. 학생 계정은 자기 mirror DB에만, 교사 계정은 모든 mirror DB에 read/write 권한 부여 (기술문서 §13, §22)
 
 ---
 
 ## 사용
 
-**최초 실행 시** 역할 선택 화면(Student / Teacher)이 뜹니다. 역할은 한 번 선택하면 잠기며,
-변경하려면 설정의 '역할 재설정'을 사용합니다. 이후 설정 탭에서 CouchDB URL / 계정 / Mirror DB /
-localRoot 를 입력하고 **연결 테스트** → **설정 적용**을 누릅니다.
+최초 실행 시 역할 선택 화면이 뜹니다. 역할은 한 번 선택하면 잠기며, 변경하려면 설정의 '역할 재설정'을 사용합니다.
 
-자동 동기화가 켜져 있으면(기본값) 파일 생성·수정이 양방향으로 자동 반영됩니다.
-명령 팔레트(`Cmd/Ctrl+P`)에서 `Class Sync:` 로 검색:
+### 교사 (Teacher Mode)
+1. 설정 → **관리자 계정**(CouchDB URL / admin 사용자·비밀번호) 입력 — 이 기기에만 저장됩니다.
+2. **학생 목록**에서 `+ 학생 추가` → 이름·학생 ID 입력 (Mirror DB/폴더는 비우면 자동).
+3. 학생 카드의 **초대** 클릭 → 플러그인이 학생 계정/DB/권한을 자동 생성하고 **QR + 초대 코드**를 표시.
+4. **연결 테스트**로 모든 학생 DB 접근을 확인, **설정 적용**으로 동기화 시작.
 
+### 학생 (Student Mode)
+- 교사가 준 **QR을 휴대폰 기본 카메라로 스캔** → Obsidian이 열리며 자동 설정, 또는
+- **초대 코드를 붙여넣기**(첫 실행 화면 또는 Student 설정).
+- 학생은 자기 mirror DB에만 접근하는 전용 계정으로 연결됩니다.
+
+### 명령 (`Cmd/Ctrl+P` → `Class Sync:`)
 | 명령 | 동작 |
 |---|---|
-| 전체 동기화 | localRoot ↔ mirror DB 전체 정합 (업로드+다운로드) |
-| 업로드만 실행 | 로컬 파일을 원격으로 |
-| 다운로드만 실행 | 원격 문서를 로컬로 |
-| 연결/권한 테스트 | CouchDB 연결과 인증 확인 |
+| 전체 동기화 / 업로드만 / 다운로드만 | 수동 정합 (Teacher는 전체 학생) |
+| 연결/권한 테스트 | CouchDB 연결·권한 확인 |
 | 자동 동기화 켜기/끄기 | 실시간 감시·구독 토글 |
-| 로그 패널 열기 | 동기화 로그 보기 |
+| 로컬 캐시 초기화 | 로컬 PouchDB 삭제 후 서버에서 다시 받기 |
+| 로그 패널 열기 | 동기화 로그 보기 (좌측 🔄 리본으로도) |
 
-좌측 리본의 🔄 아이콘으로도 로그 패널을 열 수 있습니다.
+삭제한 파일은 **보관 폴더(`_삭제됨/`, 설정 가능)** 로 이동하며, 그 폴더에서 지우면 DB에서도 영구 삭제됩니다.
 
 ---
 
@@ -97,37 +101,43 @@ localRoot 를 입력하고 **연결 테스트** → **설정 적용**을 누릅�
 
 ```
 src/
-├─ main.ts                     # 진입점, 최초 역할 설정, 명령 등록
-├─ settings/                   # 설정 타입 + 설정 탭 UI
+├─ main.ts                     # 진입점, 역할 설정, 초대 딥링크 핸들러, 명령
+├─ settings/                   # 설정 타입 + 설정 탭(학생 카드 UI)
 ├─ core/
-│  ├─ couch/PouchService.ts    # PouchDB 래퍼 (ping/put/get/changes/allNotes)
-│  ├─ couch/obsidianFetch.ts   # requestUrl 기반 fetch shim (모바일 CORS 우회)
+│  ├─ couch/
+│  │  ├─ PouchService.ts       # 로컬 PouchDB + live sync(retry) + changes
+│  │  ├─ obsidianFetch.ts      # requestUrl 기반 fetch shim (모바일 CORS 우회)
+│  │  └─ CouchAdmin.ts         # 학생 계정/DB/_security 프로비저닝 (admin)
+│  ├─ invite/invite.ts         # 초대 페이로드 인코딩 + obsidian:// 딥링크
 │  ├─ guard/RemoteApplyGuard.ts# 동기화 루프 차단
-│  ├─ sync/                    # 동기화 엔진
-│  │  ├─ MirrorContext.ts      # 링크별 경로/IO/상태 헬퍼
-│  │  ├─ MirrorApplier.ts      # 원격→로컬 적용 (guard, preserve-local)
-│  │  ├─ Uploader.ts           # 로컬→원격 업로드 (해시 dedupe)
-│  │  ├─ LocalWatcher.ts       # vault 변경 감시 (onLayoutReady, debounce)
-│  │  ├─ RemoteSubscriber.ts   # changes 구독 (last_seq 증분 재개)
+│  ├─ sync/
+│  │  ├─ MirrorContext.ts      # 링크별 경로/IO/상태/보관 헬퍼
+│  │  ├─ MirrorApplier.ts      # 원격→로컬 적용 (_conflicts preserve-local, 삭제/purge)
+│  │  ├─ Uploader.ts           # 로컬→원격 (해시 dedupe, tombstone, purge)
+│  │  ├─ LocalWatcher.ts       # vault 감시 (create/modify/rename/delete)
+│  │  ├─ LocalApplier.ts       # 로컬 changes → vault 반영 (last_seq 증분)
 │  │  ├─ FullSync.ts           # 전체 정합 (up/down/both)
-│  │  └─ MirrorSync.ts         # 위를 엮은 링크 엔진
+│  │  ├─ MirrorSync.ts         # 위를 엮은 학생↔DB 링크 엔진
+│  │  └─ connectionTest.ts     # 연결/권한 테스트
 │  ├─ path/  hash/  log/       # 경로 매핑 · contentHash · 로거
-│  └─ model/types.ts           # 문서 모델 (note 등)
+│  └─ model/types.ts           # 문서 모델 (note / tombstone)
 ├─ modes/                      # ClassSyncMode / StudentMode / TeacherMode
-└─ ui/                         # LogView · RoleSetupModal
+└─ ui/                         # LogView · RoleSetupModal · InviteModal
 ```
+
+**동기화 구조 (오프라인 우선)**
+```
+Vault  ◄──(LocalWatcher / LocalApplier)──►  로컬 PouchDB  ◄──(live sync, retry)──►  원격 CouchDB
+```
+교사는 학생마다 `MirrorSync`를 하나씩 두어 여러 학생을 동시에 동기화합니다.
 
 ---
 
-## 로드맵 (기술문서 §24)
+## 보안 메모
 
-- [x] **Phase 0** — 기술 검증 POC
-- [x] **Phase 1** — 단일 학생 양방향 미러 MVP (자동 파일 감지·반영) *(기기 검증 대기)*
-- [ ] **Phase 2** — 다중 학생 Teacher Mode
-- [ ] **Phase 3** — 이동/삭제/충돌 처리
-- [ ] **Phase 4** — 교사 편의 복사 명령
-- [ ] **Phase 5** — 첨부파일 · 안정화
-- [ ] **Phase 6** — Yjs 기반 글자 단위 실시간 공동 편집 (저장 백엔드와 독립적인 확장 레이어)
+- 초대 코드에는 학생 전용 비밀번호가 포함됩니다(교실 1회 온보딩용). 만료 토큰은 후속 과제입니다.
+- 교사 관리자 자격증명은 교사 기기에만 저장되며, 학생은 admin 권한을 일절 다루지 않습니다.
+- 학생 간 데이터는 CouchDB `_security`로 서버에서 격리됩니다(다른 학생 DB 접근 시 403).
 
 ---
 
