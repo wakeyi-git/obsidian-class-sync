@@ -17,6 +17,8 @@ TeacherVault/
 - **오프라인 우선** — 로컬 PouchDB ↔ 원격 CouchDB live replication. 끊겨도 큐에 쌓였다 재연결 시 전파.
 - **QR/코드 초대** — 교사가 학생을 초대하면 학생은 admin 자격증명 없이 **자기 mirror DB만 접근**하는 최소 권한 계정으로 자동 설정.
 - **서버 강제 격리** — 학생별 데이터는 CouchDB 데이터베이스별 권한(`_security`)으로 서버에서 격리.
+- **마크다운 + 첨부파일** — 노트뿐 아니라 이미지·PDF 등 첨부도 동기화(PouchDB attachment).
+- **충돌 보존** — 양쪽 동시 편집 시 로컬을 지키고 충돌 해소 UI로 비교/선택.
 
 > 전체 설계는 [`기술문서.md`](기술문서.md)를 참고하세요.
 
@@ -30,7 +32,8 @@ TeacherVault/
 | **1** | 단일 학생 양방향 미러 + 이름변경/삭제/purge + 오프라인 충돌(preserve-local) | ✅ 검증 |
 | **2** | 다중 학생 Teacher Mode + 보안 초대(QR) + 자동 프로비저닝 | ✅ 검증 |
 | **3** | 충돌 해소 UI(보기/선택/보존) + 학생 상태 대시보드 | ✅ 검증 |
-| 5 | 첨부파일 동기화 | ⬜ 예정 |
+| **4** | 교사 편의 — 학생에게 파일/폴더 복사 + 템플릿 변수 | ✅ 검증 |
+| **5** | 첨부파일(이미지/PDF 등) 동기화 | ✅ |
 | 6 | Yjs 기반 실시간 공동 편집 | ⬜ 예정 |
 
 ---
@@ -93,6 +96,7 @@ docker run -d --name couchdb -p 5984:5984 \
 | 로컬 캐시 초기화 | 로컬 PouchDB 삭제 후 서버에서 다시 받기 |
 | 충돌 목록 열기 | 충돌 비교/해소 (로컬 유지·원격 적용·두 버전 보관) |
 | 대시보드 열기 | 학생별 동기화 상태 표 (👥 리본으로도) |
+| 현재 파일/폴더를 학생에게 복사 | 템플릿 배포 (교사) — `{{studentName}}` 등 변수 치환 |
 | 로그 패널 열기 | 동기화 로그 보기 (🔄 리본으로도) |
 
 삭제한 파일은 **보관 폴더(`_삭제됨/`, 설정 가능)** 로 이동하며, 그 폴더에서 지우면 DB에서도 영구 삭제됩니다.
@@ -101,6 +105,15 @@ docker run -d --name couchdb -p 5984:5984 \
 양쪽이 같은 파일을 다르게 편집하면 로컬을 보존(preserve-local)하고 원격 버전을 **`_충돌/` 폴더**에
 꺼내 둡니다. `충돌 목록 열기`에서 비교 후 *로컬 유지 / 원격 적용 / 두 버전 보관*으로 해소합니다.
 상대가 먼저 해소해 내 편집이 덮일 경우, 내 버전은 `_충돌/<파일>.내편집.md`로 보존됩니다.
+
+### 첨부파일
+이미지·PDF 등 비markdown 파일도 동기화됩니다(CouchDB attachment). 설정에서 *첨부파일 동기화* 토글과
+*첨부 최대 크기(MB)* 로 제어합니다(모바일 보호). 첨부 충돌은 로컬 보존 + 로그(비교 UI는 마크다운만).
+
+### 교사 배포 (Phase 4)
+`템플릿/` 등 학생 폴더 밖에 원본을 두고, `현재 파일/폴더를 학생에게 복사`로 선택·전체 학생에게 배포합니다.
+`{{studentName}}` `{{studentId}}` `{{classId}}` `{{date}}` 변수가 학생별로 치환되고, 기존 파일은
+건너뛰기(기본)/덮어쓰기/새 이름 정책으로 처리합니다.
 
 ---
 
@@ -128,9 +141,9 @@ src/
 │  │  ├─ MirrorSync.ts         # 위를 엮은 학생↔DB 링크 엔진 + 상태
 │  │  └─ connectionTest.ts     # 연결/권한 테스트
 │  ├─ path/  hash/  log/       # 경로 매핑 · contentHash · 로거
-│  └─ model/types.ts           # 문서 모델 (note / tombstone)
-├─ modes/                      # ClassSyncMode / StudentMode / TeacherMode
-└─ ui/                         # LogView · RoleSetupModal · InviteModal · ConflictModal · DashboardView
+│  └─ model/types.ts           # 문서 모델 (note / asset / tombstone)
+├─ modes/                      # ClassSyncMode / StudentMode / TeacherMode / teacher/BulkCopy
+└─ ui/                         # LogView · RoleSetupModal · InviteModal · ConflictModal · DashboardView · BulkCopyModal
 ```
 
 **동기화 구조 (오프라인 우선)**
