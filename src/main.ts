@@ -12,6 +12,7 @@ import { RoleSetupModal } from "./ui/RoleSetupModal";
 import { InviteModal } from "./ui/InviteModal";
 import { ConflictModal, ConflictRow, ConflictHost } from "./ui/ConflictModal";
 import { ResolveChoice } from "./core/sync/ConflictManager";
+import { DashboardView, DASHBOARD_VIEW_TYPE, DashboardRow, DashboardHost } from "./ui/DashboardView";
 import { testConnection } from "./core/sync/connectionTest";
 import { CouchAdmin } from "./core/couch/CouchAdmin";
 import { InvitePayload, INVITE_ACTION, genPassword, parseInvite } from "./core/invite/invite";
@@ -22,7 +23,7 @@ import { InvitePayload, INVITE_ACTION, genPassword, parseInvite } from "./core/i
  * 역할은 최초 1회 선택 후 잠긴다(기술문서 §5.4 보강). 실행 시 저장된 last_seq부터 증분 재개하고,
  * 전체 동기화는 최초 1회와 수동 명령에서만 수행한다.
  */
-export default class ClassSyncPlugin extends Plugin implements SettingsHost, ConflictHost {
+export default class ClassSyncPlugin extends Plugin implements SettingsHost, ConflictHost, DashboardHost {
 	settings!: ClassSyncSettings;
 	private logger = new Logger();
 	private core!: CoreServices;
@@ -35,8 +36,10 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.core.save = () => this.saveData(this.settings);
 
 		this.registerView(LOG_VIEW_TYPE, (leaf: WorkspaceLeaf) => new LogView(leaf, this.logger));
+		this.registerView(DASHBOARD_VIEW_TYPE, (leaf: WorkspaceLeaf) => new DashboardView(leaf, this));
 		this.addSettingTab(new ClassSyncSettingTab(this.app, this));
 		this.addRibbonIcon("refresh-cw", "Class Sync 로그 열기", () => this.activateLogView());
+		this.addRibbonIcon("users", "Class Sync 대시보드 열기", () => this.activateDashboard());
 		this.registerCommands();
 
 		// 학생 초대 딥링크: 폰 카메라로 QR 스캔 → obsidian://class-sync-invite?d=... → 자동 설정
@@ -302,6 +305,50 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			name: "충돌 목록 열기",
 			callback: () => new ConflictModal(this.app, this).open(),
 		});
+		this.addCommand({
+			id: "class-sync-dashboard",
+			name: "대시보드 열기",
+			callback: () => this.activateDashboard(),
+		});
+	}
+
+	// --- 대시보드 (DashboardHost) ---
+	async getDashboardRows(): Promise<DashboardRow[]> {
+		const rows: DashboardRow[] = [];
+		for (const sync of this.mode?.getSyncs() ?? []) {
+			let conflicts = 0;
+			try {
+				conflicts = (await sync.listConflicts()).length;
+			} catch {
+				/* 조회 실패는 0으로 */
+			}
+			rows.push({
+				studentName: sync.studentName,
+				studentId: sync.studentId,
+				remoteDb: sync.remoteDb,
+				localRoot: sync.localRoot,
+				conflicts,
+				...sync.status,
+			});
+		}
+		return rows;
+	}
+
+	openConflictModal(): void {
+		new ConflictModal(this.app, this).open();
+	}
+
+	private async activateDashboard(): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
+		if (existing.length > 0) {
+			this.app.workspace.revealLeaf(existing[0]);
+			return;
+		}
+		const leaf = this.app.workspace.getRightLeaf(false);
+		if (leaf) {
+			await leaf.setViewState({ type: DASHBOARD_VIEW_TYPE, active: true });
+			this.app.workspace.revealLeaf(leaf);
+		}
 	}
 
 	/** autoSync 토글 — 모드를 재시작해 감시/구독을 켜거나 끈다. */

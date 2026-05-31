@@ -25,6 +25,52 @@
 	padding-top: 4px;
 }
 
+/* 대시보드 */
+.class-sync-dashboard {
+	padding: 8px 12px;
+	overflow: auto;
+}
+
+.class-sync-dash-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.class-sync-dash-summary {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 6px 0 10px;
+	font-size: 13px;
+	color: var(--text-muted);
+}
+
+.class-sync-dash-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 12px;
+}
+
+.class-sync-dash-table th,
+.class-sync-dash-table td {
+	border-bottom: 1px solid var(--background-modifier-border);
+	padding: 5px 8px;
+	text-align: left;
+	white-space: nowrap;
+}
+
+.class-sync-dash-table th {
+	color: var(--text-muted);
+	font-weight: 600;
+}
+
+.class-sync-dash-conflict {
+	color: var(--text-error);
+	font-weight: 600;
+}
+
 /* 충돌 카드 */
 .class-sync-conflict-card {
 	border: 1px solid var(--background-modifier-border);

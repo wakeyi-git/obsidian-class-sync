@@ -52,6 +52,23 @@ export class MirrorSync {
 		return this.ctx.studentId || this.ctx.remoteDb;
 	}
 
+	// 대시보드용 정보 노출
+	get studentId(): string {
+		return this.ctx.studentId;
+	}
+	get studentName(): string {
+		return this.ctx.studentName;
+	}
+	get remoteDb(): string {
+		return this.ctx.remoteDb;
+	}
+	get localRoot(): string {
+		return this.ctx.localRoot;
+	}
+	get status() {
+		return this.ctx.status;
+	}
+
 	listConflicts(): Promise<ConflictInfo[]> {
 		return this.conflicts.list();
 	}
@@ -65,13 +82,16 @@ export class MirrorSync {
 		this.started = true;
 
 		if (!this.ctx.settings.autoSync) {
+			this.ctx.status.state = "disabled";
 			this.ctx.logger.info("autoSync 꺼짐 — 자동 동기화 비활성. 수동 동기화만 가능.");
 			return;
 		}
 		if (!this.ctx.settings.couchdbUrl) {
+			this.ctx.status.state = "offline";
 			this.ctx.logger.warn("CouchDB URL이 없습니다. 설정 후 '설정 적용'을 누르세요.", true);
 			return;
 		}
+		this.ctx.status.state = "syncing";
 
 		// 실시간 동기화를 켜기 전에, vault의 미반영 편집을 먼저 로컬 DB로 올린다.
 		// (앱이 꺼져 있거나 autoSync가 꺼진 동안 생긴 편집 포함.)
@@ -87,8 +107,16 @@ export class MirrorSync {
 		this.localApplier.start();
 		// 로컬 ↔ 원격 live replication (오프라인 큐·재연결·충돌)
 		this.ctx.pouch.startReplication({
-			onPaused: () => this.ctx.logger.info(`동기화 따라잡음(idle): ${this.ctx.remoteDb}`),
+			onActive: () => {
+				this.ctx.status.state = "syncing";
+			},
+			onPaused: () => {
+				if (this.ctx.status.state !== "error") this.ctx.status.state = "idle";
+				this.ctx.logger.info(`동기화 따라잡음(idle): ${this.ctx.remoteDb}`);
+			},
 			onError: (e) => {
+				this.ctx.status.lastError = e.message;
+				this.ctx.status.state = "error";
 				// 인증 실패면 재시도를 멈춘다(계속 두드리면 서버가 계정을 잠금).
 				if (isAuthError(e.message)) {
 					this.ctx.pouch.stopReplication();
@@ -108,6 +136,7 @@ export class MirrorSync {
 	async stop(): Promise<void> {
 		if (!this.started) return;
 		this.started = false;
+		this.ctx.status.state = "disabled";
 		this.watcher.stop();
 		this.localApplier.stop();
 		await this.ctx.core.flushPersist();

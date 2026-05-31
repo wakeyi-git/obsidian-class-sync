@@ -10,6 +10,14 @@ function sanitizeFileLabel(s: string): string {
 	return (s || "").replace(/[\\/:*?"<>|.]/g, "_").trim() || "상대방";
 }
 
+/** 링크(학생↔mirror) 동기화 상태. 기술문서 §12.6 대시보드용. */
+export interface LinkStatus {
+	lastUploadAt?: number; // 마지막 로컬→원격 업로드 시각
+	lastDownloadAt?: number; // 마지막 원격→로컬 적용 시각
+	lastError?: string;
+	state: "idle" | "syncing" | "offline" | "error" | "disabled";
+}
+
 /**
  * 하나의 student↔mirror 링크의 컨텍스트 + 공유 헬퍼. 기술문서 §9 / §16 / §14.2.
  *
@@ -18,6 +26,9 @@ function sanitizeFileLabel(s: string): string {
  * Phase 2에서 Teacher는 학생마다 이 컨텍스트를 하나씩 갖는다.
  */
 export class MirrorContext {
+	/** 이 링크의 실시간 상태(대시보드용). 컴포넌트들이 직접 갱신한다. */
+	readonly status: LinkStatus = { state: "idle" };
+
 	constructor(
 		public readonly core: CoreServices,
 		public readonly studentId: string,

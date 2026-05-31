@@ -36,6 +36,8 @@ export class Uploader {
 
 		const doc = await ctx.buildNoteDoc(dbPath, content, existing?.version ?? 0);
 		await ctx.pouch.put(doc);
+		ctx.status.lastUploadAt = Date.now();
+		ctx.status.lastError = undefined;
 		ctx.logger.ok(`로컬→원격 업로드: ${dbPath}`);
 		return "uploaded";
 	}

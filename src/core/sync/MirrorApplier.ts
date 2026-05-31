@@ -88,6 +88,7 @@ export class MirrorApplier {
 		ctx.guard.mark(localPath, doc.contentHash);
 		await ctx.writeVaultFile(localPath, doc.content);
 		ctx.guard.releaseAfterDelay(localPath);
+		ctx.status.lastDownloadAt = Date.now();
 		ctx.logger.ok(`원격→로컬 적용: ${localPath}`);
 		return "applied";
 	}
