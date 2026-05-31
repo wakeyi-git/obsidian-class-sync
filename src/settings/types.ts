@@ -5,6 +5,16 @@ export type ConflictPolicy = "preserve-local";
 /** 삭제/이름변경 시 상대 vault 처리. 기술문서 §15. */
 export type DeletePolicy = "archive" | "propagate-delete" | "ignore-delete";
 
+/** 공유 공간(모둠/학급 공유). 전용 DB를 멤버 학생들이 함께 동기화. */
+export interface SharedSpace {
+	id: string; // 고유 id
+	name: string; // 표시명 (모둠1)
+	remoteDb: string; // share_<id>
+	folder: string; // 각 vault 내 폴더명
+	members: string[]; // studentId[]
+	provisioned?: boolean;
+}
+
 /** 교사가 관리하는 학생 1명. 기술문서 §12.1. */
 export interface StudentConfig {
 	studentId: string;
@@ -46,6 +56,9 @@ export interface ClassSyncSettings {
 
 	/** Teacher Mode: 관리 학생 목록. 기술문서 §12.1. */
 	students: StudentConfig[];
+
+	/** Teacher Mode: 공유 공간 목록(모둠/학급 공유). */
+	sharedSpaces: SharedSpace[];
 
 	/** 동기화 root 밖으로 취급해 제외할 폴더 (기술문서 §11.1). */
 	excludeFolders: string[];
@@ -97,6 +110,7 @@ export const DEFAULT_SETTINGS: ClassSyncSettings = {
 
 	localRoot: "",
 	students: [],
+	sharedSpaces: [],
 
 	excludeFolders: [".obsidian", ".trash"],
 	archiveFolder: "_삭제됨",

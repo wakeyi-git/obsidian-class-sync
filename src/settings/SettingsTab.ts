@@ -1,5 +1,5 @@
 import { App, Plugin, PluginSettingTab, Setting } from "obsidian";
-import { ClassSyncSettings, StudentConfig } from "./types";
+import { ClassSyncSettings, StudentConfig, SharedSpace } from "./types";
 
 /** SettingsTab가 의존하는 플러그인 동작 (순환 import 방지용 인터페이스). */
 export interface SettingsHost extends Plugin {
@@ -10,6 +10,7 @@ export interface SettingsHost extends Plugin {
 	resetSetup(): Promise<void>;
 	inviteStudent(student: StudentConfig): Promise<void>;
 	ingestInvite(code: string): Promise<void>;
+	deployShared(space: SharedSpace): Promise<void>;
 }
 
 export class ClassSyncSettingTab extends PluginSettingTab {
@@ -86,6 +87,84 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 					this.display();
 				}),
 		);
+
+		// 공유 공간 (모둠/학급)
+		c.createEl("h3", { text: "공유 공간 (모둠/학급)" });
+		c.createEl("p", {
+			cls: "setting-item-description",
+			text: "여러 학생이 한 폴더를 공유합니다. 멤버를 고르고 '배포'하면 공유 DB·권한이 생성되고 학생에게 자동 전파됩니다.",
+		});
+		s.sharedSpaces.forEach((sp, i) => this.renderSharedCard(sp, i));
+
+		new Setting(c).addButton((b) =>
+			b
+				.setButtonText("+ 공유 공간 추가")
+				.setCta()
+				.onClick(async () => {
+					const id = `g${Date.now().toString(36)}`;
+					s.sharedSpaces.push({ id, name: "", remoteDb: `share_${id}`, folder: "", members: [] });
+					await this.host.saveSettings();
+					this.display();
+				}),
+		);
+	}
+
+	private renderSharedCard(sp: SharedSpace, index: number): void {
+		const s = this.host.settings;
+		const card = this.containerEl.createDiv({ cls: "class-sync-student-card" });
+
+		new Setting(card)
+			.setName(sp.name || `공유 공간 ${index + 1}`)
+			.setHeading()
+			.addButton((b) =>
+				b
+					.setButtonText(sp.provisioned ? "재배포" : "배포")
+					.setCta()
+					.onClick(() => this.runAsync(b, async () => { await this.host.deployShared(sp); this.display(); })),
+			)
+			.addButton((b) =>
+				b
+					.setButtonText("삭제")
+					.setWarning()
+					.onClick(async () => {
+						s.sharedSpaces.splice(index, 1);
+						await this.host.saveSettings();
+						this.display();
+					}),
+			);
+
+		new Setting(card).setName("이름").addText((t) => {
+			t.setPlaceholder("모둠1").setValue(sp.name).onChange(async (v) => {
+				sp.name = v.trim();
+				if (!sp.folder) sp.folder = v.trim();
+				await this.host.saveSettings();
+			});
+			noAutoCorrect(t.inputEl);
+		});
+		new Setting(card).setName("폴더").addText((t) => {
+			t.setPlaceholder("모둠1").setValue(sp.folder).onChange(async (v) => {
+				sp.folder = v.trim();
+				await this.host.saveSettings();
+			});
+			noAutoCorrect(t.inputEl);
+		});
+
+		const membersEl = card.createDiv({ cls: "class-sync-student-status" });
+		membersEl.createSpan({ text: "멤버:" });
+		for (const st of s.students) {
+			if (!st.studentId) continue;
+			new Setting(card).setName(st.studentName || st.studentId).addToggle((t) =>
+				t.setValue(sp.members.includes(st.studentId)).onChange(async (v) => {
+					if (v && !sp.members.includes(st.studentId)) sp.members.push(st.studentId);
+					else if (!v) sp.members = sp.members.filter((m) => m !== st.studentId);
+					await this.host.saveSettings();
+				}),
+			);
+		}
+		card.createEl("div", {
+			cls: "class-sync-student-status",
+			text: sp.provisioned ? `DB: ${sp.remoteDb} · 프로비저닝됨 ✓` : `DB: ${sp.remoteDb} · 미배포`,
+		});
 	}
 
 	private renderStudentCard(st: StudentConfig, index: number): void {

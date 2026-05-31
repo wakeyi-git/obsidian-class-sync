@@ -87,15 +87,44 @@ export class CouchAdmin {
 		}
 
 		// 3) _security: 학생 본인만 멤버 (서버 admin은 항상 접근)
-		const security = {
-			admins: { names: [], roles: [] },
-			members: { names: [username], roles: [] },
-		};
+		const sec = await this.setSecurity(remoteDb, [username]);
+		if (!sec.ok) return sec;
+		return { ok: true };
+	}
+
+	/**
+	 * 공유 공간 프로비저닝(멱등). DB 생성 + _security 멤버 = 참여 학생 계정들.
+	 * 학생 계정은 개인 프로비저닝으로 이미 존재한다고 가정.
+	 */
+	async provisionSharedSpace(remoteDb: string, memberUsernames: string[]): Promise<{ ok: boolean; error?: string }> {
+		const putDb = await this.req("PUT", encodeURIComponent(remoteDb));
+		if (putDb.status >= 400 && putDb.status !== 412 && putDb.status !== 409) {
+			return { ok: false, error: `공유 DB 생성 실패 (HTTP ${putDb.status}): ${putDb.json?.reason ?? putDb.text}` };
+		}
+		return this.setSecurity(remoteDb, memberUsernames);
+	}
+
+	private async setSecurity(remoteDb: string, members: string[]): Promise<{ ok: boolean; error?: string }> {
+		const security = { admins: { names: [], roles: [] }, members: { names: members, roles: [] } };
 		const putSec = await this.req("PUT", `${encodeURIComponent(remoteDb)}/_security`, security);
 		if (putSec.status >= 400) {
 			return { ok: false, error: `권한 설정 실패 (HTTP ${putSec.status}): ${putSec.json?.reason ?? putSec.text}` };
 		}
-
 		return { ok: true };
+	}
+
+	/** 임의 DB에 문서 upsert(멱등). 학생 mirror DB에 shares 문서를 기록하는 데 사용. */
+	async putDoc(db: string, doc: { _id: string; [k: string]: unknown }): Promise<{ ok: boolean; error?: string }> {
+		const path = `${encodeURIComponent(db)}/${encodeURIComponent(doc._id)}`;
+		for (let attempt = 0; attempt < 3; attempt++) {
+			const existing = await this.req("GET", path);
+			const body: Record<string, unknown> = { ...doc };
+			if (existing.status === 200 && existing.json?._rev) body._rev = existing.json._rev;
+			const put = await this.req("PUT", path, body);
+			if (put.status < 300) return { ok: true };
+			if (put.status === 409) continue;
+			return { ok: false, error: `문서 기록 실패 (HTTP ${put.status}): ${put.json?.reason ?? put.text}` };
+		}
+		return { ok: false, error: "문서 기록 실패 (rev 충돌 반복)" };
 	}
 }

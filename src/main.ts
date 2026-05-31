@@ -1,5 +1,6 @@
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
-import { ClassSyncSettings, DEFAULT_SETTINGS, Role, StudentConfig } from "./settings/types";
+import { ClassSyncSettings, DEFAULT_SETTINGS, Role, StudentConfig, SharedSpace } from "./settings/types";
+import { SHARES_DOC_ID } from "./core/model/types";
 import { ClassSyncSettingTab, SettingsHost } from "./settings/SettingsTab";
 import { Logger } from "./core/log/Logger";
 import { CoreServices } from "./core/CoreServices";
@@ -197,6 +198,48 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		new InviteModal(this.app, payload).open();
 	}
 
+	// --- 공유 공간 배포 (Teacher, Phase 6a) ---
+	async deployShared(space: SharedSpace): Promise<void> {
+		await this.activateLogView();
+		const s = this.settings;
+		if (s.role !== "teacher") {
+			this.logger.warn("교사 모드에서만 사용할 수 있습니다.", true);
+			return;
+		}
+		if (!s.couchdbUrl || !s.username || !s.password) {
+			this.logger.warn("관리자 계정을 먼저 입력하세요.", true);
+			return;
+		}
+		if (!space.remoteDb) space.remoteDb = `share_${space.id}`;
+		if (!space.folder) space.folder = space.name || space.id;
+
+		const admin = new CouchAdmin(s.couchdbUrl, s.username, s.password);
+		const memberUsers = space.members
+			.map((sid) => s.students.find((st) => st.studentId === sid)?.username)
+			.filter((u): u is string => !!u);
+
+		this.logger.info(`공유 공간 배포: ${space.name} → ${space.remoteDb} (멤버 ${memberUsers.length})`);
+		const res = await admin.provisionSharedSpace(space.remoteDb, memberUsers);
+		if (!res.ok) {
+			this.logger.error(`공유 공간 프로비저닝 실패: ${res.error}`, true);
+			return;
+		}
+		space.provisioned = true;
+		await this.saveSettings();
+
+		// 모든 학생의 shares 문서 갱신(추가/제거 학생 모두 반영)
+		for (const st of s.students) {
+			const spaces = s.sharedSpaces
+				.filter((sp) => sp.members.includes(st.studentId))
+				.map((sp) => ({ id: sp.id, name: sp.name, remoteDb: sp.remoteDb, folder: sp.folder }));
+			const r = await admin.putDoc(st.remoteDb, { _id: SHARES_DOC_ID, type: "shares", spaces });
+			if (!r.ok) this.logger.error(`shares 기록 실패(${st.studentId}): ${r.error}`);
+		}
+
+		this.logger.ok(`공유 공간 배포 완료: ${space.name}`, true);
+		await this.restartMode();
+	}
+
 	// --- 학생 온보딩: 초대 코드/딥링크로 자동 설정 ---
 	async ingestInvite(input: string): Promise<void> {
 		const payload = parseInvite(input);
@@ -321,6 +364,16 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			id: "class-sync-copy-folder",
 			name: "현재 폴더를 학생에게 복사",
 			callback: () => this.openBulkCopy("folder"),
+		});
+		this.addCommand({
+			id: "class-sync-refresh-shares",
+			name: "공유 공간 새로고침",
+			callback: async () => {
+				await this.activateLogView();
+				const m = this.mode as unknown as { refreshShares?: () => Promise<void> } | null;
+				if (this.settings.role === "student" && m?.refreshShares) await m.refreshShares();
+				else await this.restartMode();
+			},
 		});
 	}
 

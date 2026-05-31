@@ -1,41 +1,117 @@
 import { CoreServices } from "../../core/CoreServices";
 import { MirrorSync } from "../../core/sync/MirrorSync";
 import { SyncDirection } from "../../core/sync/FullSync";
+import { computeChildRoots } from "../../core/sync/childRoots";
+import { SharesDoc, SHARES_DOC_ID } from "../../core/model/types";
 import { ClassSyncMode } from "../ClassSyncMode";
 
 /**
- * Student Mode (Phase 2). 기술문서 §11.
- * vault root(또는 지정 localRoot) ↔ 자기 mirror DB를 양방향 동기화한다.
- * 자격증명은 교사 초대로 받은 학생 전용 계정(최소 권한).
+ * Student Mode (Phase 6a). 기술문서 §11.
+ * 개인 미러(vault ↔ 자기 mirror DB) + 교사가 배정한 공유 공간(모둠/학급) 링크를 동기화한다.
+ * 공유 공간 목록은 개인 mirror DB의 'shares' 문서로 자동 전파되며, 변경 시 reconcile한다.
  */
 export class StudentMode implements ClassSyncMode {
 	readonly role = "student" as const;
-	private readonly sync: MirrorSync;
+	private syncs: MirrorSync[] = [];
+	private reconciling = false;
+	private pendingReconcile = false;
 
-	constructor(private core: CoreServices) {
-		const s = core.settings;
-		this.sync = new MirrorSync(core, s.userId, s.displayName, s.localRoot, s.remoteDb);
-	}
+	constructor(private core: CoreServices) {}
 
 	async start(): Promise<void> {
-		const s = this.core.settings;
-		this.core.logger.ok(
-			`Student Mode 시작 — localRoot=${s.localRoot || "(vault root)"}, mirror=${s.remoteDb}`,
-			true,
-		);
-		await this.sync.start();
+		await this.reconcile();
 	}
 
 	async stop(): Promise<void> {
-		await this.sync.stop();
+		for (const sync of this.syncs) await sync.stop();
+		this.syncs = [];
 		this.core.logger.info("Student Mode 정지.");
 	}
 
-	fullSync(direction: SyncDirection): Promise<void> {
-		return this.sync.fullSync(direction);
+	async fullSync(direction: SyncDirection): Promise<void> {
+		for (const sync of this.syncs) await sync.fullSync(direction);
 	}
 
 	getSyncs(): MirrorSync[] {
-		return [this.sync];
+		return this.syncs;
+	}
+
+	/** 공유 공간 변경(또는 수동 새로고침) 시 링크 재구성. */
+	async refreshShares(): Promise<void> {
+		await this.reconcile();
+	}
+
+	// --- 내부 ---
+
+	private async reconcile(): Promise<void> {
+		if (this.reconciling) {
+			this.pendingReconcile = true;
+			return;
+		}
+		this.reconciling = true;
+		try {
+			const s = this.core.settings;
+			const spaces = await this.readShares();
+			const sharedFolders = spaces.map((sp) => sp.folder);
+			const allRoots = [s.localRoot, ...sharedFolders];
+
+			// 기존 링크 중지 후 재구성
+			for (const sync of this.syncs) await sync.stop();
+			this.syncs = [];
+
+			// 개인 미러 (공유 폴더는 childRoots로 제외)
+			this.syncs.push(
+				new MirrorSync(this.core, {
+					studentId: s.userId,
+					studentName: s.displayName,
+					localRoot: s.localRoot,
+					remoteDb: s.remoteDb,
+					childRoots: computeChildRoots(s.localRoot, allRoots),
+					onConfigChange: () => this.scheduleReconcile(),
+				}),
+			);
+
+			// 공유 공간 (학생 본인 자격, _security로 접근 허용됨)
+			for (const sp of spaces) {
+				this.syncs.push(
+					new MirrorSync(this.core, {
+						studentId: s.userId,
+						studentName: sp.name,
+						localRoot: sp.folder,
+						remoteDb: sp.remoteDb,
+						childRoots: computeChildRoots(sp.folder, allRoots),
+					}),
+				);
+			}
+
+			for (const sync of this.syncs) await sync.start();
+			this.core.logger.ok(`Student Mode 시작 — 개인 + 공유 ${spaces.length}개`, true);
+		} catch (e) {
+			this.core.logger.error(`공유 공간 reconcile 실패: ${e instanceof Error ? e.message : String(e)}`, true);
+		} finally {
+			this.reconciling = false;
+			if (this.pendingReconcile) {
+				this.pendingReconcile = false;
+				this.scheduleReconcile();
+			}
+		}
+	}
+
+	private scheduleReconcile(): void {
+		// 콜백 재진입 방지: 다음 틱에 reconcile
+		setTimeout(() => void this.reconcile(), 100);
+	}
+
+	/** 개인 mirror DB(로컬)에서 shares 문서를 읽는다. 없으면 빈 목록. */
+	private async readShares(): Promise<SharesDoc["spaces"]> {
+		const pouch = this.core.createPouch(this.core.settings.remoteDb);
+		try {
+			const doc = await pouch.get<SharesDoc>(SHARES_DOC_ID);
+			return doc?.spaces ?? [];
+		} catch {
+			return [];
+		} finally {
+			await pouch.close();
+		}
 	}
 }

@@ -16,6 +16,7 @@ export class LocalApplier {
 	constructor(
 		private ctx: MirrorContext,
 		private applier: MirrorApplier,
+		private onConfigChange?: () => void,
 	) {}
 
 	start(): void {
@@ -33,6 +34,8 @@ export class LocalApplier {
 						await this.applier.applyDoc(change.doc);
 					} else if (change.doc && (change.doc as any).type === "asset") {
 						await this.applier.applyAsset(change.doc as any);
+					} else if (change.doc && (change.doc as any).type === "shares") {
+						this.onConfigChange?.(); // 공유 공간 목록 변경 → 링크 reconcile
 					}
 				} catch (e) {
 					this.ctx.logger.error(`로컬 변경 적용 실패: ${change.id} — ${e instanceof Error ? e.message : String(e)}`);

@@ -20,6 +20,17 @@ import { FullSync, SyncDirection } from "./FullSync";
  *  - 최초: 기존 vault 파일을 로컬 DB로 1회 업로드 스캔(원격 문서는 replication이 자동으로 가져와 반영)
  *  - 이후: 저장된 local seq부터 증분 적용 + 상시 replication
  */
+export interface MirrorSyncOptions {
+	studentId: string;
+	studentName: string;
+	localRoot: string;
+	remoteDb: string;
+	childRoots?: string[];
+	pouch?: PouchService;
+	/** 'shares' 등 설정 문서가 바뀌면 호출(학생이 공유 링크 reconcile). */
+	onConfigChange?: () => void;
+}
+
 export class MirrorSync {
 	readonly ctx: MirrorContext;
 	private readonly applier: MirrorApplier;
@@ -30,20 +41,22 @@ export class MirrorSync {
 	private readonly fullSyncRunner: FullSync;
 	private started = false;
 
-	constructor(
-		core: CoreServices,
-		studentId: string,
-		studentName: string,
-		localRoot: string,
-		remoteDb: string,
-		pouch?: PouchService,
-	) {
-		this.ctx = new MirrorContext(core, studentId, studentName, localRoot, remoteDb, pouch ?? core.createPouch(remoteDb));
+	constructor(core: CoreServices, opts: MirrorSyncOptions) {
+		const remoteDb = opts.remoteDb;
+		this.ctx = new MirrorContext(
+			core,
+			opts.studentId,
+			opts.studentName,
+			opts.localRoot,
+			remoteDb,
+			opts.pouch ?? core.createPouch(remoteDb),
+			opts.childRoots ?? [],
+		);
 		this.conflicts = new ConflictManager(this.ctx);
 		this.applier = new MirrorApplier(this.ctx, this.conflicts);
 		this.uploader = new Uploader(this.ctx);
 		this.watcher = new LocalWatcher(this.ctx, this.uploader);
-		this.localApplier = new LocalApplier(this.ctx, this.applier);
+		this.localApplier = new LocalApplier(this.ctx, this.applier, opts.onConfigChange);
 		this.fullSyncRunner = new FullSync(this.ctx, this.applier, this.uploader);
 	}
 

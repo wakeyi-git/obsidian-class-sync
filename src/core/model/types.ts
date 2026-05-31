@@ -60,3 +60,11 @@ export interface AssetDoc extends PouchDocBase {
 export function assetId(dbPath: string): string {
 	return `asset:${dbPath}`;
 }
+
+/** 학생이 속한 공유 공간 목록. 교사가 학생 개인 mirror DB에 기록 → 학생이 자동으로 공유 링크 생성. */
+export interface SharesDoc extends PouchDocBase {
+	type: "shares";
+	spaces: Array<{ id: string; name: string; remoteDb: string; folder: string }>;
+}
+
+export const SHARES_DOC_ID = "shares";

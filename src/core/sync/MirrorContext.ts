@@ -36,6 +36,8 @@ export class MirrorContext {
 		public readonly localRoot: string,
 		public readonly remoteDb: string,
 		public readonly pouch: PouchService,
+		/** 이 링크 root 아래에 중첩된 다른 링크들의 root(공유 폴더 등). 동기화에서 제외해 이중 동기화 방지. */
+		public readonly childRoots: string[] = [],
 	) {}
 
 	get app() {
@@ -74,6 +76,11 @@ export class MirrorContext {
 		if (archiveRoot !== "" && (p === archiveRoot || p.startsWith(archiveRoot + "/"))) return true;
 		const conflictRoot = normalizePath(dbPathToLocal(this.localRoot, this.settings.conflictFolder));
 		if (conflictRoot !== "" && (p === conflictRoot || p.startsWith(conflictRoot + "/"))) return true;
+		// 다른 링크(공유 폴더 등)가 담당하는 하위 경로는 이 링크에서 제외
+		for (const child of this.childRoots) {
+			const cr = normalizePath(child);
+			if (cr !== "" && (p === cr || p.startsWith(cr + "/"))) return true;
+		}
 		return this.settings.excludeFolders.some((f) => {
 			const folder = normalizePath(f);
 			return folder !== "" && (p === folder || p.startsWith(folder + "/"));
