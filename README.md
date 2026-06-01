@@ -24,7 +24,26 @@ TeacherVault/
 - **피드백 레이어** — 본문을 고치지 않고 텍스트에 앵커를 단 댓글로 의견 전달(공유·개인 노트 모두). 세션 중 주기적 스냅샷도 지원.
 - **운영 편의** — 설정 내보내기/가져오기(자격증명 제외), 종합 진단(서버·읽기/쓰기 권한·실시간), 모바일 절전(백그라운드 동기화 일시정지·대용량 파일 사전 검사).
 
-> 전체 설계는 [`기술문서.md`](기술문서.md)를 참고하세요.
+> 전체 설계는 [`docs/기술문서.md`](docs/기술문서.md)를 참고하세요.
+
+### 요구사항
+- **Obsidian 1.11.0 이상** (데스크톱·모바일 모두 지원).
+- **자가 호스팅 CouchDB** (시놀로지 NAS 등) — 필수 중앙 서버. [설정 방법](#couchdb-준비-시놀로지-nas-docker-예시).
+- **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택 ([docs/yjs-server-synology.md](docs/yjs-server-synology.md)).
+
+---
+
+## 스크린샷
+
+<!-- 아래 이미지는 assets/ 에 직접 캡처해 넣으세요(파일명 유지 시 자동 표시). -->
+
+| 교사 설정 | QR 초대 |
+|---|---|
+| ![교사 설정 화면](assets/teacher-settings.png) | ![QR 초대 모달](assets/qr-invite.png) |
+
+| 실시간 공동 편집 | 피드백 패널 |
+|---|---|
+| ![실시간 커서·이름](assets/realtime.png) | ![피드백 레이어](assets/feedback.png) |
 
 ---
 
@@ -45,21 +64,32 @@ TeacherVault/
 
 ---
 
-## 설치 (개발 빌드)
+## 설치
 
+### ① 커뮤니티 플러그인 (심사 통과 후)
+설정 → 커뮤니티 플러그인 → 탐색에서 **Class Sync** 검색 후 설치·활성화.
+
+### ② 수동 설치 (릴리스 자산)
+[Releases](https://github.com/wakeyi-git/obsidian-class-sync/releases)에서 최신 버전의
+**`main.js` · `manifest.json` · `styles.css`** 를 받아 vault의 `<vault>/.obsidian/plugins/class-sync/` 에 넣고 활성화합니다.
+
+### ③ BRAT (베타 테스트)
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) 플러그인에서 `wakeyi-git/obsidian-class-sync` 저장소를 추가합니다.
+
+### 개발 빌드
 ```bash
 git clone https://github.com/wakeyi-git/obsidian-class-sync.git
 cd obsidian-class-sync
 npm install
 npm run build      # main.js 생성 (개발 중에는 npm run dev 로 watch)
 ```
-
-빌드 산출물 **`main.js` · `manifest.json` · `styles.css`** 세 파일을 vault의
-`<vault>/.obsidian/plugins/class-sync/` 에 복사한 뒤, Obsidian 설정 → 커뮤니티 플러그인에서
-**Class Sync** 를 활성화합니다.
+산출물 세 파일을 위 ② 경로에 복사합니다.
 
 > **모바일(iOS/Android)**: 같은 세 파일을 폰 vault의 같은 경로에 넣습니다. iCloud로 동기화되는
 > vault라면 데스크톱에서 복사한 파일이 폰에 따라옵니다. 적용 후 Obsidian 앱을 완전히 종료했다 다시 엽니다.
+
+> 릴리스·제출 절차는 [docs/release-and-submit.md](docs/release-and-submit.md), 모바일 점검은
+> [docs/mobile-test-checklist.md](docs/mobile-test-checklist.md)를 참고하세요.
 
 ---
 

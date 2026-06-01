@@ -32,7 +32,13 @@ export class InviteModal extends Modal {
 			const qr = qrcode(0, "L");
 			qr.addData(uri);
 			qr.make();
-			qrWrap.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 4, scalable: true });
+			// innerHTML 대신 SVG 문자열을 파싱해 element로 삽입(심사 가이드라인: innerHTML 회피).
+			const svg = new DOMParser().parseFromString(
+				qr.createSvgTag({ cellSize: 5, margin: 4, scalable: true }),
+				"image/svg+xml",
+			).documentElement;
+			qrWrap.empty();
+			qrWrap.appendChild(svg);
 		} catch (e) {
 			qrWrap.createEl("p", { text: `QR 생성 실패: ${e instanceof Error ? e.message : String(e)}` });
 		}
