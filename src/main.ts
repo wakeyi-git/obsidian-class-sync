@@ -18,6 +18,9 @@ import { BulkCopyModal } from "./ui/BulkCopyModal";
 import { BulkCopy, CopyOptions } from "./modes/teacher/BulkCopy";
 import { RealtimeManager } from "./core/realtime/RealtimeManager";
 import { realtimeEditorExtension } from "./core/realtime/editorBinding";
+import { FeedbackStore } from "./core/feedback/FeedbackStore";
+import { FeedbackView, FEEDBACK_VIEW_TYPE, promptAddFeedback } from "./ui/FeedbackView";
+import { MirrorSync } from "./core/sync/MirrorSync";
 import { testConnection } from "./core/sync/connectionTest";
 import { CouchAdmin } from "./core/couch/CouchAdmin";
 import { InvitePayload, INVITE_ACTION, genPassword, parseInvite } from "./core/invite/invite";
@@ -35,6 +38,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	private mode: ClassSyncMode | null = null;
 	private realtime!: RealtimeManager;
 	private rtStatus!: HTMLElement;
+	private feedback!: FeedbackStore;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -43,9 +47,19 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.core.save = () => this.saveData(this.settings);
 
 		// 실시간 공동 편집(Yjs) — 공유 폴더 문서
-		this.realtime = new RealtimeManager(this.app, this.core, () => this.core.sharedSpaces);
+		this.realtime = new RealtimeManager(
+			this.app,
+			this.core,
+			() => this.core.sharedSpaces,
+			(p) => this.syncForLocalPath(p), // 주기적 스냅샷 쓰기 대상
+		);
 		this.core.isRealtimeActive = (p) => this.realtime.isActive(p);
 		this.registerEditorExtension(realtimeEditorExtension());
+
+		// 피드백 레이어(§19.5)
+		this.feedback = new FeedbackStore(this.core, (p) => this.syncForLocalPath(p));
+		this.core.onFeedbackChange = () => this.feedback.refresh();
+		this.registerView(FEEDBACK_VIEW_TYPE, (leaf: WorkspaceLeaf) => new FeedbackView(leaf, this.feedback));
 		this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.onWorkspaceChange()));
 		this.registerEvent(this.app.workspace.on("file-open", () => this.onWorkspaceChange()));
 		this.registerEvent(this.app.workspace.on("layout-change", () => this.onWorkspaceChange()));
@@ -57,6 +71,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.addSettingTab(new ClassSyncSettingTab(this.app, this));
 		this.addRibbonIcon("refresh-cw", "Class Sync 로그 열기", () => this.activateLogView());
 		this.addRibbonIcon("users", "Class Sync 대시보드 열기", () => this.activateDashboard());
+		this.addRibbonIcon("message-square", "Class Sync 피드백 패널 열기", () => this.activateFeedbackView());
 		this.registerCommands();
 
 		// 학생 초대 딥링크: 폰 카메라로 QR 스캔 → obsidian://class-sync-invite?d=... → 자동 설정
@@ -99,7 +114,8 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.core.settings = this.settings;
 		this.mode = this.createMode(this.settings.role);
 		await this.mode.start();
-		this.realtime?.syncOpenEditors(); // 공유 폴더 갱신분 반영
+		// 재배포/설정 적용 시 기존 세션을 깨끗이 종료(awareness 제거) 후 재구성 → 유령 커서 방지
+		await this.realtime?.refresh();
 	}
 
 	/** 최초 실행 역할 선택 모달 → 역할 잠금 + 모드 시작. 학생은 초대 코드로 바로 설정 가능. */
@@ -256,6 +272,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 				enabled: s.realtimeEnabled,
 				url: s.yjsServerUrl,
 				token: s.yjsToken,
+				snapshotSec: s.realtimeSnapshotSec,
 			});
 			if (!rc.ok) this.logger.error(`rtconfig 기록 실패(${st.studentId}): ${rc.error}`);
 		}
@@ -399,6 +416,16 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			},
 		});
 		this.addCommand({
+			id: "class-sync-add-feedback",
+			name: "피드백 추가 (선택 영역)",
+			callback: () => promptAddFeedback(this.app, this.feedback),
+		});
+		this.addCommand({
+			id: "class-sync-open-feedback",
+			name: "피드백 패널 열기",
+			callback: () => this.activateFeedbackView(),
+		});
+		this.addCommand({
 			id: "class-sync-refresh-shares",
 			name: "공유 공간 새로고침",
 			callback: async () => {
@@ -473,6 +500,28 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		const leaf = this.app.workspace.getRightLeaf(false);
 		if (leaf) {
 			await leaf.setViewState({ type: DASHBOARD_VIEW_TYPE, active: true });
+			this.app.workspace.revealLeaf(leaf);
+		}
+	}
+
+	/** 로컬 경로를 담당하는 동기화 링크(피드백 저장/조회 + 실시간 스냅샷 대상). 없으면 undefined. */
+	private syncForLocalPath(localPath: string): MirrorSync | undefined {
+		for (const sync of this.mode?.getSyncs() ?? []) {
+			if (sync.owns(localPath)) return sync;
+		}
+		return undefined;
+	}
+
+	/** 피드백 패널 활성화. */
+	private async activateFeedbackView(): Promise<void> {
+		const existing = this.app.workspace.getLeavesOfType(FEEDBACK_VIEW_TYPE);
+		if (existing.length > 0) {
+			this.app.workspace.revealLeaf(existing[0]);
+			return;
+		}
+		const leaf = this.app.workspace.getRightLeaf(false);
+		if (leaf) {
+			await leaf.setViewState({ type: FEEDBACK_VIEW_TYPE, active: true });
 			this.app.workspace.revealLeaf(leaf);
 		}
 	}

@@ -19,7 +19,8 @@ export function realtimeEditorExtension(): Extension {
 
 /** 해당 뷰에 Y.Text ↔ 에디터 실시간 바인딩 부착. */
 export function bindView(view: EditorView, ytext: Y.Text, awareness: Awareness): void {
-	view.dispatch({ effects: rtCompartment.reconfigure(yCollab(ytext, awareness)) });
+	const ext: Extension = yCollab(ytext, awareness);
+	view.dispatch({ effects: rtCompartment.reconfigure(ext) });
 }
 
 /** 해당 뷰의 실시간 바인딩 해제. */

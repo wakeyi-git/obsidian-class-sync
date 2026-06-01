@@ -36,6 +36,9 @@ export class LocalApplier {
 						await this.applier.applyAsset(change.doc as any);
 					} else if (change.doc && ((change.doc as any).type === "shares" || (change.doc as any).type === "rtconfig")) {
 						this.onConfigChange?.(); // 공유 공간/실시간 설정 변경 → reconcile
+					} else if (change.doc && (change.doc as any).type === "feedback") {
+						// 피드백(§19.5)은 파일이 아니라 메타데이터 → vault에 쓰지 않고 패널만 갱신
+						this.ctx.core.onFeedbackChange();
 					}
 				} catch (e) {
 					this.ctx.logger.error(`로컬 변경 적용 실패: ${change.id} — ${e instanceof Error ? e.message : String(e)}`);

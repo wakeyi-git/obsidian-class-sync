@@ -168,6 +168,21 @@ export class PouchService {
 		return out;
 	}
 
+	/** prefix로 시작하는 로컬 문서 전체(예: 피드백 feedback:<dbPath>:). */
+	async allDocsByPrefix<T extends PouchDocBase>(prefix: string): Promise<T[]> {
+		const res = await this.localDb().allDocs<T>({
+			include_docs: true,
+			startkey: prefix,
+			endkey: `${prefix}￿`,
+		});
+		const out: T[] = [];
+		for (const row of res.rows) {
+			const d = (row as any).doc;
+			if (d) out.push(d as T);
+		}
+		return out;
+	}
+
 	/** 로컬 변경 구독(라이브). conflicts:true로 충돌 정보를 함께 받는다. */
 	localChanges<T = any>(
 		onChange: (change: ChangeEvent<T>) => void,

@@ -22,6 +22,9 @@ export class CoreServices {
 	/** 현재 사용자의 공유 공간(교사=설정, 학생=shares 문서). 모드가 런타임에 채운다. RealtimeManager가 참조. */
 	sharedSpaces: Array<{ id: string; folder: string }> = [];
 
+	/** 피드백 문서(§19.5) 변경 알림. main이 FeedbackStore에 연결. 링크의 LocalApplier가 호출. */
+	onFeedbackChange: () => void = () => {};
+
 	private persistTimer: ReturnType<typeof setTimeout> | null = null;
 	private readonly persistDelayMs = 1500;
 

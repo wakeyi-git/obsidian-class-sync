@@ -75,6 +75,36 @@ export interface RtConfigDoc extends PouchDocBase {
 	enabled: boolean;
 	url: string;
 	token: string;
+	/** 실시간 세션 중 CouchDB 스냅샷 주기(초). 0/미설정=끔(§19.2). */
+	snapshotSec?: number;
 }
 
 export const RTCONFIG_DOC_ID = "rtconfig";
+
+/**
+ * 피드백 레이어 문서. 기술문서 §19.5. 본문을 직접 고치지 않고 앵커(인용구+오프셋) 기반 댓글을 남긴다.
+ * 대상 노트가 사는 DB(mirror_<id> 또는 share_<id>)에 함께 저장되어 기존 replication으로 동기화된다.
+ * 파일이 아니라 메타데이터이므로 vault에는 쓰지 않는다(FeedbackStore만 처리).
+ */
+export interface FeedbackDoc extends PouchDocBase {
+	type: "feedback";
+	schemaVersion: number;
+	classId: string;
+	studentId: string; // 대상 노트가 속한 링크의 studentId(공유 공간은 spaceId 대용)
+	targetPath: string; // 대상 노트의 dbPath (해당 DB 기준 상대경로)
+	content: string;
+	anchor: { textQuote: string; start: number; end: number };
+	createdBy: string; // userId
+	createdByRole: "student" | "teacher";
+	createdAt: string;
+	updatedAt: string;
+	resolved: boolean;
+	deleted?: boolean;
+}
+
+export const FEEDBACK_ID_PREFIX = "feedback:";
+
+/** 피드백 문서 _id: feedback:<dbPath>:<uid>. dbPath 기준으로 노트별 prefix 조회 가능. */
+export function feedbackId(dbPath: string, uid: string): string {
+	return `${FEEDBACK_ID_PREFIX}${dbPath}:${uid}`;
+}

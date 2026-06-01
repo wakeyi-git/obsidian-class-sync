@@ -126,6 +126,96 @@
 	pointer-events: none;
 }
 
+/* 피드백 레이어(§19.5) 패널 */
+.class-sync-feedback-toolbar {
+	padding: 6px 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.class-sync-feedback-list {
+	padding: 8px 12px;
+	overflow-y: auto;
+}
+
+.class-sync-feedback-empty {
+	color: var(--text-muted);
+	font-size: 13px;
+	padding: 12px 4px;
+}
+
+.class-sync-feedback-card {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 8px 10px;
+	margin: 8px 0;
+	background: var(--background-secondary);
+}
+
+.class-sync-feedback-card.is-resolved {
+	opacity: 0.6;
+}
+
+.class-sync-feedback-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 11px;
+	color: var(--text-muted);
+	margin-bottom: 4px;
+}
+
+.class-sync-feedback-author {
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.class-sync-feedback-time {
+	margin-left: auto;
+}
+
+.class-sync-feedback-badge {
+	margin-left: 0;
+	padding: 1px 6px;
+	border-radius: 4px;
+	background: var(--background-modifier-success);
+	color: var(--text-on-accent);
+	font-weight: 600;
+}
+
+.class-sync-feedback-quote {
+	font-size: 12px;
+	color: var(--text-accent);
+	border-left: 3px solid var(--text-accent);
+	padding: 2px 8px;
+	margin: 4px 0;
+	cursor: pointer;
+	white-space: pre-wrap;
+}
+
+.class-sync-feedback-content {
+	font-size: 13px;
+	white-space: pre-wrap;
+	margin: 4px 0;
+}
+
+.class-sync-feedback-actions {
+	display: flex;
+	gap: 6px;
+	margin-top: 6px;
+}
+
+.class-sync-feedback-actions button {
+	font-size: 11px;
+	padding: 2px 8px;
+}
+
+.class-sync-feedback-input {
+	width: 100%;
+	resize: vertical;
+	font-size: 13px;
+	margin: 8px 0;
+}
+
 .class-sync-log-view {
 	padding: 8px 12px;
 	font-family: var(--font-monospace);

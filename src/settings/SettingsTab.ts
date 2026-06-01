@@ -131,6 +131,18 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 			t.inputEl.type = "password";
 			noAutoCorrect(t.inputEl);
 		});
+		new Setting(c)
+			.setName("세션 중 스냅샷 주기(초)")
+			.setDesc("실시간 세션 중 일정 주기로 CouchDB에 본문을 저장해 오프라인/비실시간 멤버에 반영. 0=끔(세션 종료 시에만 저장).")
+			.addText((t) => {
+				t.setPlaceholder("0").setValue(String(s.realtimeSnapshotSec));
+				t.inputEl.type = "number";
+				t.onChange(async (v) => {
+					const n = Number(v);
+					s.realtimeSnapshotSec = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+					await this.host.saveSettings();
+				});
+			});
 	}
 
 	private renderSharedCard(sp: SharedSpace, index: number): void {

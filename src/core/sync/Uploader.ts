@@ -29,6 +29,27 @@ export class Uploader {
 		return ctx.isMarkdown(localPath) ? this.uploadNote(localPath, dbPath) : this.uploadAsset(localPath, dbPath);
 	}
 
+	/**
+	 * vault 파일 대신 주어진 내용으로 note 업로드(실시간 스냅샷용). 경로 매핑/제외/해시 dedupe는 동일.
+	 * 열린 에디터를 건드리지 않고 로컬 DB에만 기록 → replication이 원격 전파.
+	 */
+	async uploadContent(localPath: string, content: string): Promise<UploadResult> {
+		const ctx = this.ctx;
+		if (ctx.isExcluded(localPath)) return "skipped-excluded";
+		const dbPath = ctx.toDbPath(localPath);
+		if (dbPath == null || !ctx.isValidDbPath(dbPath)) return "skipped-outside";
+		if (!ctx.isMarkdown(localPath)) return "skipped-outside";
+
+		const newHash = await sha256(content);
+		const existing = await ctx.pouch.get<NoteDoc>(noteId(dbPath));
+		if (existing && !existing.deleted && existing.contentHash === newHash) return "skipped-same";
+
+		const doc = await ctx.buildNoteDoc(dbPath, content, existing?.version ?? 0);
+		await ctx.pouch.put(doc);
+		this.markUploaded(dbPath);
+		return "uploaded";
+	}
+
 	private async uploadNote(localPath: string, dbPath: string): Promise<UploadResult> {
 		const ctx = this.ctx;
 		const content = await ctx.readVaultFile(localPath);

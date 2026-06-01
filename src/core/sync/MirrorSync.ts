@@ -3,7 +3,7 @@ import { PouchService } from "../couch/PouchService";
 import { MirrorContext } from "./MirrorContext";
 import { MirrorApplier } from "./MirrorApplier";
 import { ConflictManager, ConflictInfo, ResolveChoice } from "./ConflictManager";
-import { Uploader } from "./Uploader";
+import { Uploader, UploadResult } from "./Uploader";
 import { LocalWatcher } from "./LocalWatcher";
 import { LocalApplier } from "./LocalApplier";
 import { FullSync, SyncDirection } from "./FullSync";
@@ -158,6 +158,17 @@ export class MirrorSync {
 
 	fullSync(direction: SyncDirection = "both"): Promise<void> {
 		return this.fullSyncRunner.run(direction);
+	}
+
+	/** 실시간 스냅샷: Yjs 내용을 vault 미접촉으로 로컬 DB에 기록(→ replication이 원격 전파). 기술문서 §19.2. */
+	snapshotNote(localPath: string, content: string): Promise<UploadResult> {
+		return this.uploader.uploadContent(localPath, content);
+	}
+
+	/** 피드백 라우팅용: 이 링크가 해당 로컬 경로를 담당하는가(localRoot 안 + 제외 아님). */
+	owns(localPath: string): boolean {
+		const dbPath = this.ctx.toDbPath(localPath);
+		return dbPath != null && !this.ctx.isExcluded(localPath);
 	}
 }
 

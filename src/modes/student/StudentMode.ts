@@ -124,10 +124,17 @@ export class StudentMode implements ClassSyncMode {
 			const doc = await pouch.get<RtConfigDoc>(RTCONFIG_DOC_ID);
 			if (!doc) return;
 			const s = this.core.settings;
-			if (s.realtimeEnabled !== doc.enabled || s.yjsServerUrl !== doc.url || s.yjsToken !== doc.token) {
+			const snapshotSec = doc.snapshotSec ?? 0;
+			if (
+				s.realtimeEnabled !== doc.enabled ||
+				s.yjsServerUrl !== doc.url ||
+				s.yjsToken !== doc.token ||
+				s.realtimeSnapshotSec !== snapshotSec
+			) {
 				s.realtimeEnabled = doc.enabled;
 				s.yjsServerUrl = doc.url;
 				s.yjsToken = doc.token;
+				s.realtimeSnapshotSec = snapshotSec;
 				await this.core.save();
 			}
 		} catch {
