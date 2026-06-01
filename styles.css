@@ -30,6 +30,12 @@
 	padding-top: 4px;
 }
 
+/* 서버 데이터 초기화 모달 경고 */
+.class-sync-reset-warn {
+	color: var(--text-error);
+	font-weight: 600;
+}
+
 /* 목록 그룹의 "추가" 버튼 행: 빈 정보 영역을 없애고 풀폭 버튼으로 그룹에 자연스럽게 붙인다. */
 .class-sync-add-row {
 	border-top: none;

@@ -8,12 +8,14 @@ export interface SettingsHost extends Plugin {
 	saveSettings(): Promise<void>;
 	testConnection(): Promise<void>;
 	restartMode(): Promise<void>;
+	requestApply(): void;
 	resetSetup(): Promise<void>;
 	inviteStudent(student: StudentConfig): Promise<void>;
 	ingestInvite(code: string): Promise<void>;
 	deployShared(space: SharedSpace): Promise<void>;
 	exportSettingsJson(): string;
 	importSettingsJson(json: string): Promise<{ ok: boolean; error?: string }>;
+	openResetModal(): void;
 }
 
 /**
@@ -60,9 +62,9 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		this.textSetting(klass, "학급 ID", "classId", "class_2026_1");
 		this.textSetting(klass, "표시 이름", "displayName", "교사");
 
-		const admin = this.group("관리자 계정", "학생 계정·DB·권한 생성에 쓰이는 자격증명이며 이 기기에만 저장됩니다.");
-		this.textSetting(admin, "CouchDB URL", "couchdbUrl", "https://nas.example.com");
-		this.textSetting(admin, "관리자 사용자", "username", "admin");
+		const admin = this.group("관리자 계정", "학생 계정·DB·권한 생성용 자격증명(이 기기에만 저장) — 칸을 벗어나면 변경이 자동 적용됩니다.");
+		this.textSetting(admin, "CouchDB URL", "couchdbUrl", "https://nas.example.com", { applyOnBlur: true });
+		this.textSetting(admin, "관리자 사용자", "username", "admin", { applyOnBlur: true });
 		this.passwordSetting(admin);
 		admin.addSetting((set) =>
 			set
@@ -169,6 +171,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 					.onClick(async () => {
 						s.sharedSpaces.splice(index, 1);
 						await this.host.saveSettings();
+						this.host.requestApply();
 						this.display();
 					}),
 			);
@@ -180,6 +183,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 				await this.host.saveSettings();
 			});
 			noAutoCorrect(t.inputEl);
+			this.applyOnBlur(t.inputEl);
 		});
 		new Setting(card).setName("폴더").addText((t) => {
 			t.setPlaceholder("모둠1").setValue(sp.folder).onChange(async (v) => {
@@ -187,6 +191,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 				await this.host.saveSettings();
 			});
 			noAutoCorrect(t.inputEl);
+			this.applyOnBlur(t.inputEl);
 		});
 
 		const membersEl = card.createDiv({ cls: "class-sync-student-status" });
@@ -226,6 +231,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 					.onClick(async () => {
 						this.host.settings.students.splice(index, 1);
 						await this.host.saveSettings();
+						this.host.requestApply();
 						this.display();
 					}),
 			);
@@ -289,7 +295,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 					t.setValue(s.autoSync).onChange(async (v) => {
 						s.autoSync = v;
 						await this.host.saveSettings();
-						await this.host.restartMode();
+						this.host.requestApply();
 					}),
 				),
 		);
@@ -420,19 +426,24 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 	}
 
 	private renderApplyAndReset(s: ClassSyncSettings): void {
-		const g = this.group("적용 / 초기화");
-		g.addSetting((set) =>
-			set
-				.setName("설정 적용 (동기화 재시작)")
-				.setDesc("연결·학생 목록·옵션 변경을 실행 중인 동기화에 반영합니다.")
-				.addButton((b) => b.setButtonText("적용").onClick(() => this.runAsync(b, () => this.host.restartMode()))),
-		);
+		const g = this.group("초기화");
 
+		// 서버 데이터 초기화 — 교사 전용, 파괴적. 백엔드를 처음 상태로.
+		if (s.role === "teacher") {
+			g.addSetting((set) =>
+				set
+					.setName("서버 데이터 초기화")
+					.setDesc("서버의 모든 학생·공유 데이터베이스를 삭제해 백엔드를 초기화합니다(되돌릴 수 없음 · Yjs는 수동 안내).")
+					.addButton((b) => b.setButtonText("초기화…").setWarning().onClick(() => this.host.openResetModal())),
+			);
+		}
+
+		// ③ 역할 재설정 — 로컬만 초기화하고 역할 재선택(서버·vault는 유지).
 		if (s.setupComplete) {
 			g.addSetting((set) =>
 				set
-					.setName("역할 재설정 (동기화 상태 초기화)")
-					.setDesc("역할을 다시 선택하며 동기화 체크포인트가 초기화됩니다(vault 파일은 유지).")
+					.setName("역할 재설정 (로컬 초기화)")
+					.setDesc("교사↔학생 역할 변경이나 재시작용 — 로컬 체크포인트·캐시를 비우고 역할을 다시 고릅니다(서버 데이터·vault 파일은 유지).")
 					.addButton((b) =>
 						b.setButtonText("재설정").setWarning().onClick(async () => {
 							await this.host.resetSetup();
@@ -460,10 +471,17 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 					await this.host.saveSettings();
 				});
 			noAutoCorrect(t.inputEl);
+			this.applyOnBlur(t.inputEl); // 칸을 벗어나면 자동 적용
 		});
 	}
 
-	private textSetting(group: SettingGroup, name: string, key: keyof ClassSyncSettings, placeholder: string): void {
+	private textSetting(
+		group: SettingGroup,
+		name: string,
+		key: keyof ClassSyncSettings,
+		placeholder: string,
+		opts?: { applyOnBlur?: boolean },
+	): void {
 		const s = this.host.settings;
 		group.addSetting((set) =>
 			set.setName(name).addText((t) => {
@@ -474,6 +492,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 						await this.host.saveSettings();
 					});
 				noAutoCorrect(t.inputEl);
+				if (opts?.applyOnBlur) this.applyOnBlur(t.inputEl);
 			}),
 		);
 	}
@@ -488,8 +507,23 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 				});
 				t.inputEl.type = "password";
 				noAutoCorrect(t.inputEl);
+				this.applyOnBlur(t.inputEl); // 연결 자격증명: 칸을 벗어나면 자동 적용
 			}),
 		);
+	}
+
+	/** 구조 필드(연결·학생·공유): 타이핑 중엔 적용하지 않고, 포커스가 빠질 때 값이 바뀌었으면 자동 적용. */
+	private applyOnBlur(input: HTMLInputElement): void {
+		let focusVal = input.value;
+		input.addEventListener("focus", () => {
+			focusVal = input.value;
+		});
+		input.addEventListener("blur", () => {
+			if (input.value !== focusVal) {
+				focusVal = input.value;
+				this.host.requestApply();
+			}
+		});
 	}
 
 	private readonlySetting(group: SettingGroup, name: string, value: string): void {

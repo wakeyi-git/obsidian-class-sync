@@ -113,6 +113,27 @@ export class CouchAdmin {
 		return { ok: true };
 	}
 
+	/** DB 영구 삭제. 이미 없으면(404) 성공으로 본다. 서버 데이터 초기화용. */
+	async deleteDatabase(db: string): Promise<{ ok: boolean; error?: string }> {
+		const res = await this.req("DELETE", encodeURIComponent(db));
+		if (res.status < 300 || res.status === 404) return { ok: true };
+		return { ok: false, error: `DB 삭제 실패 (HTTP ${res.status}): ${res.json?.reason ?? res.text}` };
+	}
+
+	/** 학생 _users 계정 삭제. 이미 없으면 성공. 완전 초기화용. */
+	async deleteUser(username: string): Promise<{ ok: boolean; error?: string }> {
+		const userId = `org.couchdb.user:${username}`;
+		const path = `_users/${encodeURIComponent(userId)}`;
+		const existing = await this.req("GET", path);
+		if (existing.status === 404) return { ok: true };
+		if (existing.status >= 400) return { ok: false, error: `계정 조회 실패 (HTTP ${existing.status})` };
+		const rev = existing.json?._rev;
+		if (!rev) return { ok: true };
+		const del = await this.req("DELETE", `${path}?rev=${encodeURIComponent(rev)}`);
+		if (del.status < 300 || del.status === 404) return { ok: true };
+		return { ok: false, error: `계정 삭제 실패 (HTTP ${del.status}): ${del.json?.reason ?? del.text}` };
+	}
+
 	/** 임의 DB에 문서 upsert(멱등). 학생 mirror DB에 shares 문서를 기록하는 데 사용. */
 	async putDoc(db: string, doc: { _id: string; [k: string]: unknown }): Promise<{ ok: boolean; error?: string }> {
 		const path = `${encodeURIComponent(db)}/${encodeURIComponent(doc._id)}`;

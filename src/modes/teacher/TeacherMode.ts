@@ -15,10 +15,15 @@ export class TeacherMode implements ClassSyncMode {
 
 	constructor(private core: CoreServices) {
 		const s = core.settings;
-		// 모든 링크의 localRoot(개인 학생 폴더 + 공유 폴더)로 겹침 제외 계산
-		const roots = [...s.students.map((st) => st.localRoot), ...s.sharedSpaces.map((sp) => sp.folder)];
+		// 프로비저닝된(서버에 DB/계정이 존재하는) 항목만 동기화. 미초대·초기화된 항목은 제외
+		// → 빈 학생으로 잘못된 링크가 생기거나, 삭제된 DB로 replication이 무한 재시도되는 것을 막는다.
+		const students = s.students.filter((st) => st.provisioned && st.studentId && st.remoteDb && st.localRoot);
+		const shared = s.sharedSpaces.filter((sp) => sp.provisioned && sp.remoteDb && sp.folder);
 
-		const studentSyncs = s.students.map(
+		// 모든 링크의 localRoot(개인 학생 폴더 + 공유 폴더)로 겹침 제외 계산
+		const roots = [...students.map((st) => st.localRoot), ...shared.map((sp) => sp.folder)];
+
+		const studentSyncs = students.map(
 			(st) =>
 				new MirrorSync(core, {
 					studentId: st.studentId,
@@ -28,7 +33,7 @@ export class TeacherMode implements ClassSyncMode {
 					childRoots: computeChildRoots(st.localRoot, roots),
 				}),
 		);
-		const sharedSyncs = s.sharedSpaces.map(
+		const sharedSyncs = shared.map(
 			(sp) =>
 				new MirrorSync(core, {
 					studentId: `(공유)${sp.name}`,
@@ -40,7 +45,7 @@ export class TeacherMode implements ClassSyncMode {
 		);
 		this.syncs = [...studentSyncs, ...sharedSyncs];
 		// 실시간(RealtimeManager)이 참조할 공유 폴더 목록
-		core.sharedSpaces = s.sharedSpaces.map((sp) => ({ id: sp.id, folder: sp.folder }));
+		core.sharedSpaces = shared.map((sp) => ({ id: sp.id, folder: sp.folder }));
 	}
 
 	async start(): Promise<void> {

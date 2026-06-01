@@ -26,6 +26,7 @@ import { runDiagnostics } from "./core/sync/diagnostics";
 import { CouchAdmin } from "./core/couch/CouchAdmin";
 import { InvitePayload, INVITE_ACTION, genPassword, parseInvite } from "./core/invite/invite";
 import { exportSettings, importSettings } from "./settings/portable";
+import { ResetModal } from "./ui/ResetModal";
 
 /**
  * Class Sync for Obsidian — Phase 1 진입점.
@@ -41,6 +42,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	private realtime!: RealtimeManager;
 	private rtStatus!: HTMLElement;
 	private feedback!: FeedbackStore;
+	private applyTimer: number | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -95,6 +97,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	}
 
 	async onunload(): Promise<void> {
+		if (this.applyTimer) window.clearTimeout(this.applyTimer);
 		await this.realtime?.dispose();
 		await this.mode?.stop();
 		await this.core?.flushPersist();
@@ -220,6 +223,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		}
 		student.provisioned = true;
 		await this.saveSettings();
+		this.requestApply(); // 새 학생 링크를 자동으로 동기화에 반영
 		this.logger.ok(`프로비저닝 완료: ${student.studentId} (계정/DB/권한)`, true);
 
 		const payload: InvitePayload = {
@@ -384,12 +388,123 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		return { ok: true };
 	}
 
-	/** 연결/경로 설정 변경을 실행 중 엔진에 반영(재시작). 설정 탭 '적용' 버튼. */
+	/**
+	 * 서버 데이터 초기화(교사 전용, 파괴적). 모든 학생/공유 CouchDB DB를 삭제하고(선택 시 계정도),
+	 * 로컬 캐시·프로비저닝 상태를 비운다. 학급 구성(목록)은 유지 → 재초대·재배포로 복구.
+	 * Yjs 실시간 데이터는 플러그인이 못 지우므로 수동 안내만 표시한다.
+	 */
+	async resetServerData(deleteAccounts: boolean): Promise<void> {
+		await this.activateLogView();
+		const s = this.settings;
+		if (s.role !== "teacher") {
+			this.logger.warn("교사 모드에서만 사용할 수 있습니다.", true);
+			return;
+		}
+		if (!s.couchdbUrl || !s.username || !s.password) {
+			this.logger.warn("관리자 계정을 먼저 입력하세요.", true);
+			return;
+		}
+		const admin = new CouchAdmin(s.couchdbUrl, s.username, s.password);
+		const chk = await admin.checkAdmin();
+		if (!chk.ok) {
+			this.logger.error(`관리자 인증 실패: ${chk.error}`, true);
+			return;
+		}
+
+		// 실행 중 엔진 정지(삭제할 DB로의 replication 차단). 대기 중 자동-적용도 취소.
+		if (this.applyTimer) {
+			window.clearTimeout(this.applyTimer);
+			this.applyTimer = null;
+		}
+		await this.mode?.stop();
+		this.mode = null;
+
+		const dbs = [
+			...s.students.map((st) => st.remoteDb).filter((d) => d),
+			...s.sharedSpaces.map((sp) => sp.remoteDb).filter((d) => d),
+		];
+		this.logger.info(`서버 데이터 초기화 시작 — DB ${dbs.length}개${deleteAccounts ? " + 학생 계정" : ""}`, true);
+
+		for (const db of dbs) {
+			const r = await admin.deleteDatabase(db);
+			if (r.ok) this.logger.ok(`DB 삭제: ${db}`);
+			else this.logger.error(`DB 삭제 실패: ${db} — ${r.error}`);
+			// 로컬 PouchDB 캐시도 제거
+			try {
+				const p = this.core.createPouch(db);
+				await p.destroyLocal();
+				await p.close();
+			} catch {
+				/* 캐시 없음 등 무시 */
+			}
+		}
+
+		if (deleteAccounts) {
+			for (const st of s.students) {
+				if (!st.username) continue;
+				const r = await admin.deleteUser(st.username);
+				if (r.ok) this.logger.ok(`계정 삭제: ${st.username}`);
+				else this.logger.error(`계정 삭제 실패: ${st.username} — ${r.error}`);
+			}
+		}
+
+		// 로컬 상태 초기화
+		if (deleteAccounts) {
+			// 계정까지 삭제 → 학급 명단(학생·공유 공간)도 완전 비움(처음부터 다시 구성)
+			s.students = [];
+			s.sharedSpaces = [];
+			this.core.sharedSpaces = [];
+		} else {
+			// DB만 삭제 → 명단 유지, 프로비저닝 상태만 리셋(재초대로 복구)
+			for (const st of s.students) st.provisioned = false;
+			for (const sp of s.sharedSpaces) sp.provisioned = false;
+		}
+		s.lastSeqByDb = {};
+		await this.saveSettings();
+
+		this.logger.warn(
+			"Yjs 실시간 데이터는 수동 초기화하세요: NAS에서 yjs-websocket 컨테이너 재시작 또는 ./data 폴더 비우기 (docker compose down → data 삭제 → up).",
+			true,
+		);
+		this.logger.ok(
+			deleteAccounts
+				? "서버 데이터·계정 초기화 완료. 학생 목록·공유 공간이 비워졌습니다 — 처음부터 다시 추가·초대·배포하세요."
+				: "서버 데이터 초기화 완료. 학생 ‘초대’ → 공유 공간 ‘재배포’ 하면 자동으로 다시 동기화됩니다.",
+			true,
+		);
+	}
+
+	/** 설정 탭에서 초기화 모달 실행(교사 전용). */
+	openResetModal(): void {
+		if (this.settings.role !== "teacher") {
+			new Notice("Class Sync: 교사 모드에서만 사용할 수 있습니다.");
+			return;
+		}
+		const dbCount =
+			this.settings.students.filter((st) => st.remoteDb).length +
+			this.settings.sharedSpaces.filter((sp) => sp.remoteDb).length;
+		new ResetModal(this.app, dbCount, (deleteAccounts) => this.resetServerData(deleteAccounts)).open();
+	}
+
+	/** 연결/경로 설정 변경을 실행 중 엔진에 반영(재시작). */
 	async restartMode(): Promise<void> {
 		if (!this.settings.setupComplete) return;
 		await this.mode?.stop();
 		await this.startMode();
 		this.logger.ok("설정을 적용해 동기화를 재시작했습니다.", true);
+	}
+
+	/**
+	 * 구조 변경(연결·학생·공유)을 자동 적용. 잦은 변경을 모아 한 번만 재시작(타이핑 중 재연결 방지).
+	 * 별도 '적용' 버튼 없이 설정 변경이 곧바로 반영되게 한다.
+	 */
+	requestApply(): void {
+		if (!this.settings.setupComplete) return;
+		if (this.applyTimer) window.clearTimeout(this.applyTimer);
+		this.applyTimer = window.setTimeout(() => {
+			this.applyTimer = null;
+			void this.restartMode();
+		}, 500);
 	}
 
 	// --- 명령 등록 ---

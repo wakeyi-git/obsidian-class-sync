@@ -102,7 +102,7 @@ export class MirrorSync {
 		}
 		if (!this.ctx.settings.couchdbUrl) {
 			this.ctx.status.state = "offline";
-			this.ctx.logger.warn("CouchDB URL이 없습니다. 설정 후 '설정 적용'을 누르세요.", true);
+			this.ctx.logger.warn("CouchDB URL이 없습니다. 설정에서 입력하면 자동 적용됩니다.", true);
 			return;
 		}
 		this.ctx.status.state = "syncing";
@@ -131,9 +131,15 @@ export class MirrorSync {
 			onActive: () => {
 				this.ctx.status.state = "syncing";
 			},
-			onPaused: () => {
-				if (this.ctx.status.state !== "error") this.ctx.status.state = "idle";
-				this.ctx.logger.info(`동기화 따라잡음(idle): ${this.ctx.remoteDb}`);
+			onPaused: (err) => {
+				if (this.ctx.status.state === "error") return;
+				// 오류(예: 삭제된 DB·오프라인)면 offline, 아니면 idle. 상태가 바뀔 때만 로그(스팸 방지).
+				const next = err ? "offline" : "idle";
+				if (this.ctx.status.state === next) return;
+				this.ctx.status.state = next;
+				this.ctx.logger.info(
+					`${err ? "동기화 대기(오프라인/오류)" : "동기화 따라잡음(idle)"}: ${this.ctx.remoteDb}`,
+				);
 			},
 			onError: (e) => {
 				this.ctx.status.lastError = e.message;
@@ -142,7 +148,7 @@ export class MirrorSync {
 				if (isAuthError(e.message)) {
 					this.ctx.pouch.stopReplication();
 					this.ctx.logger.error(
-						`인증 실패로 동기화 중지: ${this.ctx.remoteDb} — ${e.message}. 자격증명/초대를 확인 후 '설정 적용'으로 재시작하세요.`,
+						`인증 실패로 동기화 중지: ${this.ctx.remoteDb} — ${e.message}. 자격증명/초대를 고치면 자동으로 다시 시도합니다.`,
 						true,
 					);
 				} else {
