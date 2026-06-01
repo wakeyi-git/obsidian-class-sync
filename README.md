@@ -20,6 +20,7 @@ TeacherVault/
 - **마크다운 + 첨부파일** — 노트뿐 아니라 이미지·PDF 등 첨부도 동기화(PouchDB attachment).
 - **충돌 보존** — 양쪽 동시 편집 시 로컬을 지키고 충돌 해소 UI로 비교/선택.
 - **공유 폴더** — 모둠/학급이 한 폴더를 공유(전용 DB + 멤버 권한), 교사 배포로 학생에게 자동 전파.
+- **실시간 공동 편집** — 공유 폴더 문서를 Yjs로 글자 단위 동시 편집(커서·이름 표시). 별도 WebSocket 서버 필요.
 
 > 전체 설계는 [`기술문서.md`](기술문서.md)를 참고하세요.
 
@@ -36,7 +37,7 @@ TeacherVault/
 | **4** | 교사 편의 — 학생에게 파일/폴더 복사 + 템플릿 변수 | ✅ 검증 |
 | **5** | 첨부파일(이미지/PDF 등) 동기화 | ✅ |
 | **6a** | 공유 폴더 (모둠/학급 공유, 파일 단위) | ✅ |
-| 6b | Yjs 기반 글자 단위 실시간 공동 편집 | ⬜ 예정 |
+| **6b** | Yjs 기반 글자 단위 실시간 공동 편집 | ✅ |
 
 ---
 
@@ -122,6 +123,13 @@ docker run -d --name couchdb -p 5984:5984 \
 권한이 생성되고 학생에게 자동 전파됩니다. 멤버 학생 vault에 같은 폴더가 생겨 서로의 파일을 보고 편집합니다.
 개인 미러와 겹치지 않도록 공유 폴더는 개인 동기화에서 자동 제외됩니다. 같은 파일 동시 편집은 충돌 UI로 해소합니다.
 
+### 실시간 공동 편집 (Phase 6b)
+공유 폴더 문서를 글자 단위로 동시에 편집합니다(Yjs). 별도 **Yjs WebSocket 서버**가 필요하며
+([docs/yjs-server-synology.md](docs/yjs-server-synology.md) 참고), 교사가 설정에 서버 URL/토큰을 입력하고
+공유 공간을 배포하면 학생에게 자동 전파됩니다. 공유 폴더 문서를 편집 모드로 열면 실시간 세션이 연결되고,
+서로의 커서·이름이 표시됩니다. 편집 중에는 Yjs가 권위이며, 문서를 닫을 때 스냅샷이 CouchDB로 저장되어
+오프라인 멤버에게 반영됩니다.
+
 ---
 
 ## 아키텍처
@@ -136,6 +144,7 @@ src/
 │  │  ├─ obsidianFetch.ts      # requestUrl 기반 fetch shim (모바일 CORS 우회)
 │  │  └─ CouchAdmin.ts         # 학생 계정/DB/_security 프로비저닝 (admin)
 │  ├─ invite/invite.ts         # 초대 페이로드 인코딩 + obsidian:// 딥링크
+│  ├─ realtime/                # Yjs 실시간 (RealtimeManager · editorBinding)
 │  ├─ guard/RemoteApplyGuard.ts# 동기화 루프 차단
 │  ├─ sync/
 │  │  ├─ MirrorContext.ts      # 링크별 경로/IO/상태/보관 헬퍼
