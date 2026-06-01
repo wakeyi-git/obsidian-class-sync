@@ -1,5 +1,5 @@
 import { CoreServices } from "../CoreServices";
-import { PouchService } from "../couch/PouchService";
+import { PouchService, ReplicationHandlers } from "../couch/PouchService";
 import { MirrorContext } from "./MirrorContext";
 import { MirrorApplier } from "./MirrorApplier";
 import { ConflictManager, ConflictInfo, ResolveChoice } from "./ConflictManager";
@@ -40,6 +40,7 @@ export class MirrorSync {
 	private readonly localApplier: LocalApplier;
 	private readonly fullSyncRunner: FullSync;
 	private started = false;
+	private pausedByHidden = false; // 백그라운드 일시정지로 replication을 멈춘 상태
 
 	constructor(core: CoreServices, opts: MirrorSyncOptions) {
 		const remoteDb = opts.remoteDb;
@@ -119,7 +120,14 @@ export class MirrorSync {
 		// 로컬 DB 변경을 vault에 반영(원격에서 replication으로 들어온 것 포함)
 		this.localApplier.start();
 		// 로컬 ↔ 원격 live replication (오프라인 큐·재연결·충돌)
-		this.ctx.pouch.startReplication({
+		this.ctx.pouch.startReplication(this.replicationHandlers());
+		// vault 변경 감시
+		this.watcher.start();
+	}
+
+	/** live replication 핸들러(시작/재개 공용). */
+	private replicationHandlers(): ReplicationHandlers {
+		return {
 			onActive: () => {
 				this.ctx.status.state = "syncing";
 			},
@@ -141,9 +149,27 @@ export class MirrorSync {
 					this.ctx.logger.error(`replication 오류: ${e.message}`);
 				}
 			},
-		});
-		// vault 변경 감시
-		this.watcher.start();
+		};
+	}
+
+	/** 백그라운드 진입 시 원격 replication만 일시정지(배터리/네트워크 절감). watcher/applier는 유지. */
+	pauseReplication(): void {
+		if (!this.started || this.pausedByHidden) return;
+		if (this.ctx.status.state === "disabled" || this.ctx.status.state === "error") return;
+		this.pausedByHidden = true;
+		this.ctx.pouch.stopReplication();
+		this.ctx.status.state = "offline";
+		this.ctx.logger.info(`백그라운드 — 동기화 일시정지: ${this.ctx.remoteDb}`);
+	}
+
+	/** 포그라운드 복귀 시 replication 재개(내가 일시정지했던 경우만). */
+	resumeReplication(): void {
+		if (!this.pausedByHidden) return;
+		this.pausedByHidden = false;
+		if (!this.started || !this.ctx.settings.autoSync || !this.ctx.settings.couchdbUrl) return;
+		this.ctx.status.state = "syncing";
+		this.ctx.pouch.startReplication(this.replicationHandlers());
+		this.ctx.logger.info(`포그라운드 — 동기화 재개: ${this.ctx.remoteDb}`);
 	}
 
 	async stop(): Promise<void> {

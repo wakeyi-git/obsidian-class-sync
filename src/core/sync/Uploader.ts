@@ -70,10 +70,20 @@ export class Uploader {
 		const ctx = this.ctx;
 		if (!ctx.settings.syncAssets) return "skipped-asset-off";
 
+		const maxBytes = (ctx.settings.maxAttachmentMB || 0) * 1024 * 1024;
+
+		// 큰 파일을 메모리에 읽기 전에 stat.size로 먼저 한도 초과를 판정(모바일 메모리 보호, §24.6).
+		if (maxBytes > 0) {
+			const size = ctx.getFile(localPath)?.stat.size;
+			if (size != null && size > maxBytes) {
+				ctx.logger.warn(`첨부 크기 초과로 생략: ${dbPath} (${(size / 1024 / 1024).toFixed(1)}MB)`);
+				return "skipped-toolarge";
+			}
+		}
+
 		const data = await ctx.readVaultBinary(localPath);
 		if (data == null) return "skipped-missing";
 
-		const maxBytes = (ctx.settings.maxAttachmentMB || 0) * 1024 * 1024;
 		if (maxBytes > 0 && data.byteLength > maxBytes) {
 			ctx.logger.warn(`첨부 크기 초과로 생략: ${dbPath} (${(data.byteLength / 1024 / 1024).toFixed(1)}MB)`);
 			return "skipped-toolarge";

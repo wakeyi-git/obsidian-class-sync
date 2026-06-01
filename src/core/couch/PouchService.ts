@@ -85,6 +85,22 @@ export class PouchService {
 		return { status: resp.status, length: text.length, snippet: text.slice(0, 200) };
 	}
 
+	/**
+	 * 원격 쓰기 권한 프로브. _local 문서를 잠깐 PUT 후 remove(영구 데이터·replication에 영향 없음).
+	 * 401/403이면 쓰기 권한 없음. 진단용. 기술문서 §22.3.
+	 */
+	async probeWrite(): Promise<{ ok: boolean; status?: number; error?: string }> {
+		const id = "_local/classsync_probe";
+		try {
+			const existing = (await this.remote.get(id).catch(() => null)) as { _rev?: string } | null;
+			const res = await this.remote.put({ _id: id, _rev: existing?._rev, t: Date.now() } as any);
+			await this.remote.remove(id, res.rev).catch(() => undefined);
+			return { ok: true };
+		} catch (e: any) {
+			return { ok: false, status: e?.status, error: describeError(e) };
+		}
+	}
+
 	// --- 로컬 DB 읽기/쓰기 ---
 
 	async get<T extends PouchDocBase>(id: string): Promise<(T & PouchDB.Core.IdMeta & PouchDB.Core.GetMeta) | null> {

@@ -10,8 +10,13 @@
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 8px;
 	padding: 8px 12px;
-	margin: 10px 0;
+	margin: 12px;
 	background: var(--background-secondary);
+}
+
+/* 카드가 든 그룹은 새 블록 포맷팅 컨텍스트로 만들어 첫 카드의 위쪽 마진이 상쇄되지 않게 한다. */
+.setting-group .setting-items:has(> .class-sync-student-card) {
+	display: flow-root;
 }
 
 .class-sync-student-card .setting-item {
@@ -23,6 +28,24 @@
 	font-size: 12px;
 	color: var(--text-muted);
 	padding-top: 4px;
+}
+
+/* 목록 그룹의 "추가" 버튼 행: 빈 정보 영역을 없애고 풀폭 버튼으로 그룹에 자연스럽게 붙인다. */
+.class-sync-add-row {
+	border-top: none;
+}
+
+.class-sync-add-row .setting-item-info {
+	display: none;
+}
+
+.class-sync-add-row .setting-item-control {
+	flex: 1;
+	justify-content: stretch;
+}
+
+.class-sync-add-row .setting-item-control button {
+	width: 100%;
 }
 
 /* 대시보드 */
@@ -213,6 +236,14 @@
 	width: 100%;
 	resize: vertical;
 	font-size: 13px;
+	margin: 8px 0;
+}
+
+.class-sync-backup-input {
+	width: 100%;
+	resize: vertical;
+	font-family: var(--font-monospace);
+	font-size: 11px;
 	margin: 8px 0;
 }
 

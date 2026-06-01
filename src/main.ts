@@ -22,8 +22,10 @@ import { FeedbackStore } from "./core/feedback/FeedbackStore";
 import { FeedbackView, FEEDBACK_VIEW_TYPE, promptAddFeedback } from "./ui/FeedbackView";
 import { MirrorSync } from "./core/sync/MirrorSync";
 import { testConnection } from "./core/sync/connectionTest";
+import { runDiagnostics } from "./core/sync/diagnostics";
 import { CouchAdmin } from "./core/couch/CouchAdmin";
 import { InvitePayload, INVITE_ACTION, genPassword, parseInvite } from "./core/invite/invite";
+import { exportSettings, importSettings } from "./settings/portable";
 
 /**
  * Class Sync for Obsidian — Phase 1 진입점.
@@ -65,6 +67,9 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.registerEvent(this.app.workspace.on("layout-change", () => this.onWorkspaceChange()));
 		this.rtStatus = this.addStatusBarItem();
 		this.registerInterval(window.setInterval(() => this.updateRtStatus(), 2000));
+
+		// 백그라운드(앱/창 비활성) 시 원격 동기화 일시정지 → 배터리/네트워크 절감(기술문서 §24.6)
+		this.registerDomEvent(document, "visibilitychange", () => this.onVisibilityChange());
 
 		this.registerView(LOG_VIEW_TYPE, (leaf: WorkspaceLeaf) => new LogView(leaf, this.logger));
 		this.registerView(DASHBOARD_VIEW_TYPE, (leaf: WorkspaceLeaf) => new DashboardView(leaf, this));
@@ -325,6 +330,14 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		for (const db of dbs) await testConnection(this.core, db);
 	}
 
+	/** 종합 진단: 서버 도달 + 활성 링크별 읽기/쓰기 권한 + 실시간 상태. */
+	async runDiagnostics(): Promise<void> {
+		await this.activateLogView();
+		const targets = (this.mode?.getSyncs() ?? []).map((s) => ({ db: s.remoteDb, label: s.label }));
+		await runDiagnostics(this.core, targets);
+		this.realtime.diagnose();
+	}
+
 	// --- 충돌 해소 (ConflictHost) ---
 	async listConflicts(): Promise<ConflictRow[]> {
 		const rows: ConflictRow[] = [];
@@ -352,6 +365,25 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		else this.logger.warn(`원격본 파일이 없습니다: ${row.info.conflictPath}`, true);
 	}
 
+	// --- 설정 내보내기/가져오기 (기술문서 §22.4) ---
+	exportSettingsJson(): string {
+		return exportSettings(this.settings);
+	}
+
+	async importSettingsJson(json: string): Promise<{ ok: boolean; error?: string }> {
+		const res = importSettings(this.settings, json);
+		if (!res.ok) {
+			this.logger.error(`설정 가져오기 실패: ${res.error}`, true);
+			return { ok: false, error: res.error };
+		}
+		this.settings = res.settings;
+		this.core.settings = this.settings;
+		await this.saveSettings();
+		if (this.settings.setupComplete) await this.restartMode();
+		this.logger.ok("설정을 가져와 적용했습니다. 비밀번호/Yjs 토큰은 다시 입력하고, 가져온 학생은 재초대하세요.", true);
+		return { ok: true };
+	}
+
 	/** 연결/경로 설정 변경을 실행 중 엔진에 반영(재시작). 설정 탭 '적용' 버튼. */
 	async restartMode(): Promise<void> {
 		if (!this.settings.setupComplete) return;
@@ -372,6 +404,11 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			id: "class-sync-test-connection",
 			name: "연결/권한 테스트",
 			callback: () => this.testConnection(),
+		});
+		this.addCommand({
+			id: "class-sync-diagnostics",
+			name: "종합 진단 실행 (서버·읽기/쓰기 권한·실시간)",
+			callback: () => this.runDiagnostics(),
 		});
 		this.addCommand({ id: "class-sync-full-sync", name: "전체 동기화", callback: () => fullSync("both") });
 		this.addCommand({ id: "class-sync-upload-only", name: "업로드만 실행", callback: () => fullSync("up") });
@@ -534,6 +571,16 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		if (this.settings.setupComplete) {
 			await this.mode?.stop();
 			await this.startMode();
+		}
+	}
+
+	// --- 백그라운드 동기화 일시정지 (모바일 배터리/네트워크 절감) ---
+	private onVisibilityChange(): void {
+		if (!this.settings.pauseWhenHidden) return;
+		const hidden = document.hidden;
+		for (const sync of this.mode?.getSyncs() ?? []) {
+			if (hidden) sync.pauseReplication();
+			else sync.resumeReplication();
 		}
 	}
 

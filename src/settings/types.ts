@@ -84,6 +84,12 @@ export interface ClassSyncSettings {
 	/** 편집 중 업로드 debounce(ms). 기술문서 §11.3. */
 	debounceMs: number;
 
+	/** 모바일에서의 업로드 debounce(ms). 배터리/네트워크 절감용으로 더 길게. 기술문서 §24.6. */
+	mobileDebounceMs: number;
+
+	/** 앱/창이 백그라운드로 가면 원격 replication을 일시정지(배터리/네트워크 절감). 기술문서 §24.6. */
+	pauseWhenHidden: boolean;
+
 	/** mirror DB별 로컬 changes 체크포인트(local seq). vault 적용 증분 재개에 사용. */
 	lastSeqByDb: Record<string, string>;
 
@@ -127,6 +133,8 @@ export const DEFAULT_SETTINGS: ClassSyncSettings = {
 	syncAssets: true,
 	maxAttachmentMB: 20,
 	debounceMs: 2000,
+	mobileDebounceMs: 4000,
+	pauseWhenHidden: true,
 	lastSeqByDb: {},
 	conflictPolicy: "preserve-local",
 	deletePolicy: "archive",

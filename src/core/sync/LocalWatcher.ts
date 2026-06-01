@@ -1,4 +1,4 @@
-import { EventRef, TAbstractFile, TFile } from "obsidian";
+import { EventRef, Platform, TAbstractFile, TFile } from "obsidian";
 import { MirrorContext } from "./MirrorContext";
 import { Uploader } from "./Uploader";
 import { sha256 } from "../hash/hash";
@@ -146,10 +146,12 @@ export class LocalWatcher {
 	private scheduleUpload(localPath: string, dbPath: string): void {
 		const existing = this.timers.get(localPath);
 		if (existing) clearTimeout(existing);
+		// 모바일은 배터리/네트워크 절감을 위해 더 긴 디바운스 사용(기술문서 §24.6).
+		const delay = Platform.isMobile ? this.ctx.settings.mobileDebounceMs : this.ctx.settings.debounceMs;
 		const timer = setTimeout(() => {
 			this.timers.delete(localPath);
 			void this.flushUpload(localPath, dbPath);
-		}, this.ctx.settings.debounceMs);
+		}, delay);
 		this.timers.set(localPath, timer);
 	}
 
