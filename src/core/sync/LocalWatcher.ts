@@ -60,6 +60,10 @@ export class LocalWatcher {
 	 * 진짜 사용자 편집만 pending 표시 + 업로드 예약 → 디바운스 동안 원격 적용이 덮지 못하게.
 	 */
 	private async maybeSchedule(localPath: string, dbPath: string): Promise<void> {
+		// 실시간 세션 중인 파일은 Yjs가 권위 → CouchDB 업로드하지 않음(Obsidian 자동저장 포함).
+		// 세션 종료 시 스냅샷만 업로드된다.
+		if (this.ctx.core.isRealtimeActive(localPath)) return;
+
 		const hash = await this.currentHash(localPath);
 		if (hash == null) return;
 		if (this.ctx.guard.shouldIgnore(localPath, hash)) return; // applier echo → 무시 (§16.2)

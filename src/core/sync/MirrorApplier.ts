@@ -52,6 +52,9 @@ export class MirrorApplier {
 		if (ctx.isPending(doc.path)) return "skipped-pending";
 
 		const localPath = ctx.toLocalPath(doc.path);
+		// 실시간 세션 중이면 Yjs가 권위 → 원격 적용으로 라이브 에디터를 덮지 않는다.
+		if (ctx.core.isRealtimeActive(localPath)) return "skipped-pending";
+
 		const local = await ctx.readVaultFile(localPath);
 		const localHash = local == null ? null : await sha256(local);
 

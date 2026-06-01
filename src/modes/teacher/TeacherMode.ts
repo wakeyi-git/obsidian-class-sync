@@ -39,6 +39,8 @@ export class TeacherMode implements ClassSyncMode {
 				}),
 		);
 		this.syncs = [...studentSyncs, ...sharedSyncs];
+		// 실시간(RealtimeManager)이 참조할 공유 폴더 목록
+		core.sharedSpaces = s.sharedSpaces.map((sp) => ({ id: sp.id, folder: sp.folder }));
 	}
 
 	async start(): Promise<void> {

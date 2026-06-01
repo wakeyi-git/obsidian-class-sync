@@ -68,3 +68,13 @@ export interface SharesDoc extends PouchDocBase {
 }
 
 export const SHARES_DOC_ID = "shares";
+
+/** 실시간(Yjs) 서버 설정. 교사가 학생 mirror DB에 기록 → 학생이 자동 수신. */
+export interface RtConfigDoc extends PouchDocBase {
+	type: "rtconfig";
+	enabled: boolean;
+	url: string;
+	token: string;
+}
+
+export const RTCONFIG_DOC_ID = "rtconfig";

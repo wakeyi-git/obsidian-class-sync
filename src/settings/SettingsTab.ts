@@ -107,6 +107,30 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 					this.display();
 				}),
 		);
+
+		// 실시간 공동 편집 (Yjs)
+		c.createEl("h3", { text: "실시간 공동 편집 (Yjs)" });
+		c.createEl("p", {
+			cls: "setting-item-description",
+			text: "공유 폴더 문서를 글자 단위로 실시간 공동 편집합니다. 별도 Yjs WebSocket 서버가 필요하며, 공유 공간 '배포' 시 학생에게 자동 전파됩니다.",
+		});
+		new Setting(c)
+			.setName("실시간 편집 사용")
+			.addToggle((t) =>
+				t.setValue(s.realtimeEnabled).onChange(async (v) => {
+					s.realtimeEnabled = v;
+					await this.host.saveSettings();
+				}),
+			);
+		this.textSetting("Yjs 서버 URL", "yjsServerUrl", "wss://yjs.example.com");
+		new Setting(c).setName("Yjs 토큰").addText((t) => {
+			t.setPlaceholder("공유 비밀 토큰").setValue(s.yjsToken).onChange(async (v) => {
+				s.yjsToken = v.trim();
+				await this.host.saveSettings();
+			});
+			t.inputEl.type = "password";
+			noAutoCorrect(t.inputEl);
+		});
 	}
 
 	private renderSharedCard(sp: SharedSpace, index: number): void {

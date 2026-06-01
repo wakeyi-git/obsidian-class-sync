@@ -2,7 +2,7 @@ import { CoreServices } from "../../core/CoreServices";
 import { MirrorSync } from "../../core/sync/MirrorSync";
 import { SyncDirection } from "../../core/sync/FullSync";
 import { computeChildRoots } from "../../core/sync/childRoots";
-import { SharesDoc, SHARES_DOC_ID } from "../../core/model/types";
+import { SharesDoc, SHARES_DOC_ID, RtConfigDoc, RTCONFIG_DOC_ID } from "../../core/model/types";
 import { ClassSyncMode } from "../ClassSyncMode";
 
 /**
@@ -51,7 +51,9 @@ export class StudentMode implements ClassSyncMode {
 		this.reconciling = true;
 		try {
 			const s = this.core.settings;
+			await this.applyRtConfig(); // 교사가 배포한 실시간 설정 수신
 			const spaces = await this.readShares();
+			this.core.sharedSpaces = spaces.map((sp) => ({ id: sp.id, folder: sp.folder }));
 			const sharedFolders = spaces.map((sp) => sp.folder);
 			const allRoots = [s.localRoot, ...sharedFolders];
 
@@ -110,6 +112,26 @@ export class StudentMode implements ClassSyncMode {
 			return doc?.spaces ?? [];
 		} catch {
 			return [];
+		} finally {
+			await pouch.close();
+		}
+	}
+
+	/** 교사가 배포한 rtconfig(실시간 서버/토큰)를 받아 설정에 반영. */
+	private async applyRtConfig(): Promise<void> {
+		const pouch = this.core.createPouch(this.core.settings.remoteDb);
+		try {
+			const doc = await pouch.get<RtConfigDoc>(RTCONFIG_DOC_ID);
+			if (!doc) return;
+			const s = this.core.settings;
+			if (s.realtimeEnabled !== doc.enabled || s.yjsServerUrl !== doc.url || s.yjsToken !== doc.token) {
+				s.realtimeEnabled = doc.enabled;
+				s.yjsServerUrl = doc.url;
+				s.yjsToken = doc.token;
+				await this.core.save();
+			}
+		} catch {
+			/* 없으면 무시 */
 		} finally {
 			await pouch.close();
 		}

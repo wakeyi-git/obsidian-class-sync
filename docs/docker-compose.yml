@@ -1,0 +1,16 @@
+services:
+  yjs:
+    build: .
+    container_name: yjs-websocket
+    restart: unless-stopped
+    ports:
+      - "1234:1234"        # NAS 내부 포트(외부 직접 노출 금지 — 리버스 프록시로만)
+    environment:
+      - HOST=0.0.0.0
+      - PORT=1234
+      - YPERSISTENCE=/data  # 영속 저장(LevelDB)
+      # 토큰 인증: 아래를 긴 무작위 문자열로 바꾸세요. (예: openssl rand -hex 24)
+      # 비워 두거나 줄을 지우면 인증이 꺼집니다(테스트용).
+      - YJS_TOKEN=CHANGE_ME_to_a_long_random_secret
+    volumes:
+      - ./data:/data

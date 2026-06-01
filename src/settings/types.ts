@@ -90,6 +90,11 @@ export interface ClassSyncSettings {
 	/** 충돌 정책. Phase 1은 preserve-local 고정(정식 처리는 Phase 3). */
 	conflictPolicy: ConflictPolicy;
 
+	/** 실시간 공동 편집(Yjs) — 공유 폴더 문서에만 적용. 기술문서 §19. */
+	realtimeEnabled: boolean;
+	yjsServerUrl: string; // wss://yjs.example.com
+	yjsToken: string; // 공유 비밀 토큰
+
 	/** 삭제/이름변경 시 상대 vault 처리 정책. 기술문서 §15. 기본 archive. */
 	deletePolicy: DeletePolicy;
 }
@@ -122,6 +127,9 @@ export const DEFAULT_SETTINGS: ClassSyncSettings = {
 	lastSeqByDb: {},
 	conflictPolicy: "preserve-local",
 	deletePolicy: "archive",
+	realtimeEnabled: false,
+	yjsServerUrl: "",
+	yjsToken: "",
 };
 
 /** 기기별 고유 ID. 기술문서 §16.3 deviceId 기반 무시에 사용. */

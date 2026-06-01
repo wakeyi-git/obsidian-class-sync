@@ -1,6 +1,6 @@
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { ClassSyncSettings, DEFAULT_SETTINGS, Role, StudentConfig, SharedSpace } from "./settings/types";
-import { SHARES_DOC_ID } from "./core/model/types";
+import { SHARES_DOC_ID, RTCONFIG_DOC_ID } from "./core/model/types";
 import { ClassSyncSettingTab, SettingsHost } from "./settings/SettingsTab";
 import { Logger } from "./core/log/Logger";
 import { CoreServices } from "./core/CoreServices";
@@ -16,6 +16,8 @@ import { ResolveChoice } from "./core/sync/ConflictManager";
 import { DashboardView, DASHBOARD_VIEW_TYPE, DashboardRow, DashboardHost } from "./ui/DashboardView";
 import { BulkCopyModal } from "./ui/BulkCopyModal";
 import { BulkCopy, CopyOptions } from "./modes/teacher/BulkCopy";
+import { RealtimeManager } from "./core/realtime/RealtimeManager";
+import { realtimeEditorExtension } from "./core/realtime/editorBinding";
 import { testConnection } from "./core/sync/connectionTest";
 import { CouchAdmin } from "./core/couch/CouchAdmin";
 import { InvitePayload, INVITE_ACTION, genPassword, parseInvite } from "./core/invite/invite";
@@ -31,12 +33,24 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	private logger = new Logger();
 	private core!: CoreServices;
 	private mode: ClassSyncMode | null = null;
+	private realtime!: RealtimeManager;
+	private rtStatus!: HTMLElement;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 
 		this.core = new CoreServices(this.app, this.settings, this.logger);
 		this.core.save = () => this.saveData(this.settings);
+
+		// 실시간 공동 편집(Yjs) — 공유 폴더 문서
+		this.realtime = new RealtimeManager(this.app, this.core, () => this.core.sharedSpaces);
+		this.core.isRealtimeActive = (p) => this.realtime.isActive(p);
+		this.registerEditorExtension(realtimeEditorExtension());
+		this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.onWorkspaceChange()));
+		this.registerEvent(this.app.workspace.on("file-open", () => this.onWorkspaceChange()));
+		this.registerEvent(this.app.workspace.on("layout-change", () => this.onWorkspaceChange()));
+		this.rtStatus = this.addStatusBarItem();
+		this.registerInterval(window.setInterval(() => this.updateRtStatus(), 2000));
 
 		this.registerView(LOG_VIEW_TYPE, (leaf: WorkspaceLeaf) => new LogView(leaf, this.logger));
 		this.registerView(DASHBOARD_VIEW_TYPE, (leaf: WorkspaceLeaf) => new DashboardView(leaf, this));
@@ -61,6 +75,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	}
 
 	async onunload(): Promise<void> {
+		await this.realtime?.dispose();
 		await this.mode?.stop();
 		await this.core?.flushPersist();
 		this.core?.dispose();
@@ -84,6 +99,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.core.settings = this.settings;
 		this.mode = this.createMode(this.settings.role);
 		await this.mode.start();
+		this.realtime?.syncOpenEditors(); // 공유 폴더 갱신분 반영
 	}
 
 	/** 최초 실행 역할 선택 모달 → 역할 잠금 + 모드 시작. 학생은 초대 코드로 바로 설정 가능. */
@@ -227,13 +243,21 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		space.provisioned = true;
 		await this.saveSettings();
 
-		// 모든 학생의 shares 문서 갱신(추가/제거 학생 모두 반영)
+		// 모든 학생의 shares + rtconfig 문서 갱신(추가/제거 학생 모두 반영)
 		for (const st of s.students) {
 			const spaces = s.sharedSpaces
 				.filter((sp) => sp.members.includes(st.studentId))
 				.map((sp) => ({ id: sp.id, name: sp.name, remoteDb: sp.remoteDb, folder: sp.folder }));
 			const r = await admin.putDoc(st.remoteDb, { _id: SHARES_DOC_ID, type: "shares", spaces });
 			if (!r.ok) this.logger.error(`shares 기록 실패(${st.studentId}): ${r.error}`);
+			const rc = await admin.putDoc(st.remoteDb, {
+				_id: RTCONFIG_DOC_ID,
+				type: "rtconfig",
+				enabled: s.realtimeEnabled,
+				url: s.yjsServerUrl,
+				token: s.yjsToken,
+			});
+			if (!rc.ok) this.logger.error(`rtconfig 기록 실패(${st.studentId}): ${rc.error}`);
 		}
 
 		this.logger.ok(`공유 공간 배포 완료: ${space.name}`, true);
@@ -366,6 +390,15 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			callback: () => this.openBulkCopy("folder"),
 		});
 		this.addCommand({
+			id: "class-sync-realtime-status",
+			name: "실시간 상태 점검",
+			callback: async () => {
+				await this.activateLogView();
+				this.realtime.syncOpenEditors();
+				this.realtime.diagnose();
+			},
+		});
+		this.addCommand({
 			id: "class-sync-refresh-shares",
 			name: "공유 공간 새로고침",
 			callback: async () => {
@@ -453,6 +486,19 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			await this.mode?.stop();
 			await this.startMode();
 		}
+	}
+
+	// --- 실시간 상태바 ---
+	private onWorkspaceChange(): void {
+		this.realtime?.syncOpenEditors();
+		this.updateRtStatus();
+	}
+
+	private updateRtStatus(): void {
+		if (!this.rtStatus) return;
+		const file = this.app.workspace.getActiveFile();
+		const n = file ? this.realtime.presenceFor(file.path) : 0;
+		this.rtStatus.setText(n > 0 ? `🟢 실시간 ${n}명` : "");
 	}
 
 	// --- 로그 뷰 ---

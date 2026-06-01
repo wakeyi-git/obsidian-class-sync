@@ -112,6 +112,20 @@
 	font-size: 12px;
 }
 
+/* 실시간 커서: 편집자 이름 라벨 항상 표시 (y-codemirror.next) */
+.cm-ySelectionInfo {
+	opacity: 1 !important;
+	transition-delay: 0s !important;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 1px 5px;
+	border-radius: 4px 4px 4px 0;
+	white-space: nowrap;
+	color: #fff;
+	z-index: 100;
+	pointer-events: none;
+}
+
 .class-sync-log-view {
 	padding: 8px 12px;
 	font-family: var(--font-monospace);

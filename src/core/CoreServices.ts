@@ -16,6 +16,12 @@ export class CoreServices {
 	/** 실제 영속 함수. main이 주입한다(this.saveData(this.settings)). */
 	save: () => Promise<void> = async () => {};
 
+	/** 실시간 세션 중인 파일 판단(RealtimeManager 주입). 공존: 라이브 에디터를 덮지 않게. */
+	isRealtimeActive: (localPath: string) => boolean = () => false;
+
+	/** 현재 사용자의 공유 공간(교사=설정, 학생=shares 문서). 모드가 런타임에 채운다. RealtimeManager가 참조. */
+	sharedSpaces: Array<{ id: string; folder: string }> = [];
+
 	private persistTimer: ReturnType<typeof setTimeout> | null = null;
 	private readonly persistDelayMs = 1500;
 
