@@ -25,10 +25,17 @@ export class CouchAdmin {
 		return `${this.baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 	}
 
-	private async req(method: string, path: string, body?: unknown): Promise<{ status: number; json: any; text: string }> {
+	private async req(
+		method: string,
+		path: string,
+		body?: unknown,
+		extraHeaders?: Record<string, string>,
+	): Promise<{ status: number; json: any; text: string }> {
+		const headers: Record<string, string> = { ...(extraHeaders ?? {}) };
+		if (body !== undefined) headers["Content-Type"] = "application/json";
 		const resp = await this.fetchImpl(this.url(path), {
 			method,
-			headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+			headers: Object.keys(headers).length ? headers : undefined,
 			body: body !== undefined ? JSON.stringify(body) : undefined,
 		});
 		const text = await resp.text();
@@ -39,6 +46,16 @@ export class CouchAdmin {
 			/* non-JSON */
 		}
 		return { status: resp.status, json, text };
+	}
+
+	/** 삭제된(tombstone) 문서의 최신 leaf _rev를 찾는다(없으면 null). 재생성 시 충돌 방지에 사용. */
+	private async getDeletedRev(path: string): Promise<string | null> {
+		const res = await this.req("GET", `${path}?open_revs=all`, undefined, { Accept: "application/json" });
+		if (!Array.isArray(res.json)) return null;
+		for (const entry of res.json) {
+			if (entry?.ok?._rev) return entry.ok._rev as string;
+		}
+		return null;
 	}
 
 	/** admin 연결/권한 확인 (서버 루트 + _users 접근). */
@@ -68,7 +85,13 @@ export class CouchAdmin {
 		for (let attempt = 0; attempt < 3 && !userOk; attempt++) {
 			const existing = await this.req("GET", userPath);
 			const userDoc: Record<string, unknown> = { _id: userId, name: username, password, roles: [], type: "user" };
-			if (existing.status === 200 && existing.json?._rev) userDoc._rev = existing.json._rev;
+			if (existing.status === 200 && existing.json?._rev) {
+				userDoc._rev = existing.json._rev;
+			} else if (existing.status === 404) {
+				// 삭제된(tombstone) 계정일 수 있음 → 삭제 leaf rev로 덮어써 재생성(409 방지)
+				const delRev = await this.getDeletedRev(userPath);
+				if (delRev) userDoc._rev = delRev;
+			}
 			const putUser = await this.req("PUT", userPath, userDoc);
 			if (putUser.status < 300) {
 				userOk = true;
@@ -120,7 +143,10 @@ export class CouchAdmin {
 		return { ok: false, error: `DB 삭제 실패 (HTTP ${res.status}): ${res.json?.reason ?? res.text}` };
 	}
 
-	/** 학생 _users 계정 삭제. 이미 없으면 성공. 완전 초기화용. */
+	/**
+	 * 학생 _users 계정 삭제. 이미 없으면 성공. 완전 초기화용.
+	 * 삭제 후 tombstone을 purge해, 같은 ID로 재초대 시 rev 충돌 없이 깨끗이 재생성되게 한다.
+	 */
 	async deleteUser(username: string): Promise<{ ok: boolean; error?: string }> {
 		const userId = `org.couchdb.user:${username}`;
 		const path = `_users/${encodeURIComponent(userId)}`;
@@ -130,8 +156,13 @@ export class CouchAdmin {
 		const rev = existing.json?._rev;
 		if (!rev) return { ok: true };
 		const del = await this.req("DELETE", `${path}?rev=${encodeURIComponent(rev)}`);
-		if (del.status < 300 || del.status === 404) return { ok: true };
-		return { ok: false, error: `계정 삭제 실패 (HTTP ${del.status}): ${del.json?.reason ?? del.text}` };
+		if (del.status >= 300 && del.status !== 404) {
+			return { ok: false, error: `계정 삭제 실패 (HTTP ${del.status}): ${del.json?.reason ?? del.text}` };
+		}
+		// tombstone 제거(재생성 충돌 방지). 미지원/실패해도 삭제 자체는 성공으로 본다.
+		const delRev = del.json?.rev ?? rev;
+		await this.req("POST", "_users/_purge", { [userId]: [delRev] });
+		return { ok: true };
 	}
 
 	/** 임의 DB에 문서 upsert(멱등). 학생 mirror DB에 shares 문서를 기록하는 데 사용. */
