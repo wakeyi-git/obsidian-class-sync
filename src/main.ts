@@ -8,18 +8,18 @@ import { ClassSyncMode } from "./modes/ClassSyncMode";
 import { StudentMode } from "./modes/student/StudentMode";
 import { TeacherMode } from "./modes/teacher/TeacherMode";
 import { TFile, TFolder } from "obsidian";
-import { LogView, LOG_VIEW_TYPE } from "./ui/LogView";
 import { RoleSetupModal } from "./ui/RoleSetupModal";
 import { InviteModal } from "./ui/InviteModal";
 import { ConflictModal, ConflictRow, ConflictHost } from "./ui/ConflictModal";
 import { ResolveChoice } from "./core/sync/ConflictManager";
-import { DashboardView, DASHBOARD_VIEW_TYPE, DashboardRow, DashboardHost } from "./ui/DashboardView";
 import { BulkCopyModal } from "./ui/BulkCopyModal";
 import { BulkCopy, CopyOptions } from "./modes/teacher/BulkCopy";
 import { RealtimeManager } from "./core/realtime/RealtimeManager";
 import { realtimeEditorExtension } from "./core/realtime/editorBinding";
 import { FeedbackStore } from "./core/feedback/FeedbackStore";
-import { FeedbackView, FEEDBACK_VIEW_TYPE, promptAddFeedback } from "./ui/FeedbackView";
+import { promptAddFeedback } from "./ui/FeedbackView";
+import { ClassSyncPanelView, PANEL_VIEW_TYPE } from "./ui/PanelView";
+import { PanelHost, PanelTab, DashboardRow } from "./ui/panel/PanelSection";
 import { MirrorSync } from "./core/sync/MirrorSync";
 import { testConnection } from "./core/sync/connectionTest";
 import { runDiagnostics } from "./core/sync/diagnostics";
@@ -34,15 +34,20 @@ import { ResetModal } from "./ui/ResetModal";
  * 역할은 최초 1회 선택 후 잠긴다(기술문서 §5.4 보강). 실행 시 저장된 last_seq부터 증분 재개하고,
  * 전체 동기화는 최초 1회와 수동 명령에서만 수행한다.
  */
-export default class ClassSyncPlugin extends Plugin implements SettingsHost, ConflictHost, DashboardHost {
+export default class ClassSyncPlugin extends Plugin implements SettingsHost, ConflictHost, PanelHost {
 	settings!: ClassSyncSettings;
-	private logger = new Logger();
+	logger = new Logger();
 	private core!: CoreServices;
 	private mode: ClassSyncMode | null = null;
 	private realtime!: RealtimeManager;
 	private rtStatus!: HTMLElement;
 	private feedback!: FeedbackStore;
 	private applyTimer: number | null = null;
+
+	/** PanelHost: 피드백 섹션이 사용. */
+	get feedbackStore(): FeedbackStore {
+		return this.feedback;
+	}
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -63,7 +68,6 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		// 피드백 레이어(§19.5)
 		this.feedback = new FeedbackStore(this.core, (p) => this.syncForLocalPath(p));
 		this.core.onFeedbackChange = () => this.feedback.refresh();
-		this.registerView(FEEDBACK_VIEW_TYPE, (leaf: WorkspaceLeaf) => new FeedbackView(leaf, this.feedback));
 		this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.onWorkspaceChange()));
 		this.registerEvent(this.app.workspace.on("file-open", () => this.onWorkspaceChange()));
 		this.registerEvent(this.app.workspace.on("layout-change", () => this.onWorkspaceChange()));
@@ -73,12 +77,9 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		// 백그라운드(앱/창 비활성) 시 원격 동기화 일시정지 → 배터리/네트워크 절감(기술문서 §24.6)
 		this.registerDomEvent(document, "visibilitychange", () => this.onVisibilityChange());
 
-		this.registerView(LOG_VIEW_TYPE, (leaf: WorkspaceLeaf) => new LogView(leaf, this.logger));
-		this.registerView(DASHBOARD_VIEW_TYPE, (leaf: WorkspaceLeaf) => new DashboardView(leaf, this));
+		this.registerView(PANEL_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ClassSyncPanelView(leaf, this));
 		this.addSettingTab(new ClassSyncSettingTab(this.app, this));
-		this.addRibbonIcon("refresh-cw", "Class Sync 로그 열기", () => this.activateLogView());
-		this.addRibbonIcon("users", "Class Sync 대시보드 열기", () => this.activateDashboard());
-		this.addRibbonIcon("message-square", "Class Sync 피드백 패널 열기", () => this.activateFeedbackView());
+		this.addRibbonIcon("graduation-cap", "Class Sync 패널 열기", () => this.activatePanel());
 		this.registerCommands();
 
 		// 학생 초대 딥링크: 폰 카메라로 QR 스캔 → obsidian://class-sync-invite?d=... → 자동 설정
@@ -182,7 +183,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 
 	/** 로컬 캐시 초기화 후 서버에서 다시 받기. 명령에서 호출. */
 	async resetLocalCache(): Promise<void> {
-		await this.activateLogView();
+		await this.activatePanel("log");
 		await this.mode?.stop();
 		this.mode = null;
 		await this.destroyLocalCaches();
@@ -194,7 +195,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 
 	// --- 학생 프로비저닝 + 초대 (Teacher) ---
 	async inviteStudent(student: StudentConfig): Promise<void> {
-		await this.activateLogView();
+		await this.activatePanel("log");
 		const s = this.settings;
 		if (!s.couchdbUrl || !s.username || !s.password) {
 			this.logger.warn("관리자 계정(CouchDB URL/사용자/비밀번호)을 먼저 입력하세요.", true);
@@ -241,7 +242,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 
 	// --- 공유 공간 배포 (Teacher, Phase 6a) ---
 	async deployShared(space: SharedSpace): Promise<void> {
-		await this.activateLogView();
+		await this.activatePanel("log");
 		const s = this.settings;
 		if (s.role !== "teacher") {
 			this.logger.warn("교사 모드에서만 사용할 수 있습니다.", true);
@@ -315,14 +316,14 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		s.lastSeqByDb = {};
 		await this.saveSettings();
 
-		await this.activateLogView();
+		await this.activatePanel("log");
 		this.logger.ok(`초대 적용 완료: ${payload.studentName} (${payload.remoteDb}). 동기화를 시작합니다.`, true);
 		await this.startMode();
 	}
 
 	// --- 연결 테스트 (설정 버튼) — 항상 최신 설정으로, 역할별 DB 전체 검사 ---
 	async testConnection(): Promise<void> {
-		await this.activateLogView();
+		await this.activatePanel("log");
 		const dbs =
 			this.settings.role === "teacher"
 				? this.settings.students.map((s) => s.remoteDb).filter((d) => d)
@@ -336,7 +337,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 
 	/** 종합 진단: 서버 도달 + 활성 링크별 읽기/쓰기 권한 + 실시간 상태. */
 	async runDiagnostics(): Promise<void> {
-		await this.activateLogView();
+		await this.activatePanel("log");
 		const targets = (this.mode?.getSyncs() ?? []).map((s) => ({ db: s.remoteDb, label: s.label }));
 		await runDiagnostics(this.core, targets);
 		this.realtime.diagnose();
@@ -357,7 +358,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	}
 
 	async resolveConflict(row: ConflictRow, choice: ResolveChoice): Promise<void> {
-		await this.activateLogView();
+		await this.activatePanel("log");
 		await row.sync.resolveConflict(row.info.dbPath, choice);
 	}
 
@@ -394,7 +395,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	 * Yjs 실시간 데이터는 플러그인이 못 지우므로 수동 안내만 표시한다.
 	 */
 	async resetServerData(deleteAccounts: boolean): Promise<void> {
-		await this.activateLogView();
+		await this.activatePanel("log");
 		const s = this.settings;
 		if (s.role !== "teacher") {
 			this.logger.warn("교사 모드에서만 사용할 수 있습니다.", true);
@@ -507,14 +508,10 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		}, 500);
 	}
 
-	// --- 명령 등록 ---
+	// --- 명령 등록 (패널 버튼과 동일 메서드를 호출) ---
 	private registerCommands(): void {
-		const fullSync = async (dir: "both" | "up" | "down") => {
-			await this.activateLogView();
-			await this.mode?.fullSync(dir);
-		};
-
-		this.addCommand({ id: "class-sync-open-log", name: "로그 패널 열기", callback: () => this.activateLogView() });
+		this.addCommand({ id: "class-sync-open-panel", name: "패널 열기", callback: () => this.activatePanel() });
+		this.addCommand({ id: "class-sync-open-log", name: "로그 패널 열기", callback: () => this.activatePanel("log") });
 		this.addCommand({
 			id: "class-sync-test-connection",
 			name: "연결/권한 테스트",
@@ -525,9 +522,9 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			name: "종합 진단 실행 (서버·읽기/쓰기 권한·실시간)",
 			callback: () => this.runDiagnostics(),
 		});
-		this.addCommand({ id: "class-sync-full-sync", name: "전체 동기화", callback: () => fullSync("both") });
-		this.addCommand({ id: "class-sync-upload-only", name: "업로드만 실행", callback: () => fullSync("up") });
-		this.addCommand({ id: "class-sync-download-only", name: "다운로드만 실행", callback: () => fullSync("down") });
+		this.addCommand({ id: "class-sync-full-sync", name: "전체 동기화", callback: () => this.fullSync("both") });
+		this.addCommand({ id: "class-sync-upload-only", name: "업로드만 실행", callback: () => this.fullSync("up") });
+		this.addCommand({ id: "class-sync-download-only", name: "다운로드만 실행", callback: () => this.fullSync("down") });
 		this.addCommand({
 			id: "class-sync-toggle-autosync",
 			name: "자동 동기화 켜기/끄기",
@@ -541,12 +538,12 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.addCommand({
 			id: "class-sync-conflicts",
 			name: "충돌 목록 열기",
-			callback: () => new ConflictModal(this.app, this).open(),
+			callback: () => this.openConflictModal(),
 		});
 		this.addCommand({
 			id: "class-sync-dashboard",
-			name: "대시보드 열기",
-			callback: () => this.activateDashboard(),
+			name: "동기화 상태 열기",
+			callback: () => this.activatePanel("sync"),
 		});
 		this.addCommand({
 			id: "class-sync-copy-file",
@@ -561,11 +558,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.addCommand({
 			id: "class-sync-realtime-status",
 			name: "실시간 상태 점검",
-			callback: async () => {
-				await this.activateLogView();
-				this.realtime.syncOpenEditors();
-				this.realtime.diagnose();
-			},
+			callback: () => this.realtimeStatus(),
 		});
 		this.addCommand({
 			id: "class-sync-add-feedback",
@@ -575,22 +568,40 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.addCommand({
 			id: "class-sync-open-feedback",
 			name: "피드백 패널 열기",
-			callback: () => this.activateFeedbackView(),
+			callback: () => this.activatePanel("feedback"),
 		});
 		this.addCommand({
 			id: "class-sync-refresh-shares",
 			name: "공유 공간 새로고침",
-			callback: async () => {
-				await this.activateLogView();
-				const m = this.mode as unknown as { refreshShares?: () => Promise<void> } | null;
-				if (this.settings.role === "student" && m?.refreshShares) await m.refreshShares();
-				else await this.restartMode();
-			},
+			callback: () => this.refreshShares(),
 		});
 	}
 
+	// --- 패널 버튼/명령 공용 동작 (PanelHost) ---
+
+	/** 전체/업로드/다운로드 수동 동기화. */
+	async fullSync(dir: "both" | "up" | "down"): Promise<void> {
+		await this.activatePanel("log");
+		await this.mode?.fullSync(dir);
+	}
+
+	/** 실시간 세션 점검 + 진단 로그. */
+	async realtimeStatus(): Promise<void> {
+		await this.activatePanel("log");
+		this.realtime.syncOpenEditors();
+		this.realtime.diagnose();
+	}
+
+	/** 공유 공간 새로고침(학생=shares 재조회, 교사=재시작). */
+	async refreshShares(): Promise<void> {
+		await this.activatePanel("log");
+		const m = this.mode as unknown as { refreshShares?: () => Promise<void> } | null;
+		if (this.settings.role === "student" && m?.refreshShares) await m.refreshShares();
+		else await this.restartMode();
+	}
+
 	// --- 교사 편의: 학생에게 복사 (기술문서 §12.5 / §20) ---
-	private openBulkCopy(kind: "file" | "folder"): void {
+	openBulkCopy(kind: "file" | "folder"): void {
 		if (this.settings.role !== "teacher") {
 			new Notice("Class Sync: 교사 모드에서만 사용할 수 있습니다.");
 			return;
@@ -617,7 +628,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		}).open();
 	}
 
-	// --- 대시보드 (DashboardHost) ---
+	// --- 동기화 상태 (PanelHost) ---
 	async getDashboardRows(): Promise<DashboardRow[]> {
 		const rows: DashboardRow[] = [];
 		for (const sync of this.mode?.getSyncs() ?? []) {
@@ -643,17 +654,17 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		new ConflictModal(this.app, this).open();
 	}
 
-	private async activateDashboard(): Promise<void> {
-		const existing = this.app.workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
-		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]);
-			return;
+	/** 통합 패널 활성화(우측 사이드바). tab을 주면 해당 탭으로 전환. */
+	async activatePanel(tab?: PanelTab): Promise<void> {
+		let leaf = this.app.workspace.getLeavesOfType(PANEL_VIEW_TYPE)[0];
+		if (!leaf) {
+			const right = this.app.workspace.getRightLeaf(false);
+			if (!right) return;
+			await right.setViewState({ type: PANEL_VIEW_TYPE, active: true });
+			leaf = right;
 		}
-		const leaf = this.app.workspace.getRightLeaf(false);
-		if (leaf) {
-			await leaf.setViewState({ type: DASHBOARD_VIEW_TYPE, active: true });
-			this.app.workspace.revealLeaf(leaf);
-		}
+		this.app.workspace.revealLeaf(leaf);
+		if (tab && leaf.view instanceof ClassSyncPanelView) leaf.view.setTab(tab);
 	}
 
 	/** 로컬 경로를 담당하는 동기화 링크(피드백 저장/조회 + 실시간 스냅샷 대상). 없으면 undefined. */
@@ -664,22 +675,8 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		return undefined;
 	}
 
-	/** 피드백 패널 활성화. */
-	private async activateFeedbackView(): Promise<void> {
-		const existing = this.app.workspace.getLeavesOfType(FEEDBACK_VIEW_TYPE);
-		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]);
-			return;
-		}
-		const leaf = this.app.workspace.getRightLeaf(false);
-		if (leaf) {
-			await leaf.setViewState({ type: FEEDBACK_VIEW_TYPE, active: true });
-			this.app.workspace.revealLeaf(leaf);
-		}
-	}
-
 	/** autoSync 토글 — 모드를 재시작해 감시/구독을 켜거나 끈다. */
-	private async toggleAutoSync(): Promise<void> {
+	async toggleAutoSync(): Promise<void> {
 		this.settings.autoSync = !this.settings.autoSync;
 		await this.saveSettings();
 		this.logger.info(`자동 동기화: ${this.settings.autoSync ? "켜짐" : "꺼짐"}`, true);
@@ -710,19 +707,5 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		const file = this.app.workspace.getActiveFile();
 		const n = file ? this.realtime.presenceFor(file.path) : 0;
 		this.rtStatus.setText(n > 0 ? `🟢 실시간 ${n}명` : "");
-	}
-
-	// --- 로그 뷰 ---
-	private async activateLogView(): Promise<void> {
-		const existing = this.app.workspace.getLeavesOfType(LOG_VIEW_TYPE);
-		if (existing.length > 0) {
-			this.app.workspace.revealLeaf(existing[0]);
-			return;
-		}
-		const leaf = this.app.workspace.getRightLeaf(false);
-		if (leaf) {
-			await leaf.setViewState({ type: LOG_VIEW_TYPE, active: true });
-			this.app.workspace.revealLeaf(leaf);
-		}
 	}
 }

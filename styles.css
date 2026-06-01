@@ -30,6 +30,71 @@
 	padding-top: 4px;
 }
 
+/* 통합 패널: 탭 바 + 콘텐츠 */
+.class-sync-panel {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	padding: 0;
+}
+
+.class-sync-panel-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	padding: 4px 6px 0;
+}
+
+.class-sync-panel-tab {
+	padding: 6px 10px;
+	font-size: 13px;
+	color: var(--text-muted);
+	cursor: pointer;
+	border-bottom: 2px solid transparent;
+	border-radius: 4px 4px 0 0;
+	white-space: nowrap;
+}
+
+.class-sync-panel-tab:hover {
+	background: var(--background-modifier-hover);
+}
+
+.class-sync-panel-tab.is-active {
+	color: var(--text-normal);
+	font-weight: 600;
+	border-bottom-color: var(--interactive-accent);
+}
+
+.class-sync-panel-body {
+	flex: 1;
+	overflow-y: auto;
+	padding: 8px 12px;
+}
+
+/* 패널 액션 버튼 묶음 */
+.class-sync-panel-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.class-sync-panel-label {
+	font-weight: 600;
+	margin: 12px 0 6px;
+}
+
+.class-sync-panel-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+	font-size: 13px;
+}
+
 /* 서버 데이터 초기화 모달 경고 */
 .class-sync-reset-warn {
 	color: var(--text-error);
