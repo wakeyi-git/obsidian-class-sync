@@ -18,6 +18,7 @@ export type ApplyResult =
 	| "skipped-same"
 	| "skipped-deleted"
 	| "skipped-nonmd"
+	| "skipped-excluded"
 	| "skipped-pending"
 	| "conflict";
 
@@ -45,13 +46,16 @@ export class MirrorApplier {
 
 		if (!ctx.isMarkdown(doc.path) || !ctx.isValidDbPath(doc.path)) return "skipped-nonmd";
 
+		const localPath = ctx.toLocalPath(doc.path);
+		// 보관(_삭제됨)·충돌(_충돌)·제외 폴더 경로는 동기화 대상이 아니다(업로드와 동일 규칙, 양방향 격리).
+		if (ctx.isExcluded(localPath)) return "skipped-excluded";
+
 		// 삭제(tombstone) 처리. 기술문서 §10.4 / §15.
 		if (doc.deleted) return await this.applyDeletion(doc);
 
 		// 업로드 대기 중인 로컬 편집이면 덮지 않음(레이스 방지) — 업로드가 곧 정합한다.
 		if (ctx.isPending(doc.path)) return "skipped-pending";
 
-		const localPath = ctx.toLocalPath(doc.path);
 		// 실시간 세션 중이면 Yjs가 권위 → 원격 적용으로 라이브 에디터를 덮지 않는다.
 		if (ctx.core.isRealtimeActive(localPath)) return "skipped-pending";
 
@@ -128,11 +132,14 @@ export class MirrorApplier {
 	async applyAsset(doc: AssetDoc & { _conflicts?: string[] }): Promise<ApplyResult> {
 		const ctx = this.ctx;
 		if (!ctx.isValidDbPath(doc.path)) return "skipped-nonmd";
+
+		const localPath = ctx.toLocalPath(doc.path);
+		if (ctx.isExcluded(localPath)) return "skipped-excluded"; // 보관/충돌/제외 폴더 격리
+
 		if (doc.deleted) return await this.applyDeletion(doc);
 		if (!ctx.settings.syncAssets) return "skipped-nonmd";
 		if (ctx.isPending(doc.path)) return "skipped-pending";
 
-		const localPath = ctx.toLocalPath(doc.path);
 		const local = await ctx.readVaultBinary(localPath);
 		const localHash = local == null ? null : await sha256(local);
 		if (localHash === doc.contentHash) return "skipped-same";
