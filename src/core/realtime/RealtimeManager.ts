@@ -275,13 +275,30 @@ export class RealtimeManager {
 				presence: f ? this.presenceFor(f.path) : 0,
 			}),
 		);
-		const md = this.app.workspace.getActiveViewOfType(MarkdownView);
-		const cm = md ? (md.editor as unknown as { cm?: EditorView }).cm : undefined;
-		log.info(
-			t("활성 에디터 CM6 접근: {access}", {
-				access: cm ? t("가능(편집모드)") : t("불가(읽기 모드면 편집모드로 여세요)"),
-			}),
-		);
+		// 에디터 유형별 접근 점검: Excalidraw 파일이면 Excalidraw API, 아니면 CM6.
+		if (f && this.isExcalidrawPath(f.path)) {
+			const plugin = (this.app as any).plugins?.plugins?.["obsidian-excalidraw-plugin"];
+			const exView = this.app.workspace
+				.getLeavesOfType("excalidraw")
+				.map((l) => l.view as ExcalidrawLikeView)
+				.find((v) => v?.file?.path === f.path);
+			const api = exView ? this.getExcalidrawApi(exView) : null;
+			log.info(
+				t("Excalidraw: 플러그인={plugin}, API={api}, 바인딩={bound}", {
+					plugin: plugin ? t("설치됨") : t("미설치"),
+					api: api ? t("가능") : t("불가"),
+					bound: session?.exBinding ? t("됨") : t("안됨"),
+				}),
+			);
+		} else {
+			const md = this.app.workspace.getActiveViewOfType(MarkdownView);
+			const cm = md ? (md.editor as unknown as { cm?: EditorView }).cm : undefined;
+			log.info(
+				t("활성 에디터 CM6 접근: {access}", {
+					access: cm ? t("가능(편집모드)") : t("불가(읽기 모드면 편집모드로 여세요)"),
+				}),
+			);
+		}
 	}
 
 	private bindViews(session: Session, views: MarkdownView[]): void {

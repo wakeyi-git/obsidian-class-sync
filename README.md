@@ -30,6 +30,7 @@ TeacherVault/
 - **Obsidian 1.11.0 이상** (데스크톱·모바일 모두 지원).
 - **자가 호스팅 CouchDB** (시놀로지 NAS 등) — 필수 중앙 서버. [설정 방법](#couchdb-준비-시놀로지-nas-docker-예시).
 - **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택 ([docs/yjs-server-synology.md](docs/yjs-server-synology.md)).
+- **Excalidraw 플러그인** — Excalidraw 그림 실시간 공동 편집을 쓸 때만 선택(미설치 시 해당 기능만 자동 비활성).
 
 ---
 
@@ -166,6 +167,11 @@ docker run -d --name couchdb -p 5984:5984 \
 서로의 커서·이름이 표시됩니다. 편집 중에는 Yjs가 권위이며, 문서를 닫을 때 스냅샷이 CouchDB로 저장되어
 오프라인 멤버에게 반영됩니다. 설정에서 **세션 중 스냅샷 주기(초)** 를 켜면, 편집을 닫기 전에도 일정 주기로
 CouchDB에 본문이 저장되어 비실시간/오프라인 멤버가 더 빨리 최신본을 받습니다(리더 1인만 기록해 충돌 방지).
+
+**Excalidraw 그림**도 공유 폴더에서 **요소 단위 실시간 공동 편집**을 지원합니다(추가·이동·삭제, 이름·색 커서, 이미지 동기화).
+[Excalidraw 플러그인](https://github.com/zsviczian/obsidian-excalidraw-plugin)이 설치돼 있어야 하며(미설치 시 자동 비활성),
+바인딩은 [`y-excalidraw`](https://github.com/RahulBadenkal/y-excalidraw)(MIT)를 사용합니다. 각자 줌/스크롤은 독립적이고
+도형·커서는 씬 좌표로 공유됩니다(세션 종료 시 파일이 CouchDB로 전파).
 
 ### 피드백 레이어 (Phase 6c)
 본문을 직접 수정하지 않고 의견을 남기는 **앵커 기반 댓글**입니다(기술문서 §19.5). 노트에서 텍스트를 선택하고
