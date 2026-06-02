@@ -172,6 +172,9 @@ export class MirrorApplier {
 		if (policy === "ignore-delete") return "skipped-deleted";
 
 		const localPath = ctx.toLocalPath(doc.path);
+		// 실시간 세션 중인 파일은 삭제/보관을 보류 — 공동 편집 중인 라이브 파일을 _삭제됨으로 끌고 가지 않는다.
+		// (세션 종료 스냅샷이 내용을 다시 올려 삭제를 무효화한다.)
+		if (ctx.core.isRealtimeActive(localPath)) return "skipped-pending";
 		const file = ctx.getFile(localPath);
 		if (!file) return "skipped-deleted"; // 이미 없음
 

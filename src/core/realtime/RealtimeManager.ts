@@ -286,13 +286,32 @@ export class RealtimeManager {
 		return `class_${this.settings.classId}/share/${space.id}/${dbPath}`;
 	}
 
-	/** 파일 경로가 속한 공유 공간(있으면). */
+	/** 파일 경로가 속한 공유 공간(있으면). 보관/충돌/제외 폴더 아래 파일은 실시간 대상이 아니다. */
 	private spaceFor(localPath: string): { id: string; folder: string } | null {
 		for (const sp of this.getSpaces()) {
 			if (!sp.folder) continue;
-			if (localPath === sp.folder || localPath.startsWith(sp.folder + "/")) return sp;
+			if (localPath === sp.folder || localPath.startsWith(sp.folder + "/")) {
+				if (this.isExcludedFromRealtime(localPath, sp.folder)) return null;
+				return sp;
+			}
 		}
 		return null;
+	}
+
+	/**
+	 * 보관(_삭제됨)·충돌(_충돌)·제외 폴더 아래 파일인지(실시간 제외).
+	 * 보관본이 별도 room으로 실시간 세션을 띄워 협업이 갈라지는 것을 막는다([MirrorContext.isExcluded]와 동일 규칙).
+	 */
+	private isExcludedFromRealtime(localPath: string, folder: string): boolean {
+		const s = this.settings;
+		const rel = localPath === folder ? "" : localPath.slice(folder.length + 1);
+		const under = (base: string): boolean => !!base && (rel === base || rel.startsWith(base + "/"));
+		if (under(s.archiveFolder) || under(s.conflictFolder)) return true;
+		for (const f of s.excludeFolders) {
+			const ff = f.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+			if (ff && (localPath === ff || localPath.startsWith(ff + "/"))) return true;
+		}
+		return false;
 	}
 
 	/**
