@@ -2,6 +2,7 @@ import { TFile } from "obsidian";
 import { MirrorContext } from "./MirrorContext";
 import { MirrorApplier } from "./MirrorApplier";
 import { Uploader } from "./Uploader";
+import { t } from "../../i18n";
 
 export type SyncDirection = "both" | "up" | "down";
 
@@ -23,7 +24,7 @@ export class FullSync {
 
 	async run(direction: SyncDirection = "both"): Promise<void> {
 		const ctx = this.ctx;
-		ctx.logger.info(`전체 동기화 시작 (${direction}) — ${ctx.remoteDb}`);
+		ctx.logger.info(t("전체 동기화 시작 ({direction}) — {db}", { direction, db: ctx.remoteDb }));
 
 		// 1) vault → 로컬 DB
 		if (direction === "up" || direction === "both") await this.upload();
@@ -31,16 +32,19 @@ export class FullSync {
 		// 2) 로컬 ↔ 원격 1회 동기화 (자동 동기화가 꺼져 있어도 원격까지 반영)
 		try {
 			const r = await ctx.pouch.replicateOnce();
-			ctx.logger.info(`원격 동기화: ↑${r.pushed} ↓${r.pulled} 문서`);
+			ctx.logger.info(t("원격 동기화: ↑{pushed} ↓{pulled} 문서", { pushed: r.pushed, pulled: r.pulled }));
 		} catch (e) {
-			ctx.logger.error(`원격 동기화 실패: ${e instanceof Error ? e.message : String(e)}`, true);
+			ctx.logger.error(
+				t("원격 동기화 실패: {err}", { err: e instanceof Error ? e.message : String(e) }),
+				true,
+			);
 		}
 
 		// 3) 로컬 DB(원격 반영분 포함) → vault
 		if (direction === "down" || direction === "both") await this.download();
 
 		await ctx.core.flushPersist();
-		ctx.logger.ok(`전체 동기화 완료 (${direction}).`, true);
+		ctx.logger.ok(t("전체 동기화 완료 ({direction}).", { direction }), true);
 	}
 
 	private async download(): Promise<void> {
@@ -62,7 +66,13 @@ export class FullSync {
 				if (res === "applied") applied++;
 			}
 		}
-		ctx.logger.info(`다운로드 정합: 문서 ${notes.length} + 첨부 ${assetCount} 중 ${applied}개 적용.`);
+		ctx.logger.info(
+			t("다운로드 정합: 문서 {notes} + 첨부 {assets} 중 {applied}개 적용.", {
+				notes: notes.length,
+				assets: assetCount,
+				applied,
+			}),
+		);
 	}
 
 	private async upload(): Promise<void> {
@@ -73,7 +83,9 @@ export class FullSync {
 			const res = await this.uploader.uploadPath(file.path);
 			if (res === "uploaded") uploaded++;
 		}
-		ctx.logger.info(`업로드 정합: ${files.length}개 파일 중 ${uploaded}개 업로드.`);
+		ctx.logger.info(
+			t("업로드 정합: {files}개 파일 중 {uploaded}개 업로드.", { files: files.length, uploaded }),
+		);
 	}
 
 	/** localRoot 아래, excludeFolders 제외 동기화 대상 파일(markdown + 첨부). */

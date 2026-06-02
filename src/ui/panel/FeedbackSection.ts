@@ -3,6 +3,7 @@ import { FeedbackStore } from "../../core/feedback/FeedbackStore";
 import { FeedbackDoc } from "../../core/model/types";
 import { PanelSection } from "./PanelSection";
 import { promptAddFeedback, resolveMarkdownView } from "../FeedbackView";
+import { t } from "../../i18n";
 
 /** 피드백 탭 — 활성 노트의 앵커 댓글(§19.5). (구 FeedbackView 본문) */
 export class FeedbackSection implements PanelSection {
@@ -19,7 +20,7 @@ export class FeedbackSection implements PanelSection {
 		container.addClass("class-sync-feedback");
 
 		const toolbar = container.createDiv({ cls: "class-sync-feedback-toolbar" });
-		const addBtn = toolbar.createEl("button", { text: "＋ 피드백 추가" });
+		const addBtn = toolbar.createEl("button", { text: t("＋ 피드백 추가") });
 		addBtn.onclick = () => promptAddFeedback(this.app, this.store, this.currentPath);
 
 		this.listEl = container.createDiv({ cls: "class-sync-feedback-list" });
@@ -61,11 +62,11 @@ export class FeedbackSection implements PanelSection {
 		};
 
 		if (!this.currentPath || !file || file.extension !== "md") {
-			writeEmpty("노트를 열면 피드백이 표시됩니다.");
+			writeEmpty(t("노트를 열면 피드백이 표시됩니다."));
 			return;
 		}
 		if (!this.store.canAnnotate(this.currentPath)) {
-			writeEmpty("이 노트는 동기화 대상이 아닙니다.");
+			writeEmpty(t("이 노트는 동기화 대상이 아닙니다."));
 			return;
 		}
 
@@ -76,7 +77,7 @@ export class FeedbackSection implements PanelSection {
 		if (items.length === 0) {
 			this.listEl.createDiv({
 				cls: "class-sync-feedback-empty",
-				text: "피드백이 없습니다. 본문에서 텍스트를 선택하고 ‘＋ 피드백 추가’를 누르세요.",
+				text: t("피드백이 없습니다. 본문에서 텍스트를 선택하고 ‘＋ 피드백 추가’를 누르세요."),
 			});
 			return;
 		}
@@ -89,10 +90,10 @@ export class FeedbackSection implements PanelSection {
 		const card = this.listEl.createDiv({ cls: `class-sync-feedback-card${doc.resolved ? " is-resolved" : ""}` });
 
 		const head = card.createDiv({ cls: "class-sync-feedback-head" });
-		const who = doc.createdByRole === "teacher" ? "교사" : "학생";
-		head.createSpan({ cls: "class-sync-feedback-author", text: `${who} · ${doc.createdBy}` });
+		const who = doc.createdByRole === "teacher" ? t("교사") : t("학생");
+		head.createSpan({ cls: "class-sync-feedback-author", text: t("{who} · {by}", { who, by: doc.createdBy }) });
 		head.createSpan({ cls: "class-sync-feedback-time", text: new Date(doc.createdAt).toLocaleString() });
-		if (doc.resolved) head.createSpan({ cls: "class-sync-feedback-badge", text: "해결됨" });
+		if (doc.resolved) head.createSpan({ cls: "class-sync-feedback-badge", text: t("해결됨") });
 
 		if (doc.anchor.textQuote) {
 			const quote = card.createDiv({ cls: "class-sync-feedback-quote", text: `“${doc.anchor.textQuote}”` });
@@ -101,11 +102,11 @@ export class FeedbackSection implements PanelSection {
 		card.createDiv({ cls: "class-sync-feedback-content", text: doc.content });
 
 		const actions = card.createDiv({ cls: "class-sync-feedback-actions" });
-		actions.createEl("button", { text: "위치로" }).onclick = () => void this.jumpTo(doc);
-		actions.createEl("button", { text: doc.resolved ? "되돌리기" : "해결" }).onclick = async () => {
+		actions.createEl("button", { text: t("위치로") }).onclick = () => void this.jumpTo(doc);
+		actions.createEl("button", { text: doc.resolved ? t("되돌리기") : t("해결") }).onclick = async () => {
 			await this.store.setResolved(path, doc, !doc.resolved);
 		};
-		const del = actions.createEl("button", { cls: "mod-warning", text: "삭제" });
+		const del = actions.createEl("button", { cls: "mod-warning", text: t("삭제") });
 		del.onclick = async () => {
 			await this.store.remove(path, doc);
 		};
@@ -115,7 +116,7 @@ export class FeedbackSection implements PanelSection {
 	private async jumpTo(doc: FeedbackDoc): Promise<void> {
 		const view = resolveMarkdownView(this.app, this.currentPath);
 		if (!view || !view.file || view.file.path !== this.currentPath) {
-			new Notice("Class Sync: 해당 노트를 편집 모드로 열어 주세요.");
+			new Notice(t("Class Sync: 해당 노트를 편집 모드로 열어 주세요."));
 			return;
 		}
 		const editor = view.editor;

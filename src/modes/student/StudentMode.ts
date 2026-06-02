@@ -4,6 +4,7 @@ import { SyncDirection } from "../../core/sync/FullSync";
 import { computeChildRoots } from "../../core/sync/childRoots";
 import { SharesDoc, SHARES_DOC_ID, RtConfigDoc, RTCONFIG_DOC_ID } from "../../core/model/types";
 import { ClassSyncMode } from "../ClassSyncMode";
+import { t } from "../../i18n";
 
 /**
  * Student Mode (Phase 6a). 기술문서 §11.
@@ -25,7 +26,7 @@ export class StudentMode implements ClassSyncMode {
 	async stop(): Promise<void> {
 		for (const sync of this.syncs) await sync.stop();
 		this.syncs = [];
-		this.core.logger.info("Student Mode 정지.");
+		this.core.logger.info(t("Student Mode 정지."));
 	}
 
 	async fullSync(direction: SyncDirection): Promise<void> {
@@ -87,9 +88,12 @@ export class StudentMode implements ClassSyncMode {
 			}
 
 			for (const sync of this.syncs) await sync.start();
-			this.core.logger.ok(`Student Mode 시작 — 개인 + 공유 ${spaces.length}개`, true);
+			this.core.logger.ok(t("Student Mode 시작 — 개인 + 공유 {count}개", { count: spaces.length }), true);
 		} catch (e) {
-			this.core.logger.error(`공유 공간 reconcile 실패: ${e instanceof Error ? e.message : String(e)}`, true);
+			this.core.logger.error(
+				t("공유 공간 reconcile 실패: {error}", { error: e instanceof Error ? e.message : String(e) }),
+				true,
+			);
 		} finally {
 			this.reconciling = false;
 			if (this.pendingReconcile) {

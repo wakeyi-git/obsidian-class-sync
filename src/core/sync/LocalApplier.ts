@@ -2,6 +2,7 @@ import { MirrorContext } from "./MirrorContext";
 import { MirrorApplier } from "./MirrorApplier";
 import { LiveHandle } from "../couch/PouchService";
 import { NoteDoc } from "../model/types";
+import { t } from "../../i18n";
 
 /**
  * 로컬 PouchDB changes 구독 → vault 반영. 기술문서 §10 / §17.2.
@@ -22,7 +23,12 @@ export class LocalApplier {
 	start(): void {
 		if (this.handle) return;
 		const since = this.parseSince(this.ctx.getLastSeq());
-		this.ctx.logger.info(`LocalApplier 시작: ${this.ctx.remoteDb} (since=${since === 0 ? "처음" : since})`);
+		this.ctx.logger.info(
+			t("LocalApplier 시작: {db} (since={since})", {
+				db: this.ctx.remoteDb,
+				since: since === 0 ? t("처음") : since,
+			}),
+		);
 
 		this.handle = this.ctx.pouch.localChanges<NoteDoc & { _conflicts?: string[] }>(
 			async (change) => {
@@ -41,14 +47,19 @@ export class LocalApplier {
 						this.ctx.core.onFeedbackChange();
 					}
 				} catch (e) {
-					this.ctx.logger.error(`로컬 변경 적용 실패: ${change.id} — ${e instanceof Error ? e.message : String(e)}`);
+					this.ctx.logger.error(
+						t("로컬 변경 적용 실패: {id} — {err}", {
+							id: change.id,
+							err: e instanceof Error ? e.message : String(e),
+						}),
+					);
 				} finally {
 					this.ctx.setLastSeq(String(change.seq));
 				}
 			},
 			{
 				since,
-				onError: (e) => this.ctx.logger.error(`로컬 changes 오류: ${e.message}`),
+				onError: (e) => this.ctx.logger.error(t("로컬 changes 오류: {err}", { err: e.message })),
 			},
 		);
 	}

@@ -1,6 +1,7 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import qrcode from "qrcode-generator";
 import { InvitePayload, buildInviteUri, encodeInvite } from "../core/invite/invite";
+import { t } from "../i18n";
 
 /**
  * 학생 초대 표시. 기술문서 §22.4.
@@ -21,9 +22,13 @@ export class InviteModal extends Modal {
 		const uri = buildInviteUri(this.payload);
 		const code = encodeInvite(this.payload);
 
-		contentEl.createEl("h2", { text: `학생 초대 — ${this.payload.studentName || this.payload.studentId}` });
+		contentEl.createEl("h2", {
+			text: t("학생 초대 — {name}", { name: this.payload.studentName || this.payload.studentId }),
+		});
 		contentEl.createEl("p", {
-			text: "학생이 휴대폰 기본 카메라로 아래 QR을 스캔하면 Obsidian이 열리며 자동 설정됩니다. 또는 코드를 복사해 전달하면 학생이 '초대 코드로 설정'에 붙여넣을 수 있습니다.",
+			text: t(
+				"학생이 휴대폰 기본 카메라로 아래 QR을 스캔하면 Obsidian이 열리며 자동 설정됩니다. 또는 코드를 복사해 전달하면 학생이 '초대 코드로 설정'에 붙여넣을 수 있습니다.",
+			),
 		});
 
 		// QR (obsidian:// 딥링크)
@@ -40,20 +45,24 @@ export class InviteModal extends Modal {
 			qrWrap.empty();
 			qrWrap.appendChild(svg);
 		} catch (e) {
-			qrWrap.createEl("p", { text: `QR 생성 실패: ${e instanceof Error ? e.message : String(e)}` });
+			qrWrap.createEl("p", {
+				text: t("QR 생성 실패: {error}", { error: e instanceof Error ? e.message : String(e) }),
+			});
 		}
 
 		// 복사 코드
 		new Setting(contentEl)
-			.setName("초대 코드")
-			.setDesc("학생에게 전달 → Student Mode '초대 코드로 설정'에 붙여넣기")
+			.setName(t("초대 코드"))
+			.setDesc(t("학생에게 전달 → Student Mode '초대 코드로 설정'에 붙여넣기"))
 			.addButton((b) =>
 				b
-					.setButtonText("코드 복사")
+					.setButtonText(t("코드 복사"))
 					.setCta()
-					.onClick(() => this.copy(code, "초대 코드를 복사했습니다.")),
+					.onClick(() => this.copy(code, t("초대 코드를 복사했습니다."))),
 			)
-			.addButton((b) => b.setButtonText("딥링크 복사").onClick(() => this.copy(uri, "초대 딥링크를 복사했습니다.")));
+			.addButton((b) =>
+				b.setButtonText(t("딥링크 복사")).onClick(() => this.copy(uri, t("초대 딥링크를 복사했습니다."))),
+			);
 
 		const codeEl = contentEl.createEl("textarea", { cls: "class-sync-invite-code" });
 		codeEl.value = code;
@@ -62,7 +71,7 @@ export class InviteModal extends Modal {
 
 		contentEl.createEl("p", {
 			cls: "class-sync-invite-warn",
-			text: "⚠ 이 초대에는 학생 전용 비밀번호가 포함됩니다. 본인에게만 안전하게 전달하세요.",
+			text: t("⚠ 이 초대에는 학생 전용 비밀번호가 포함됩니다. 본인에게만 안전하게 전달하세요."),
 		});
 	}
 
@@ -71,7 +80,7 @@ export class InviteModal extends Modal {
 			await navigator.clipboard.writeText(text);
 			new Notice(ok);
 		} catch {
-			new Notice("복사 실패 — 코드 상자에서 직접 선택해 복사하세요.");
+			new Notice(t("복사 실패 — 코드 상자에서 직접 선택해 복사하세요."));
 		}
 	}
 

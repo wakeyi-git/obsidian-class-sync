@@ -2,6 +2,7 @@ import { MirrorContext } from "./MirrorContext";
 import { ConflictManager } from "./ConflictManager";
 import { NoteDoc, AssetDoc, assetId } from "../model/types";
 import { sha256 } from "../hash/hash";
+import { t } from "../../i18n";
 
 /** 삭제(tombstone) 적용에 필요한 최소 형태(note/asset 공통). */
 type DeletableDoc = {
@@ -75,7 +76,10 @@ export class MirrorApplier {
 			if (!this.loggedConflicts.has(doc.path)) {
 				this.loggedConflicts.add(doc.path);
 				ctx.logger.warn(
-					`충돌 보류(preserve-local): ${localPath} — 양쪽 분기 편집. 로컬 유지, 원격본을 _충돌/에 저장. '충돌 목록'에서 해소하세요.`,
+					t(
+						"충돌 보류(preserve-local): {path} — 양쪽 분기 편집. 로컬 유지, 원격본을 _충돌/에 저장. '충돌 목록'에서 해소하세요.",
+						{ path: localPath },
+					),
 					true,
 				);
 			}
@@ -92,7 +96,9 @@ export class MirrorApplier {
 		if (local != null && this.conflicts.hadConflict(doc.path)) {
 			await this.conflicts.preserveLocal(doc.path, local);
 			ctx.logger.warn(
-				`상대가 충돌을 해소함 — 내 편집이 덮어써집니다. 내 버전을 '${ctx.localBackupPath(doc.path)}'에 보관했습니다.`,
+				t("상대가 충돌을 해소함 — 내 편집이 덮어써집니다. 내 버전을 '{path}'에 보관했습니다.", {
+					path: ctx.localBackupPath(doc.path),
+				}),
 				true,
 			);
 		}
@@ -104,7 +110,7 @@ export class MirrorApplier {
 		await ctx.writeVaultFile(localPath, doc.content);
 		ctx.guard.releaseAfterDelay(localPath);
 		ctx.status.lastDownloadAt = Date.now();
-		ctx.logger.ok(`원격→로컬 적용: ${localPath}`);
+		ctx.logger.ok(t("원격→로컬 적용: {path}", { path: localPath }));
 		return "applied";
 	}
 
@@ -123,7 +129,7 @@ export class MirrorApplier {
 		if (!file) return;
 		ctx.suppressStructural(archivePath);
 		await ctx.deleteVaultFile(file);
-		ctx.logger.info(`purge 전파: 아카이브 정리 ${archivePath}`);
+		ctx.logger.info(t("purge 전파: 아카이브 정리 {path}", { path: archivePath }));
 	}
 
 	/**
@@ -148,7 +154,10 @@ export class MirrorApplier {
 		if (hasConflict) {
 			if (!this.loggedConflicts.has(doc.path)) {
 				this.loggedConflicts.add(doc.path);
-				ctx.logger.warn(`첨부 충돌 보류(preserve-local): ${localPath} — 로컬 유지. (바이너리는 수동 정리)`, true);
+				ctx.logger.warn(
+					t("첨부 충돌 보류(preserve-local): {path} — 로컬 유지. (바이너리는 수동 정리)", { path: localPath }),
+					true,
+				);
 			}
 			return "conflict";
 		}
@@ -156,14 +165,14 @@ export class MirrorApplier {
 
 		const data = await ctx.pouch.getAssetBinary(assetId(doc.path));
 		if (data == null) {
-			ctx.logger.warn(`첨부 데이터 없음(전파 대기?): ${doc.path}`);
+			ctx.logger.warn(t("첨부 데이터 없음(전파 대기?): {path}", { path: doc.path }));
 			return "skipped-nonmd";
 		}
 		ctx.guard.mark(localPath, doc.contentHash);
 		await ctx.writeVaultBinary(localPath, data);
 		ctx.guard.releaseAfterDelay(localPath);
 		ctx.status.lastDownloadAt = Date.now();
-		ctx.logger.ok(`원격→로컬 적용(첨부): ${localPath}`);
+		ctx.logger.ok(t("원격→로컬 적용(첨부): {path}", { path: localPath }));
 		return "applied";
 	}
 
@@ -191,7 +200,7 @@ export class MirrorApplier {
 
 		if (policy === "propagate-delete") {
 			await ctx.deleteVaultFile(file);
-			ctx.logger.ok(`원격 삭제 반영(완전 삭제): ${localPath}`);
+			ctx.logger.ok(t("원격 삭제 반영(완전 삭제): {path}", { path: localPath }));
 			return "deleted";
 		}
 
@@ -200,7 +209,7 @@ export class MirrorApplier {
 		if (ctx.fileExists(archivePath)) archivePath = `${archivePath}.${Date.now()}`;
 		ctx.suppressStructural(archivePath);
 		await ctx.renameVaultFile(file, archivePath);
-		ctx.logger.ok(`원격 삭제 반영(.deleted 보관): ${localPath} → ${archivePath}`);
+		ctx.logger.ok(t("원격 삭제 반영(.deleted 보관): {from} → {to}", { from: localPath, to: archivePath }));
 		return "deleted";
 	}
 }

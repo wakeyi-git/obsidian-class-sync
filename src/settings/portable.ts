@@ -1,4 +1,5 @@
 import { ClassSyncSettings } from "./types";
+import { t } from "../i18n";
 
 /** 내보낼 때 제외할 자격증명/기기 고유 키. 기술문서 §22.4. */
 const SECRET_KEYS: Array<keyof ClassSyncSettings> = ["password", "yjsToken"];
@@ -64,10 +65,10 @@ export function importSettings(
 	try {
 		payload = JSON.parse(json);
 	} catch {
-		return { ok: false, error: "JSON 형식이 아닙니다." };
+		return { ok: false, error: t("JSON 형식이 아닙니다.") };
 	}
 	if (!payload || payload._meta?.app !== "class-sync" || typeof payload.settings !== "object") {
-		return { ok: false, error: "Class Sync 설정 백업이 아닙니다." };
+		return { ok: false, error: t("Class Sync 설정 백업이 아닙니다.") };
 	}
 
 	const merged: ClassSyncSettings = { ...current };

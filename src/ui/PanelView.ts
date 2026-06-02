@@ -5,16 +5,24 @@ import { SyncStatusSection } from "./panel/SyncStatusSection";
 import { DeploySection } from "./panel/DeploySection";
 import { ManageSection } from "./panel/ManageSection";
 import { LogSection } from "./panel/LogSection";
+import { t } from "../i18n";
 
 export const PANEL_VIEW_TYPE = "class-sync-panel";
 
-const TAB_LABEL: Record<PanelTab, string> = {
-	feedback: "피드백",
-	deploy: "배포",
-	sync: "동기화 상태",
-	manage: "관리",
-	log: "로그",
-};
+function tabLabel(tab: PanelTab): string {
+	switch (tab) {
+		case "feedback":
+			return t("피드백");
+		case "deploy":
+			return t("배포");
+		case "sync":
+			return t("동기화 상태");
+		case "manage":
+			return t("관리");
+		case "log":
+			return t("로그");
+	}
+}
 
 /**
  * Class Sync 통합 사이드 패널. 탭(피드백·배포·동기화 상태·관리·로그)으로 기존 3개 뷰 + 명령 기능을 모은다.
@@ -34,7 +42,7 @@ export class ClassSyncPanelView extends ItemView {
 		return PANEL_VIEW_TYPE;
 	}
 	getDisplayText(): string {
-		return "Class Sync";
+		return t("Class Sync");
 	}
 	getIcon(): string {
 		return "graduation-cap";
@@ -61,6 +69,13 @@ export class ClassSyncPanelView extends ItemView {
 		this.current = null;
 	}
 
+	/** 언어 변경 등으로 탭 라벨·현재 섹션을 다시 그린다. */
+	refresh(): void {
+		if (!this.tabBar || !this.body) return;
+		this.renderTabBar();
+		this.renderSection();
+	}
+
 	/** 외부(명령/리본)에서 특정 탭을 연다. */
 	setTab(tab: PanelTab): void {
 		if (!this.tabs().includes(tab)) return;
@@ -75,7 +90,7 @@ export class ClassSyncPanelView extends ItemView {
 		for (const tab of this.tabs()) {
 			const el = this.tabBar.createDiv({
 				cls: `class-sync-panel-tab${tab === this.activeTab ? " is-active" : ""}`,
-				text: TAB_LABEL[tab],
+				text: tabLabel(tab),
 			});
 			el.onclick = () => {
 				if (this.activeTab === tab) return;

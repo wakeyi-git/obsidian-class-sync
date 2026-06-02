@@ -27,6 +27,7 @@ import { CouchAdmin } from "./core/couch/CouchAdmin";
 import { InvitePayload, INVITE_ACTION, genPassword, parseInvite } from "./core/invite/invite";
 import { exportSettings, importSettings } from "./settings/portable";
 import { ResetModal } from "./ui/ResetModal";
+import { initI18n, t } from "./i18n";
 
 /**
  * Class Sync for Obsidian — Phase 1 진입점.
@@ -51,6 +52,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+		initI18n(this.settings.language); // 모든 t() 이전에 로케일 확정
 
 		this.core = new CoreServices(this.app, this.settings, this.logger);
 		this.core.save = () => this.saveData(this.settings);
@@ -79,7 +81,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 
 		this.registerView(PANEL_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ClassSyncPanelView(leaf, this));
 		this.addSettingTab(new ClassSyncSettingTab(this.app, this));
-		this.addRibbonIcon("graduation-cap", "Class Sync 패널 열기", () => this.activatePanel());
+		this.addRibbonIcon("graduation-cap", t("Class Sync 패널 열기"), () => this.activatePanel());
 		this.registerCommands();
 
 		// 학생 초대 딥링크: 폰 카메라로 QR 스캔 → obsidian://class-sync-invite?d=... → 자동 설정
@@ -94,7 +96,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			await this.startMode();
 		}
 
-		this.logger.info(`Class Sync 로드됨 [Phase 2] (role=${this.settings.role}, setup=${this.settings.setupComplete}).`);
+		this.logger.info(t("Class Sync 로드됨 [Phase 2] (role={role}, setup={setup}).", { role: this.settings.role, setup: String(this.settings.setupComplete) }));
 	}
 
 	async onunload(): Promise<void> {
@@ -136,13 +138,13 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 				this.settings.setupComplete = true;
 				if (role === "teacher") {
 					this.settings.userId = "teacher";
-					if (this.settings.displayName === "학생A") this.settings.displayName = "교사";
+					if (this.settings.displayName === t("학생A")) this.settings.displayName = t("교사");
 				}
 				await this.saveSettings();
 				this.logger.ok(
 					role === "teacher"
-						? "Teacher Mode 설정 완료. 설정에서 관리자 계정 입력 후 학생을 추가하세요."
-						: "Student Mode 설정 완료. 교사 초대(QR/코드)로 연결하세요.",
+						? t("Teacher Mode 설정 완료. 설정에서 관리자 계정 입력 후 학생을 추가하세요.")
+						: t("Student Mode 설정 완료. 교사 초대(QR/코드)로 연결하세요."),
 					true,
 				);
 				await this.startMode();
@@ -159,7 +161,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.settings.setupComplete = false;
 		this.settings.lastSeqByDb = {};
 		await this.saveSettings();
-		this.logger.warn("역할/동기화 상태/로컬 캐시를 초기화했습니다. 역할을 다시 선택하세요.", true);
+		this.logger.warn(t("역할/동기화 상태/로컬 캐시를 초기화했습니다. 역할을 다시 선택하세요."), true);
 		this.promptRoleSetup();
 	}
 
@@ -174,9 +176,9 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 				const p = this.core.createPouch(db);
 				await p.destroyLocal();
 				await p.close();
-				this.logger.ok(`로컬 캐시 삭제: ${db}`);
+				this.logger.ok(t("로컬 캐시 삭제: {db}", { db }));
 			} catch (e) {
-				this.logger.error(`로컬 캐시 삭제 실패(${db}): ${e instanceof Error ? e.message : String(e)}`);
+				this.logger.error(t("로컬 캐시 삭제 실패({db}): {err}", { db, err: e instanceof Error ? e.message : String(e) }));
 			}
 		}
 	}
@@ -190,7 +192,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.settings.lastSeqByDb = {};
 		await this.saveSettings();
 		if (this.settings.setupComplete) await this.startMode();
-		this.logger.ok("로컬 캐시를 초기화했습니다. 서버에서 다시 동기화합니다.", true);
+		this.logger.ok(t("로컬 캐시를 초기화했습니다. 서버에서 다시 동기화합니다."), true);
 	}
 
 	// --- 학생 프로비저닝 + 초대 (Teacher) ---
@@ -198,11 +200,11 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		await this.activatePanel("log");
 		const s = this.settings;
 		if (!s.couchdbUrl || !s.username || !s.password) {
-			this.logger.warn("관리자 계정(CouchDB URL/사용자/비밀번호)을 먼저 입력하세요.", true);
+			this.logger.warn(t("관리자 계정(CouchDB URL/사용자/비밀번호)을 먼저 입력하세요."), true);
 			return;
 		}
 		if (!student.studentId) {
-			this.logger.warn("학생 ID를 입력하세요.", true);
+			this.logger.warn(t("학생 ID를 입력하세요."), true);
 			return;
 		}
 		// 기본값 보정
@@ -211,7 +213,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		if (!student.localRoot) student.localRoot = student.studentName || student.studentId;
 		if (!student.password) student.password = genPassword();
 
-		this.logger.info(`학생 프로비저닝: ${student.studentId} → ${student.remoteDb}`);
+		this.logger.info(t("학생 프로비저닝: {id} → {db}", { id: student.studentId, db: student.remoteDb }));
 		const admin = new CouchAdmin(s.couchdbUrl, s.username, s.password);
 		const res = await admin.provisionStudent({
 			username: student.username,
@@ -219,13 +221,13 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			remoteDb: student.remoteDb,
 		});
 		if (!res.ok) {
-			this.logger.error(`프로비저닝 실패: ${res.error}`, true);
+			this.logger.error(t("프로비저닝 실패: {err}", { err: res.error ?? "" }), true);
 			return;
 		}
 		student.provisioned = true;
 		await this.saveSettings();
 		this.requestApply(); // 새 학생 링크를 자동으로 동기화에 반영
-		this.logger.ok(`프로비저닝 완료: ${student.studentId} (계정/DB/권한)`, true);
+		this.logger.ok(t("프로비저닝 완료: {id} (계정/DB/권한)", { id: student.studentId }), true);
 
 		const payload: InvitePayload = {
 			v: 1,
@@ -245,11 +247,11 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		await this.activatePanel("log");
 		const s = this.settings;
 		if (s.role !== "teacher") {
-			this.logger.warn("교사 모드에서만 사용할 수 있습니다.", true);
+			this.logger.warn(t("교사 모드에서만 사용할 수 있습니다."), true);
 			return;
 		}
 		if (!s.couchdbUrl || !s.username || !s.password) {
-			this.logger.warn("관리자 계정을 먼저 입력하세요.", true);
+			this.logger.warn(t("관리자 계정을 먼저 입력하세요."), true);
 			return;
 		}
 		if (!space.remoteDb) space.remoteDb = `share_${space.id}`;
@@ -260,10 +262,10 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			.map((sid) => s.students.find((st) => st.studentId === sid)?.username)
 			.filter((u): u is string => !!u);
 
-		this.logger.info(`공유 공간 배포: ${space.name} → ${space.remoteDb} (멤버 ${memberUsers.length})`);
+		this.logger.info(t("공유 공간 배포: {name} → {db} (멤버 {count})", { name: space.name, db: space.remoteDb, count: memberUsers.length }));
 		const res = await admin.provisionSharedSpace(space.remoteDb, memberUsers);
 		if (!res.ok) {
-			this.logger.error(`공유 공간 프로비저닝 실패: ${res.error}`, true);
+			this.logger.error(t("공유 공간 프로비저닝 실패: {err}", { err: res.error ?? "" }), true);
 			return;
 		}
 		space.provisioned = true;
@@ -275,7 +277,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 				.filter((sp) => sp.members.includes(st.studentId))
 				.map((sp) => ({ id: sp.id, name: sp.name, remoteDb: sp.remoteDb, folder: sp.folder }));
 			const r = await admin.putDoc(st.remoteDb, { _id: SHARES_DOC_ID, type: "shares", spaces });
-			if (!r.ok) this.logger.error(`shares 기록 실패(${st.studentId}): ${r.error}`);
+			if (!r.ok) this.logger.error(t("shares 기록 실패({id}): {err}", { id: st.studentId, err: r.error ?? "" }));
 			const rc = await admin.putDoc(st.remoteDb, {
 				_id: RTCONFIG_DOC_ID,
 				type: "rtconfig",
@@ -284,10 +286,10 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 				token: s.yjsToken,
 				snapshotSec: s.realtimeSnapshotSec,
 			});
-			if (!rc.ok) this.logger.error(`rtconfig 기록 실패(${st.studentId}): ${rc.error}`);
+			if (!rc.ok) this.logger.error(t("rtconfig 기록 실패({id}): {err}", { id: st.studentId, err: rc.error ?? "" }));
 		}
 
-		this.logger.ok(`공유 공간 배포 완료: ${space.name}`, true);
+		this.logger.ok(t("공유 공간 배포 완료: {name}", { name: space.name }), true);
 		await this.restartMode();
 	}
 
@@ -295,8 +297,8 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	async ingestInvite(input: string): Promise<void> {
 		const payload = parseInvite(input);
 		if (!payload) {
-			new Notice("Class Sync: 초대 코드를 해석할 수 없습니다.");
-			this.logger.error("초대 코드 파싱 실패.");
+			new Notice(t("Class Sync: 초대 코드를 해석할 수 없습니다."));
+			this.logger.error(t("초대 코드 파싱 실패."));
 			return;
 		}
 		await this.mode?.stop();
@@ -317,7 +319,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		await this.saveSettings();
 
 		await this.activatePanel("log");
-		this.logger.ok(`초대 적용 완료: ${payload.studentName} (${payload.remoteDb}). 동기화를 시작합니다.`, true);
+		this.logger.ok(t("초대 적용 완료: {name} ({db}). 동기화를 시작합니다.", { name: payload.studentName, db: payload.remoteDb }), true);
 		await this.startMode();
 	}
 
@@ -329,7 +331,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 				? this.settings.students.map((s) => s.remoteDb).filter((d) => d)
 				: [this.settings.remoteDb];
 		if (dbs.length === 0) {
-			this.logger.warn("테스트할 mirror DB가 없습니다. (교사: 학생을 추가하세요)", true);
+			this.logger.warn(t("테스트할 mirror DB가 없습니다. (교사: 학생을 추가하세요)"), true);
 			return;
 		}
 		for (const db of dbs) await testConnection(this.core, db);
@@ -351,7 +353,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 				const infos = await sync.listConflicts();
 				for (const info of infos) rows.push({ sync, info });
 			} catch (e) {
-				this.logger.error(`충돌 목록 조회 실패(${sync.label}): ${e instanceof Error ? e.message : String(e)}`);
+				this.logger.error(t("충돌 목록 조회 실패({label}): {err}", { label: sync.label, err: e instanceof Error ? e.message : String(e) }));
 			}
 		}
 		return rows;
@@ -367,7 +369,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		const conflict = this.app.vault.getAbstractFileByPath(row.info.conflictPath);
 		if (local instanceof TFile) await this.app.workspace.getLeaf(false).openFile(local);
 		if (conflict instanceof TFile) await this.app.workspace.getLeaf("split").openFile(conflict);
-		else this.logger.warn(`원격본 파일이 없습니다: ${row.info.conflictPath}`, true);
+		else this.logger.warn(t("원격본 파일이 없습니다: {path}", { path: row.info.conflictPath }), true);
 	}
 
 	// --- 설정 내보내기/가져오기 (기술문서 §22.4) ---
@@ -378,14 +380,14 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	async importSettingsJson(json: string): Promise<{ ok: boolean; error?: string }> {
 		const res = importSettings(this.settings, json);
 		if (!res.ok) {
-			this.logger.error(`설정 가져오기 실패: ${res.error}`, true);
+			this.logger.error(t("설정 가져오기 실패: {err}", { err: res.error }), true);
 			return { ok: false, error: res.error };
 		}
 		this.settings = res.settings;
 		this.core.settings = this.settings;
 		await this.saveSettings();
 		if (this.settings.setupComplete) await this.restartMode();
-		this.logger.ok("설정을 가져와 적용했습니다. 비밀번호/Yjs 토큰은 다시 입력하고, 가져온 학생은 재초대하세요.", true);
+		this.logger.ok(t("설정을 가져와 적용했습니다. 비밀번호/Yjs 토큰은 다시 입력하고, 가져온 학생은 재초대하세요."), true);
 		return { ok: true };
 	}
 
@@ -398,17 +400,17 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		await this.activatePanel("log");
 		const s = this.settings;
 		if (s.role !== "teacher") {
-			this.logger.warn("교사 모드에서만 사용할 수 있습니다.", true);
+			this.logger.warn(t("교사 모드에서만 사용할 수 있습니다."), true);
 			return;
 		}
 		if (!s.couchdbUrl || !s.username || !s.password) {
-			this.logger.warn("관리자 계정을 먼저 입력하세요.", true);
+			this.logger.warn(t("관리자 계정을 먼저 입력하세요."), true);
 			return;
 		}
 		const admin = new CouchAdmin(s.couchdbUrl, s.username, s.password);
 		const chk = await admin.checkAdmin();
 		if (!chk.ok) {
-			this.logger.error(`관리자 인증 실패: ${chk.error}`, true);
+			this.logger.error(t("관리자 인증 실패: {err}", { err: chk.error ?? "" }), true);
 			return;
 		}
 
@@ -424,12 +426,12 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			...s.students.map((st) => st.remoteDb).filter((d) => d),
 			...s.sharedSpaces.map((sp) => sp.remoteDb).filter((d) => d),
 		];
-		this.logger.info(`서버 데이터 초기화 시작 — DB ${dbs.length}개${deleteAccounts ? " + 학생 계정" : ""}`, true);
+		this.logger.info(t("서버 데이터 초기화 시작 — DB {count}개{accounts}", { count: dbs.length, accounts: deleteAccounts ? t(" + 학생 계정") : "" }), true);
 
 		for (const db of dbs) {
 			const r = await admin.deleteDatabase(db);
-			if (r.ok) this.logger.ok(`DB 삭제: ${db}`);
-			else this.logger.error(`DB 삭제 실패: ${db} — ${r.error}`);
+			if (r.ok) this.logger.ok(t("DB 삭제: {db}", { db }));
+			else this.logger.error(t("DB 삭제 실패: {db} — {err}", { db, err: r.error ?? "" }));
 			// 로컬 PouchDB 캐시도 제거
 			try {
 				const p = this.core.createPouch(db);
@@ -444,8 +446,8 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			for (const st of s.students) {
 				if (!st.username) continue;
 				const r = await admin.deleteUser(st.username);
-				if (r.ok) this.logger.ok(`계정 삭제: ${st.username}`);
-				else this.logger.error(`계정 삭제 실패: ${st.username} — ${r.error}`);
+				if (r.ok) this.logger.ok(t("계정 삭제: {user}", { user: st.username }));
+				else this.logger.error(t("계정 삭제 실패: {user} — {err}", { user: st.username, err: r.error ?? "" }));
 			}
 		}
 
@@ -464,21 +466,29 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		await this.saveSettings();
 
 		this.logger.warn(
-			"Yjs 실시간 데이터는 수동 초기화하세요: NAS에서 yjs-websocket 컨테이너 재시작 또는 ./data 폴더 비우기 (docker compose down → data 삭제 → up).",
+			t("Yjs 실시간 데이터는 수동 초기화하세요: NAS에서 yjs-websocket 컨테이너 재시작 또는 ./data 폴더 비우기 (docker compose down → data 삭제 → up)."),
 			true,
 		);
 		this.logger.ok(
 			deleteAccounts
-				? "서버 데이터·계정 초기화 완료. 학생 목록·공유 공간이 비워졌습니다 — 처음부터 다시 추가·초대·배포하세요."
-				: "서버 데이터 초기화 완료. 학생 ‘초대’ → 공유 공간 ‘재배포’ 하면 자동으로 다시 동기화됩니다.",
+				? t("서버 데이터·계정 초기화 완료. 학생 목록·공유 공간이 비워졌습니다 — 처음부터 다시 추가·초대·배포하세요.")
+				: t("서버 데이터 초기화 완료. 학생 ‘초대’ → 공유 공간 ‘재배포’ 하면 자동으로 다시 동기화됩니다."),
 			true,
 		);
+	}
+
+	/** 언어 변경 시 로케일 재초기화 + 열린 패널 새로고침(설정 탭은 호출 측에서 display). */
+	refreshUiLanguage(): void {
+		initI18n(this.settings.language);
+		for (const leaf of this.app.workspace.getLeavesOfType(PANEL_VIEW_TYPE)) {
+			if (leaf.view instanceof ClassSyncPanelView) leaf.view.refresh();
+		}
 	}
 
 	/** 설정 탭에서 초기화 모달 실행(교사 전용). */
 	openResetModal(): void {
 		if (this.settings.role !== "teacher") {
-			new Notice("Class Sync: 교사 모드에서만 사용할 수 있습니다.");
+			new Notice(t("Class Sync: 교사 모드에서만 사용할 수 있습니다."));
 			return;
 		}
 		const dbCount =
@@ -492,7 +502,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		if (!this.settings.setupComplete) return;
 		await this.mode?.stop();
 		await this.startMode();
-		this.logger.ok("설정을 적용해 동기화를 재시작했습니다.", true);
+		this.logger.ok(t("설정을 적용해 동기화를 재시작했습니다."), true);
 	}
 
 	/**
@@ -510,69 +520,69 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 
 	// --- 명령 등록 (패널 버튼과 동일 메서드를 호출) ---
 	private registerCommands(): void {
-		this.addCommand({ id: "class-sync-open-panel", name: "패널 열기", callback: () => this.activatePanel() });
-		this.addCommand({ id: "class-sync-open-log", name: "로그 패널 열기", callback: () => this.activatePanel("log") });
+		this.addCommand({ id: "class-sync-open-panel", name: t("패널 열기"), callback: () => this.activatePanel() });
+		this.addCommand({ id: "class-sync-open-log", name: t("로그 패널 열기"), callback: () => this.activatePanel("log") });
 		this.addCommand({
 			id: "class-sync-test-connection",
-			name: "연결/권한 테스트",
+			name: t("연결/권한 테스트"),
 			callback: () => this.testConnection(),
 		});
 		this.addCommand({
 			id: "class-sync-diagnostics",
-			name: "종합 진단 실행 (서버·읽기/쓰기 권한·실시간)",
+			name: t("종합 진단 실행 (서버·읽기/쓰기 권한·실시간)"),
 			callback: () => this.runDiagnostics(),
 		});
-		this.addCommand({ id: "class-sync-full-sync", name: "전체 동기화", callback: () => this.fullSync("both") });
-		this.addCommand({ id: "class-sync-upload-only", name: "업로드만 실행", callback: () => this.fullSync("up") });
-		this.addCommand({ id: "class-sync-download-only", name: "다운로드만 실행", callback: () => this.fullSync("down") });
+		this.addCommand({ id: "class-sync-full-sync", name: t("전체 동기화"), callback: () => this.fullSync("both") });
+		this.addCommand({ id: "class-sync-upload-only", name: t("업로드만 실행"), callback: () => this.fullSync("up") });
+		this.addCommand({ id: "class-sync-download-only", name: t("다운로드만 실행"), callback: () => this.fullSync("down") });
 		this.addCommand({
 			id: "class-sync-toggle-autosync",
-			name: "자동 동기화 켜기/끄기",
+			name: t("자동 동기화 켜기/끄기"),
 			callback: () => this.toggleAutoSync(),
 		});
 		this.addCommand({
 			id: "class-sync-reset-local",
-			name: "로컬 캐시 초기화 (서버에서 다시 받기)",
+			name: t("로컬 캐시 초기화 (서버에서 다시 받기)"),
 			callback: () => this.resetLocalCache(),
 		});
 		this.addCommand({
 			id: "class-sync-conflicts",
-			name: "충돌 목록 열기",
+			name: t("충돌 목록 열기"),
 			callback: () => this.openConflictModal(),
 		});
 		this.addCommand({
 			id: "class-sync-dashboard",
-			name: "동기화 상태 열기",
+			name: t("동기화 상태 열기"),
 			callback: () => this.activatePanel("sync"),
 		});
 		this.addCommand({
 			id: "class-sync-copy-file",
-			name: "현재 파일을 학생에게 복사",
+			name: t("현재 파일을 학생에게 복사"),
 			callback: () => this.openBulkCopy("file"),
 		});
 		this.addCommand({
 			id: "class-sync-copy-folder",
-			name: "현재 폴더를 학생에게 복사",
+			name: t("현재 폴더를 학생에게 복사"),
 			callback: () => this.openBulkCopy("folder"),
 		});
 		this.addCommand({
 			id: "class-sync-realtime-status",
-			name: "실시간 상태 점검",
+			name: t("실시간 상태 점검"),
 			callback: () => this.realtimeStatus(),
 		});
 		this.addCommand({
 			id: "class-sync-add-feedback",
-			name: "피드백 추가 (선택 영역)",
+			name: t("피드백 추가 (선택 영역)"),
 			callback: () => promptAddFeedback(this.app, this.feedback),
 		});
 		this.addCommand({
 			id: "class-sync-open-feedback",
-			name: "피드백 패널 열기",
+			name: t("피드백 패널 열기"),
 			callback: () => this.activatePanel("feedback"),
 		});
 		this.addCommand({
 			id: "class-sync-refresh-shares",
-			name: "공유 공간 새로고침",
+			name: t("공유 공간 새로고침"),
 			callback: () => this.refreshShares(),
 		});
 	}
@@ -603,21 +613,21 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	// --- 교사 편의: 학생에게 복사 (기술문서 §12.5 / §20) ---
 	openBulkCopy(kind: "file" | "folder"): void {
 		if (this.settings.role !== "teacher") {
-			new Notice("Class Sync: 교사 모드에서만 사용할 수 있습니다.");
+			new Notice(t("Class Sync: 교사 모드에서만 사용할 수 있습니다."));
 			return;
 		}
 		if (this.settings.students.length === 0) {
-			new Notice("Class Sync: 학생이 없습니다. 설정에서 학생을 추가하세요.");
+			new Notice(t("Class Sync: 학생이 없습니다. 설정에서 학생을 추가하세요."));
 			return;
 		}
 		const file = this.app.workspace.getActiveFile();
 		if (!file) {
-			new Notice("Class Sync: 복사할 파일을 먼저 여세요.");
+			new Notice(t("Class Sync: 복사할 파일을 먼저 여세요."));
 			return;
 		}
 		const source = kind === "folder" ? file.parent : file;
 		if (!source || (kind === "folder" && !(source instanceof TFolder))) {
-			new Notice("Class Sync: 대상을 찾을 수 없습니다.");
+			new Notice(t("Class Sync: 대상을 찾을 수 없습니다."));
 			return;
 		}
 		const bulk = new BulkCopy(this.app, this.settings);
@@ -679,7 +689,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	async toggleAutoSync(): Promise<void> {
 		this.settings.autoSync = !this.settings.autoSync;
 		await this.saveSettings();
-		this.logger.info(`자동 동기화: ${this.settings.autoSync ? "켜짐" : "꺼짐"}`, true);
+		this.logger.info(t("자동 동기화: {state}", { state: this.settings.autoSync ? t("켜짐") : t("꺼짐") }), true);
 		if (this.settings.setupComplete) {
 			await this.mode?.stop();
 			await this.startMode();
@@ -706,6 +716,6 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		if (!this.rtStatus) return;
 		const file = this.app.workspace.getActiveFile();
 		const n = file ? this.realtime.presenceFor(file.path) : 0;
-		this.rtStatus.setText(n > 0 ? `🟢 실시간 ${n}명` : "");
+		this.rtStatus.setText(n > 0 ? t("🟢 실시간 {n}명", { n }) : "");
 	}
 }

@@ -2,6 +2,7 @@ import { EventRef, Platform, TAbstractFile, TFile } from "obsidian";
 import { MirrorContext } from "./MirrorContext";
 import { Uploader } from "./Uploader";
 import { sha256 } from "../hash/hash";
+import { t } from "../../i18n";
 
 /**
  * vault 변경 감지 → debounce → 업로드. 기술문서 §11.2 / §11.3.
@@ -31,7 +32,9 @@ export class LocalWatcher {
 			this.refs.push(vault.on("modify", (f) => this.onChange(f)));
 			this.refs.push(vault.on("rename", (f, oldPath) => this.onRename(f, oldPath)));
 			this.refs.push(vault.on("delete", (f) => this.onDelete(f)));
-			this.ctx.logger.info(`LocalWatcher 시작 (localRoot=${this.ctx.localRoot || "(vault root)"})`);
+			this.ctx.logger.info(
+				t("LocalWatcher 시작 (localRoot={root})", { root: this.ctx.localRoot || t("(vault root)") }),
+			);
 		});
 	}
 
@@ -111,7 +114,13 @@ export class LocalWatcher {
 				}
 			}
 		} catch (e) {
-			this.ctx.logger.error(`이름변경 처리 실패: ${oldPath} → ${newPath} — ${e instanceof Error ? e.message : String(e)}`);
+			this.ctx.logger.error(
+				t("이름변경 처리 실패: {from} → {to} — {err}", {
+					from: oldPath,
+					to: newPath,
+					err: e instanceof Error ? e.message : String(e),
+				}),
+			);
 		}
 	}
 
@@ -130,7 +139,11 @@ export class LocalWatcher {
 		if (archivedDb != null) {
 			void this.uploader
 				.purgePath(archivedDb)
-				.catch((e) => this.ctx.logger.error(`purge 실패: ${localPath} — ${e instanceof Error ? e.message : String(e)}`));
+				.catch((e) =>
+					this.ctx.logger.error(
+						t("purge 실패: {path} — {err}", { path: localPath, err: e instanceof Error ? e.message : String(e) }),
+					),
+				);
 			return;
 		}
 
@@ -140,7 +153,11 @@ export class LocalWatcher {
 		if (dbPath == null) return;
 		void this.uploader
 			.tombstonePath(dbPath)
-			.catch((e) => this.ctx.logger.error(`삭제 처리 실패: ${localPath} — ${e instanceof Error ? e.message : String(e)}`));
+			.catch((e) =>
+				this.ctx.logger.error(
+					t("삭제 처리 실패: {path} — {err}", { path: localPath, err: e instanceof Error ? e.message : String(e) }),
+				),
+			);
 	}
 
 	private scheduleUpload(localPath: string, dbPath: string): void {
@@ -159,7 +176,9 @@ export class LocalWatcher {
 		try {
 			await this.uploader.uploadPath(localPath);
 		} catch (e) {
-			this.ctx.logger.error(`업로드 실패: ${localPath} — ${e instanceof Error ? e.message : String(e)}`);
+			this.ctx.logger.error(
+				t("업로드 실패: {path} — {err}", { path: localPath, err: e instanceof Error ? e.message : String(e) }),
+			);
 		} finally {
 			this.ctx.clearPending(dbPath);
 		}

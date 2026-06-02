@@ -1,4 +1,5 @@
 import { createObsidianFetch } from "./obsidianFetch";
+import { t } from "../../i18n";
 
 /**
  * CouchDB 관리자 프로비저닝. 기술문서 §13 / §22.
@@ -61,8 +62,9 @@ export class CouchAdmin {
 	/** admin 연결/권한 확인 (서버 루트 + _users 접근). */
 	async checkAdmin(): Promise<{ ok: boolean; error?: string }> {
 		const root = await this.req("GET", "/");
-		if (root.status === 401 || root.status === 403) return { ok: false, error: `인증 오류 (HTTP ${root.status})` };
-		if (root.status >= 400) return { ok: false, error: `서버 오류 (HTTP ${root.status})` };
+		if (root.status === 401 || root.status === 403)
+			return { ok: false, error: t("인증 오류 (HTTP {status})", { status: root.status }) };
+		if (root.status >= 400) return { ok: false, error: t("서버 오류 (HTTP {status})", { status: root.status }) };
 		return { ok: true };
 	}
 
@@ -98,15 +100,27 @@ export class CouchAdmin {
 			} else if (putUser.status === 409) {
 				continue; // 최신 _rev로 재시도
 			} else {
-				return { ok: false, error: `계정 생성 실패 (HTTP ${putUser.status}): ${putUser.json?.reason ?? putUser.text}` };
+				return {
+					ok: false,
+					error: t("계정 생성 실패 (HTTP {status}): {reason}", {
+						status: putUser.status,
+						reason: putUser.json?.reason ?? putUser.text,
+					}),
+				};
 			}
 		}
-		if (!userOk) return { ok: false, error: "계정 비밀번호 갱신 실패 (rev 충돌 반복)" };
+		if (!userOk) return { ok: false, error: t("계정 비밀번호 갱신 실패 (rev 충돌 반복)") };
 
 		// 2) mirror DB 생성 (이미 있으면 412/409 무시)
 		const putDb = await this.req("PUT", encodeURIComponent(remoteDb));
 		if (putDb.status >= 400 && putDb.status !== 412 && putDb.status !== 409) {
-			return { ok: false, error: `DB 생성 실패 (HTTP ${putDb.status}): ${putDb.json?.reason ?? putDb.text}` };
+			return {
+				ok: false,
+				error: t("DB 생성 실패 (HTTP {status}): {reason}", {
+					status: putDb.status,
+					reason: putDb.json?.reason ?? putDb.text,
+				}),
+			};
 		}
 
 		// 3) _security: 학생 본인만 멤버 (서버 admin은 항상 접근)
@@ -122,7 +136,13 @@ export class CouchAdmin {
 	async provisionSharedSpace(remoteDb: string, memberUsernames: string[]): Promise<{ ok: boolean; error?: string }> {
 		const putDb = await this.req("PUT", encodeURIComponent(remoteDb));
 		if (putDb.status >= 400 && putDb.status !== 412 && putDb.status !== 409) {
-			return { ok: false, error: `공유 DB 생성 실패 (HTTP ${putDb.status}): ${putDb.json?.reason ?? putDb.text}` };
+			return {
+				ok: false,
+				error: t("공유 DB 생성 실패 (HTTP {status}): {reason}", {
+					status: putDb.status,
+					reason: putDb.json?.reason ?? putDb.text,
+				}),
+			};
 		}
 		return this.setSecurity(remoteDb, memberUsernames);
 	}
@@ -131,7 +151,13 @@ export class CouchAdmin {
 		const security = { admins: { names: [], roles: [] }, members: { names: members, roles: [] } };
 		const putSec = await this.req("PUT", `${encodeURIComponent(remoteDb)}/_security`, security);
 		if (putSec.status >= 400) {
-			return { ok: false, error: `권한 설정 실패 (HTTP ${putSec.status}): ${putSec.json?.reason ?? putSec.text}` };
+			return {
+				ok: false,
+				error: t("권한 설정 실패 (HTTP {status}): {reason}", {
+					status: putSec.status,
+					reason: putSec.json?.reason ?? putSec.text,
+				}),
+			};
 		}
 		return { ok: true };
 	}
@@ -140,7 +166,13 @@ export class CouchAdmin {
 	async deleteDatabase(db: string): Promise<{ ok: boolean; error?: string }> {
 		const res = await this.req("DELETE", encodeURIComponent(db));
 		if (res.status < 300 || res.status === 404) return { ok: true };
-		return { ok: false, error: `DB 삭제 실패 (HTTP ${res.status}): ${res.json?.reason ?? res.text}` };
+		return {
+			ok: false,
+			error: t("DB 삭제 실패 (HTTP {status}): {reason}", {
+				status: res.status,
+				reason: res.json?.reason ?? res.text,
+			}),
+		};
 	}
 
 	/**
@@ -152,12 +184,19 @@ export class CouchAdmin {
 		const path = `_users/${encodeURIComponent(userId)}`;
 		const existing = await this.req("GET", path);
 		if (existing.status === 404) return { ok: true };
-		if (existing.status >= 400) return { ok: false, error: `계정 조회 실패 (HTTP ${existing.status})` };
+		if (existing.status >= 400)
+			return { ok: false, error: t("계정 조회 실패 (HTTP {status})", { status: existing.status }) };
 		const rev = existing.json?._rev;
 		if (!rev) return { ok: true };
 		const del = await this.req("DELETE", `${path}?rev=${encodeURIComponent(rev)}`);
 		if (del.status >= 300 && del.status !== 404) {
-			return { ok: false, error: `계정 삭제 실패 (HTTP ${del.status}): ${del.json?.reason ?? del.text}` };
+			return {
+				ok: false,
+				error: t("계정 삭제 실패 (HTTP {status}): {reason}", {
+					status: del.status,
+					reason: del.json?.reason ?? del.text,
+				}),
+			};
 		}
 		// tombstone 제거(재생성 충돌 방지). 미지원/실패해도 삭제 자체는 성공으로 본다.
 		const delRev = del.json?.rev ?? rev;
@@ -175,8 +214,14 @@ export class CouchAdmin {
 			const put = await this.req("PUT", path, body);
 			if (put.status < 300) return { ok: true };
 			if (put.status === 409) continue;
-			return { ok: false, error: `문서 기록 실패 (HTTP ${put.status}): ${put.json?.reason ?? put.text}` };
+			return {
+				ok: false,
+				error: t("문서 기록 실패 (HTTP {status}): {reason}", {
+					status: put.status,
+					reason: put.json?.reason ?? put.text,
+				}),
+			};
 		}
-		return { ok: false, error: "문서 기록 실패 (rev 충돌 반복)" };
+		return { ok: false, error: t("문서 기록 실패 (rev 충돌 반복)") };
 	}
 }

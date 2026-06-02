@@ -1,4 +1,5 @@
 import { PanelHost, PanelSection, panelButton } from "./PanelSection";
+import { t } from "../../i18n";
 
 /** 관리 탭 — 연결/진단/캐시/실시간 점검 + (교사) 서버 초기화 / (학생) 공유 새로고침. */
 export class ManageSection implements PanelSection {
@@ -8,15 +9,15 @@ export class ManageSection implements PanelSection {
 		container.addClass("class-sync-panel-section");
 		const actions = container.createDiv({ cls: "class-sync-panel-actions" });
 
-		panelButton(actions, "연결/권한 테스트", () => this.host.testConnection());
-		panelButton(actions, "종합 진단 실행", () => this.host.runDiagnostics());
-		panelButton(actions, "실시간 상태 점검", () => this.host.realtimeStatus());
-		panelButton(actions, "로컬 캐시 초기화", () => this.host.resetLocalCache());
+		panelButton(actions, t("연결/권한 테스트"), () => this.host.testConnection());
+		panelButton(actions, t("종합 진단 실행"), () => this.host.runDiagnostics());
+		panelButton(actions, t("실시간 상태 점검"), () => this.host.realtimeStatus());
+		panelButton(actions, t("로컬 캐시 초기화"), () => this.host.resetLocalCache());
 
 		if (this.host.settings.role === "teacher") {
-			panelButton(actions, "서버 데이터 초기화…", () => this.host.openResetModal(), { warning: true });
+			panelButton(actions, t("서버 데이터 초기화…"), () => this.host.openResetModal(), { warning: true });
 		} else {
-			panelButton(actions, "공유 공간 새로고침", () => this.host.refreshShares());
+			panelButton(actions, t("공유 공간 새로고침"), () => this.host.refreshShares());
 		}
 	}
 

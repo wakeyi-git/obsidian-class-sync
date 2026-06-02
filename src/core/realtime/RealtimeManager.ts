@@ -4,6 +4,7 @@ import { WebsocketProvider } from "y-websocket";
 import { EditorView } from "@codemirror/view";
 import { CoreServices } from "../CoreServices";
 import { bindView, unbindView } from "./editorBinding";
+import { t } from "../../i18n";
 
 interface Session {
 	file: string;
@@ -110,20 +111,20 @@ export class RealtimeManager {
 		});
 
 		const color = COLORS[Math.abs(hash(this.settings.deviceId)) % COLORS.length];
-		provider.awareness.setLocalStateField("user", { name: this.settings.displayName || "사용자", color });
+		provider.awareness.setLocalStateField("user", { name: this.settings.displayName || t("사용자"), color });
 
 		const session: Session = { file: path, ydoc, ytext, provider, ready: false, bound: new Set() };
 		this.sessions.set(path, session);
 
 		provider.on("status", (e: { status: string }) => {
-			if (e.status === "connected") this.core.logger.info(`실시간 연결: ${dbPath}`);
+			if (e.status === "connected") this.core.logger.info(t("실시간 연결: {path}", { path: dbPath }));
 		});
 		provider.once("sync", (synced: boolean) => {
 			if (!synced) return;
 			// 잠깐 기다려 다른 접속자/서버 상태가 반영된 뒤 시드 판단(시드 충돌 방지)
 			window.setTimeout(() => void this.onSynced(session, file), 400);
 		});
-		this.core.logger.info(`실시간 세션 시작: ${dbPath} (room=${room})`);
+		this.core.logger.info(t("실시간 세션 시작: {path} (room={room})", { path: dbPath, room }));
 		return session;
 	}
 
@@ -139,10 +140,12 @@ export class RealtimeManager {
 					const content = await this.app.vault.read(file);
 					if (content.length > 0) {
 						session.ytext.insert(0, content);
-						this.core.logger.info(`실시간 시드(첫 진입): ${session.file}`);
+						this.core.logger.info(t("실시간 시드(첫 진입): {file}", { file: session.file }));
 					}
 				} else {
-					this.core.logger.info(`실시간: 다른 참여자 있음 → 시드 생략, 공유 내용 사용 (${session.file})`);
+					this.core.logger.info(
+						t("실시간: 다른 참여자 있음 → 시드 생략, 공유 내용 사용 ({file})", { file: session.file }),
+					);
 				}
 			}
 		} catch {
@@ -159,7 +162,7 @@ export class RealtimeManager {
 		const sec = this.settings.realtimeSnapshotSec;
 		if (!sec || sec <= 0 || session.snapTimer != null) return;
 		session.snapTimer = window.setInterval(() => void this.snapshotTick(session), Math.max(5, sec) * 1000);
-		this.core.logger.info(`실시간 주기 스냅샷 활성: ${session.file} (${sec}s)`);
+		this.core.logger.info(t("실시간 주기 스냅샷 활성: {file} ({sec}s)", { file: session.file, sec }));
 	}
 
 	private async snapshotTick(session: Session): Promise<void> {
@@ -171,9 +174,14 @@ export class RealtimeManager {
 			if (!target) return;
 			const res = await target.snapshotNote(session.file, content);
 			session.lastSnapshot = content;
-			this.core.logger.info(`주기 스냅샷 → CouchDB: ${session.file} (${String(res)})`);
+			this.core.logger.info(t("주기 스냅샷 → CouchDB: {file} ({res})", { file: session.file, res: String(res) }));
 		} catch (e) {
-			this.core.logger.warn(`주기 스냅샷 실패: ${session.file} — ${e instanceof Error ? e.message : String(e)}`);
+			this.core.logger.warn(
+				t("주기 스냅샷 실패: {file} — {error}", {
+					file: session.file,
+					error: e instanceof Error ? e.message : String(e),
+				}),
+			);
 		}
 	}
 
@@ -195,30 +203,53 @@ export class RealtimeManager {
 		const s = this.settings;
 		const log = this.core.logger;
 		log.info(
-			`실시간 점검 — enabled=${s.realtimeEnabled}, url=${s.yjsServerUrl ? "설정됨" : "없음"}, token=${s.yjsToken ? "설정됨" : "없음"}`,
+			t("실시간 점검 — enabled={enabled}, url={url}, token={token}", {
+				enabled: String(s.realtimeEnabled),
+				url: s.yjsServerUrl ? t("설정됨") : t("없음"),
+				token: s.yjsToken ? t("설정됨") : t("없음"),
+			}),
 			true,
 		);
-		log.info(`공유 폴더: ${this.getSpaces().map((x) => x.folder).join(", ") || "(없음)"}`);
+		log.info(
+			t("공유 폴더: {folders}", {
+				folders: this.getSpaces().map((x) => x.folder).join(", ") || t("(없음)"),
+			}),
+		);
 		const f = this.app.workspace.getActiveFile();
 		const space = f ? this.spaceFor(f.path) : null;
-		log.info(`활성 파일: ${f?.path ?? "(없음)"} → 공유공간: ${f ? (space?.id ?? "아님(공유폴더 밖)") : "-"}`);
+		log.info(
+			t("활성 파일: {file} → 공유공간: {space}", {
+				file: f?.path ?? t("(없음)"),
+				space: f ? (space?.id ?? t("아님(공유폴더 밖)")) : "-",
+			}),
+		);
 		// room 이름(교사·학생이 정확히 같아야 실시간 공유됨)
 		const room = f && space ? this.roomFor(f.path, space) : null;
-		log.info(`room: ${room ?? "(없음)"}  [교사·학생이 이 값이 완전히 같아야 함]`);
+		log.info(t("room: {room}  [교사·학생이 이 값이 완전히 같아야 함]", { room: room ?? t("(없음)") }));
 		const session = f ? this.sessions.get(f.path) : undefined;
 		log.info(
-			`세션: ${session ? (session.ready ? "ready" : "연결중") : "없음"}, 연결=${session ? (session.provider as any).wsconnected : "-"}, 접속자=${f ? this.presenceFor(f.path) : 0}`,
+			t("세션: {state}, 연결={connected}, 접속자={presence}", {
+				state: session ? (session.ready ? t("ready") : t("연결중")) : t("없음"),
+				connected: session ? String((session.provider as any).wsconnected) : "-",
+				presence: f ? this.presenceFor(f.path) : 0,
+			}),
 		);
 		const md = this.app.workspace.getActiveViewOfType(MarkdownView);
 		const cm = md ? (md.editor as unknown as { cm?: EditorView }).cm : undefined;
-		log.info(`활성 에디터 CM6 접근: ${cm ? "가능(편집모드)" : "불가(읽기 모드면 편집모드로 여세요)"}`);
+		log.info(
+			t("활성 에디터 CM6 접근: {access}", {
+				access: cm ? t("가능(편집모드)") : t("불가(읽기 모드면 편집모드로 여세요)"),
+			}),
+		);
 	}
 
 	private bindViews(session: Session, views: MarkdownView[]): void {
 		for (const view of views) {
 			const cm = (view.editor as unknown as { cm?: EditorView }).cm;
 			if (!cm) {
-				this.core.logger.warn(`실시간: 에디터(CM6) 접근 불가 — ${session.file} (읽기 모드면 편집 모드로 여세요)`);
+				this.core.logger.warn(
+					t("실시간: 에디터(CM6) 접근 불가 — {file} (읽기 모드면 편집 모드로 여세요)", { file: session.file }),
+				);
 				continue;
 			}
 			if (session.bound.has(cm)) continue;
@@ -226,7 +257,12 @@ export class RealtimeManager {
 				bindView(cm, session.ytext, session.provider.awareness);
 				session.bound.add(cm);
 			} catch (e) {
-				this.core.logger.error(`실시간 바인딩 실패: ${session.file} — ${e instanceof Error ? e.message : String(e)}`);
+				this.core.logger.error(
+					t("실시간 바인딩 실패: {file} — {error}", {
+						file: session.file,
+						error: e instanceof Error ? e.message : String(e),
+					}),
+				);
 			}
 		}
 	}
@@ -264,15 +300,17 @@ export class RealtimeManager {
 				if (content !== current) {
 					// 안전장치: 빈 내용으로 기존 내용을 덮어쓰지 않음(데이터 손실 방지)
 					if (content.length === 0 && current.length > 0) {
-						this.core.logger.warn(`실시간 스냅샷 생략(빈 내용 덮어쓰기 방지): ${path}`);
+						this.core.logger.warn(t("실시간 스냅샷 생략(빈 내용 덮어쓰기 방지): {path}", { path }));
 					} else {
 						await this.app.vault.modify(file, content);
-						this.core.logger.ok(`실시간 스냅샷 저장: ${path}`);
+						this.core.logger.ok(t("실시간 스냅샷 저장: {path}", { path }));
 					}
 				}
 			}
 		} catch (e) {
-			this.core.logger.error(`스냅샷 저장 실패: ${path} — ${e instanceof Error ? e.message : String(e)}`);
+			this.core.logger.error(
+				t("스냅샷 저장 실패: {path} — {error}", { path, error: e instanceof Error ? e.message : String(e) }),
+			);
 		}
 
 		session.provider.destroy();

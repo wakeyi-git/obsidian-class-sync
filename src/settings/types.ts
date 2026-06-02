@@ -104,6 +104,9 @@ export interface ClassSyncSettings {
 	/** 실시간 세션 중 CouchDB 스냅샷 주기(초). 0=끔. 기술문서 §19.2. 교사 설정 → rtconfig로 전파. */
 	realtimeSnapshotSec: number;
 
+	/** UI 언어. auto=Obsidian 따름. */
+	language: "auto" | "ko" | "en";
+
 	/** 삭제/이름변경 시 상대 vault 처리 정책. 기술문서 §15. 기본 archive. */
 	deletePolicy: DeletePolicy;
 }
@@ -142,6 +145,7 @@ export const DEFAULT_SETTINGS: ClassSyncSettings = {
 	yjsServerUrl: "",
 	yjsToken: "",
 	realtimeSnapshotSec: 0,
+	language: "auto",
 };
 
 /** 기기별 고유 ID. 기술문서 §16.3 deviceId 기반 무시에 사용. */

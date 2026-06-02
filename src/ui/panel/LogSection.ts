@@ -1,5 +1,6 @@
 import { Logger, LogEntry } from "../../core/log/Logger";
 import { PanelSection } from "./PanelSection";
+import { t } from "../../i18n";
 
 /** 로그 탭 — 실시간 로그 + 지우기. (구 LogView 본문) */
 export class LogSection implements PanelSection {
@@ -10,7 +11,7 @@ export class LogSection implements PanelSection {
 
 	render(container: HTMLElement): void {
 		const toolbar = container.createDiv({ cls: "class-sync-log-toolbar" });
-		const clearBtn = toolbar.createEl("button", { text: "지우기" });
+		const clearBtn = toolbar.createEl("button", { text: t("지우기") });
 		clearBtn.onclick = () => this.logger.clear();
 
 		this.logEl = container.createDiv({ cls: "class-sync-log-view" });

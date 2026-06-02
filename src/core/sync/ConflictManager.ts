@@ -1,6 +1,7 @@
 import { MirrorContext } from "./MirrorContext";
 import { NoteDoc, noteId } from "../model/types";
 import { sha256 } from "../hash/hash";
+import { t } from "../../i18n";
 
 export type ResolveChoice = "local" | "remote" | "both";
 
@@ -34,7 +35,9 @@ export class ConflictManager {
 		try {
 			await ctx.writeVaultFile(path, remote.content);
 		} catch (e) {
-			ctx.logger.error(`충돌본 기록 실패: ${path} — ${e instanceof Error ? e.message : String(e)}`);
+			ctx.logger.error(
+				t("충돌본 기록 실패: {path} — {err}", { path, err: e instanceof Error ? e.message : String(e) }),
+			);
 		}
 	}
 
@@ -69,7 +72,7 @@ export class ConflictManager {
 		const id = noteId(dbPath);
 		const winner = await ctx.pouch.getWithConflicts<NoteDoc>(id);
 		if (!winner || !winner._conflicts || winner._conflicts.length === 0) {
-			ctx.logger.info(`이미 해소된 충돌: ${dbPath}`);
+			ctx.logger.info(t("이미 해소된 충돌: {path}", { path: dbPath }));
 			await this.removeConflictCopy(dbPath);
 			return;
 		}
@@ -80,9 +83,9 @@ export class ConflictManager {
 
 		// "두 버전 보관": 원격을 별도 파일로 저장(동기화됨)
 		if (choice === "both" && remote) {
-			const keepPath = ctx.toLocalPath(dbPath.replace(/\.md$/i, " (충돌본).md"));
+			const keepPath = ctx.toLocalPath(dbPath.replace(/\.md$/i, ` ${t("(충돌본)")}.md`));
 			await ctx.writeVaultFile(keepPath, remote.content);
-			ctx.logger.ok(`충돌 두 버전 보관: ${keepPath}`);
+			ctx.logger.ok(t("충돌 두 버전 보관: {path}", { path: keepPath }));
 		}
 
 		// 확정할 내용
@@ -105,7 +108,7 @@ export class ConflictManager {
 		}
 
 		await this.removeConflictCopy(dbPath);
-		ctx.logger.ok(`충돌 해소(${choice}): ${dbPath}`, true);
+		ctx.logger.ok(t("충돌 해소({choice}): {path}", { choice, path: dbPath }), true);
 	}
 
 	// --- 내부 ---
@@ -144,7 +147,9 @@ export class ConflictManager {
 		try {
 			await this.ctx.writeVaultFile(path, content);
 		} catch (e) {
-			this.ctx.logger.error(`내 편집 보존 실패: ${path} — ${e instanceof Error ? e.message : String(e)}`);
+			this.ctx.logger.error(
+				t("내 편집 보존 실패: {path} — {err}", { path, err: e instanceof Error ? e.message : String(e) }),
+			);
 		}
 	}
 

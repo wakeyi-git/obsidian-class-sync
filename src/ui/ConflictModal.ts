@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from "obsidian";
 import { ConflictInfo, ResolveChoice } from "../core/sync/ConflictManager";
 import { MirrorSync } from "../core/sync/MirrorSync";
+import { t } from "../i18n";
 
 export interface ConflictRow {
 	sync: MirrorSync;
@@ -29,24 +30,26 @@ export class ConflictModal extends Modal {
 	private async render(): Promise<void> {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: "충돌 목록" });
+		contentEl.createEl("h2", { text: t("충돌 목록") });
 
 		let rows: ConflictRow[] = [];
 		try {
 			rows = await this.host.listConflicts();
 		} catch (e) {
-			contentEl.createEl("p", { text: `목록을 불러오지 못했습니다: ${e instanceof Error ? e.message : String(e)}` });
+			contentEl.createEl("p", {
+				text: t("목록을 불러오지 못했습니다: {error}", { error: e instanceof Error ? e.message : String(e) }),
+			});
 			return;
 		}
 
 		if (rows.length === 0) {
-			contentEl.createEl("p", { text: "현재 충돌이 없습니다. 🎉" });
+			contentEl.createEl("p", { text: t("현재 충돌이 없습니다. 🎉") });
 			return;
 		}
 
 		contentEl.createEl("p", {
 			cls: "setting-item-description",
-			text: "양쪽이 같은 파일을 다르게 편집했습니다. 로컬은 현재 vault 내용, 원격은 _충돌/ 폴더의 사본입니다.",
+			text: t("양쪽이 같은 파일을 다르게 편집했습니다. 로컬은 현재 vault 내용, 원격은 _충돌/ 폴더의 사본입니다."),
 		});
 
 		for (const row of rows) {
@@ -54,15 +57,20 @@ export class ConflictModal extends Modal {
 			new Setting(card)
 				.setName(row.info.dbPath)
 				.setDesc(
-					`학생 ${row.info.studentId} · 원격 수정: ${row.info.remoteMeta.by}(${row.info.remoteMeta.role}) ${row.info.remoteMeta.at}`,
+					t("학생 {studentId} · 원격 수정: {by}({role}) {at}", {
+						studentId: row.info.studentId,
+						by: row.info.remoteMeta.by,
+						role: row.info.remoteMeta.role,
+						at: row.info.remoteMeta.at,
+					}),
 				)
 				.setHeading();
 
 			new Setting(card)
-				.addButton((b) => b.setButtonText("비교(열기)").onClick(() => this.host.openConflictFiles(row)))
-				.addButton((b) => b.setButtonText("로컬 유지").setCta().onClick(() => this.act(row, "local")))
-				.addButton((b) => b.setButtonText("원격 적용").onClick(() => this.act(row, "remote")))
-				.addButton((b) => b.setButtonText("두 버전 보관").onClick(() => this.act(row, "both")));
+				.addButton((b) => b.setButtonText(t("비교(열기)")).onClick(() => this.host.openConflictFiles(row)))
+				.addButton((b) => b.setButtonText(t("로컬 유지")).setCta().onClick(() => this.act(row, "local")))
+				.addButton((b) => b.setButtonText(t("원격 적용")).onClick(() => this.act(row, "remote")))
+				.addButton((b) => b.setButtonText(t("두 버전 보관")).onClick(() => this.act(row, "both")));
 		}
 	}
 
@@ -70,7 +78,9 @@ export class ConflictModal extends Modal {
 		try {
 			await this.host.resolveConflict(row, choice);
 		} catch (e) {
-			this.contentEl.createEl("p", { text: `해소 실패: ${e instanceof Error ? e.message : String(e)}` });
+			this.contentEl.createEl("p", {
+				text: t("해소 실패: {error}", { error: e instanceof Error ? e.message : String(e) }),
+			});
 		}
 		await this.render();
 	}

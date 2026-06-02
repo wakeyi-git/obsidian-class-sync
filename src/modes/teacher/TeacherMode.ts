@@ -3,6 +3,7 @@ import { MirrorSync } from "../../core/sync/MirrorSync";
 import { SyncDirection } from "../../core/sync/FullSync";
 import { computeChildRoots } from "../../core/sync/childRoots";
 import { ClassSyncMode } from "../ClassSyncMode";
+import { t } from "../../i18n";
 
 /**
  * Teacher Mode (Phase 2 + 6a). 기술문서 §12.
@@ -50,9 +51,15 @@ export class TeacherMode implements ClassSyncMode {
 
 	async start(): Promise<void> {
 		const s = this.core.settings;
-		this.core.logger.ok(`Teacher Mode 시작 — 학생 ${s.students.length}명, 공유 ${s.sharedSpaces.length}개`, true);
+		this.core.logger.ok(
+			t("Teacher Mode 시작 — 학생 {students}명, 공유 {shared}개", {
+				students: s.students.length,
+				shared: s.sharedSpaces.length,
+			}),
+			true,
+		);
 		if (this.syncs.length === 0) {
-			this.core.logger.warn("학생/공유 공간이 없습니다. 설정에서 추가하세요.");
+			this.core.logger.warn(t("학생/공유 공간이 없습니다. 설정에서 추가하세요."));
 			return;
 		}
 		for (const sync of this.syncs) await sync.start();
@@ -60,7 +67,7 @@ export class TeacherMode implements ClassSyncMode {
 
 	async stop(): Promise<void> {
 		for (const sync of this.syncs) await sync.stop();
-		this.core.logger.info("Teacher Mode 정지.");
+		this.core.logger.info(t("Teacher Mode 정지."));
 	}
 
 	async fullSync(direction: SyncDirection): Promise<void> {

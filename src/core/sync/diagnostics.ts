@@ -1,4 +1,5 @@
 import { CoreServices } from "../CoreServices";
+import { t } from "../../i18n";
 
 /** 진단 대상 DB. label은 학생/공유 식별. */
 export interface DiagTarget {
@@ -15,19 +16,29 @@ export async function runDiagnostics(core: CoreServices, targets: DiagTarget[]):
 	const log = core.logger;
 	const s = core.settings;
 
-	log.info("───────── 종합 진단 시작 ─────────", true);
+	log.info(t("───────── 종합 진단 시작 ─────────"), true);
 	log.info(
-		`설정 — 역할=${s.role}, 학급=${s.classId}, URL=${s.couchdbUrl ? "설정됨" : "없음"}, ` +
-			`자동동기화=${s.autoSync}, 첨부=${s.syncAssets}(최대 ${s.maxAttachmentMB}MB), ` +
-			`백그라운드정지=${s.pauseWhenHidden}, 실시간=${s.realtimeEnabled}`,
+		t(
+			"설정 — 역할={role}, 학급={classId}, URL={url}, 자동동기화={autoSync}, 첨부={syncAssets}(최대 {maxMB}MB), 백그라운드정지={pauseWhenHidden}, 실시간={realtimeEnabled}",
+			{
+				role: s.role,
+				classId: s.classId,
+				url: s.couchdbUrl ? t("설정됨") : t("없음"),
+				autoSync: String(s.autoSync),
+				syncAssets: String(s.syncAssets),
+				maxMB: s.maxAttachmentMB,
+				pauseWhenHidden: String(s.pauseWhenHidden),
+				realtimeEnabled: String(s.realtimeEnabled),
+			},
+		),
 	);
 
 	if (!s.couchdbUrl) {
-		log.warn("CouchDB URL이 없습니다. 설정을 먼저 입력하세요.", true);
+		log.warn(t("CouchDB URL이 없습니다. 설정을 먼저 입력하세요."), true);
 		return;
 	}
 	if (targets.length === 0) {
-		log.warn("진단할 DB가 없습니다. (교사: 학생/공유 공간을 추가하세요)", true);
+		log.warn(t("진단할 DB가 없습니다. (교사: 학생/공유 공간을 추가하세요)"), true);
 		return;
 	}
 
@@ -43,21 +54,27 @@ export async function runDiagnostics(core: CoreServices, targets: DiagTarget[]):
 				const raw = await pouch.rawInfo();
 				status = raw.status;
 			} catch (e) {
-				log.error(`✗ ${label} (${db}) — 서버 도달 불가: ${e instanceof Error ? e.message : String(e)}`);
+				log.error(
+					t("✗ {label} ({db}) — 서버 도달 불가: {err}", {
+						label,
+						db,
+						err: e instanceof Error ? e.message : String(e),
+					}),
+				);
 				failCount++;
 				continue;
 			}
 			if (status === 401) {
-				log.error(`✗ ${label} (${db}) — 인증 오류(401). 아이디/비밀번호 확인.`);
+				log.error(t("✗ {label} ({db}) — 인증 오류(401). 아이디/비밀번호 확인.", { label, db }));
 				failCount++;
 				continue;
 			}
 			if (status === 403) {
-				log.warn(`• ${label} (${db}) — 접근 불가(403). 다른 학생 DB라면 권한 격리가 정상입니다.`);
+				log.warn(t("• {label} ({db}) — 접근 불가(403). 다른 학생 DB라면 권한 격리가 정상입니다.", { label, db }));
 				continue;
 			}
 			if (status >= 400) {
-				log.error(`✗ ${label} (${db}) — HTTP ${status}.`);
+				log.error(t("✗ {label} ({db}) — HTTP {status}.", { label, db, status }));
 				failCount++;
 				continue;
 			}
@@ -65,12 +82,12 @@ export async function runDiagnostics(core: CoreServices, targets: DiagTarget[]):
 			// 쓰기 권한
 			const w = await pouch.probeWrite();
 			if (w.ok) {
-				log.ok(`✓ ${label} (${db}) — 읽기 OK · 쓰기 OK`);
+				log.ok(t("✓ {label} ({db}) — 읽기 OK · 쓰기 OK", { label, db }));
 				okCount++;
 			} else if (w.status === 401 || w.status === 403) {
-				log.warn(`• ${label} (${db}) — 읽기 OK · 쓰기 권한 없음(${w.status}).`);
+				log.warn(t("• {label} ({db}) — 읽기 OK · 쓰기 권한 없음({status}).", { label, db, status: w.status }));
 			} else {
-				log.error(`✗ ${label} (${db}) — 읽기 OK · 쓰기 실패: ${w.error}`);
+				log.error(t("✗ {label} ({db}) — 읽기 OK · 쓰기 실패: {err}", { label, db, err: w.error ?? "" }));
 				failCount++;
 			}
 		} finally {
@@ -78,5 +95,5 @@ export async function runDiagnostics(core: CoreServices, targets: DiagTarget[]):
 		}
 	}
 
-	log.info(`───────── 진단 완료 — 정상 ${okCount} · 실패 ${failCount} ─────────`, true);
+	log.info(t("───────── 진단 완료 — 정상 {ok} · 실패 {fail} ─────────", { ok: okCount, fail: failCount }), true);
 }

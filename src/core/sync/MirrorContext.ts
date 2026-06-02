@@ -4,10 +4,11 @@ import { PouchService } from "../couch/PouchService";
 import { NoteDoc, AssetDoc, assetId } from "../model/types";
 import { sha256 } from "../hash/hash";
 import { dbPathToLocal, localPathToDb, normalizePath, validateVaultPath } from "../path/path";
+import { t } from "../../i18n";
 
 /** 파일명에 쓸 수 없는 문자를 _로 치환. */
 function sanitizeFileLabel(s: string): string {
-	return (s || "").replace(/[\\/:*?"<>|.]/g, "_").trim() || "상대방";
+	return (s || "").replace(/[\\/:*?"<>|.]/g, "_").trim() || t("상대방");
 }
 
 /** 링크(학생↔mirror) 동기화 상태. 기술문서 §12.6 대시보드용. */
@@ -146,14 +147,15 @@ export class MirrorContext {
 
 	/** 충돌 원격본의 상대방 라벨: 교사 입장=학생 이름, 학생 입장=교사. */
 	conflictPeerLabel(): string {
-		if (this.settings.role === "teacher") return this.studentName || this.studentId || "학생";
-		return "교사";
+		if (this.settings.role === "teacher") return this.studentName || this.studentId || t("학생");
+		return t("교사");
 	}
 
 	/** 내 편집 백업 경로: 상대가 충돌을 해소해 내 편집이 덮일 때 보존. _충돌/<base>.내편집.md */
 	localBackupPath(dbPath: string): string {
-		const withTag = dbPath.replace(/\.md$/i, ".내편집.md");
-		const tagged = withTag === dbPath ? `${dbPath}.내편집.md` : withTag;
+		const label = t("내편집");
+		const withTag = dbPath.replace(/\.md$/i, `.${label}.md`);
+		const tagged = withTag === dbPath ? `${dbPath}.${label}.md` : withTag;
 		return obsidianNormalize(dbPathToLocal(this.localRoot, `${this.settings.conflictFolder}/${tagged}`));
 	}
 

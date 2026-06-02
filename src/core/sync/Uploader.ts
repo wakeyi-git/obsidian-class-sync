@@ -1,6 +1,7 @@
 import { MirrorContext } from "./MirrorContext";
 import { NoteDoc, AssetDoc, noteId, assetId } from "../model/types";
 import { sha256 } from "../hash/hash";
+import { t } from "../../i18n";
 
 export type UploadResult =
 	| "uploaded"
@@ -76,7 +77,9 @@ export class Uploader {
 		if (maxBytes > 0) {
 			const size = ctx.getFile(localPath)?.stat.size;
 			if (size != null && size > maxBytes) {
-				ctx.logger.warn(`첨부 크기 초과로 생략: ${dbPath} (${(size / 1024 / 1024).toFixed(1)}MB)`);
+				ctx.logger.warn(
+					t("첨부 크기 초과로 생략: {path} ({size}MB)", { path: dbPath, size: (size / 1024 / 1024).toFixed(1) }),
+				);
 				return "skipped-toolarge";
 			}
 		}
@@ -85,7 +88,12 @@ export class Uploader {
 		if (data == null) return "skipped-missing";
 
 		if (maxBytes > 0 && data.byteLength > maxBytes) {
-			ctx.logger.warn(`첨부 크기 초과로 생략: ${dbPath} (${(data.byteLength / 1024 / 1024).toFixed(1)}MB)`);
+			ctx.logger.warn(
+				t("첨부 크기 초과로 생략: {path} ({size}MB)", {
+					path: dbPath,
+					size: (data.byteLength / 1024 / 1024).toFixed(1),
+				}),
+			);
 			return "skipped-toolarge";
 		}
 
@@ -102,7 +110,7 @@ export class Uploader {
 	private markUploaded(dbPath: string): void {
 		this.ctx.status.lastUploadAt = Date.now();
 		this.ctx.status.lastError = undefined;
-		this.ctx.logger.ok(`로컬→원격 업로드: ${dbPath}`);
+		this.ctx.logger.ok(t("로컬→원격 업로드: {path}", { path: dbPath }));
 	}
 
 	/** 삭제/이름변경 시 옛 경로를 tombstone 처리(note/asset 공통). 기술문서 §8.3 / §10.3. */
@@ -130,7 +138,7 @@ export class Uploader {
 		};
 		delete doc._attachments; // tombstone은 바이너리 불필요
 		await ctx.pouch.put(doc);
-		ctx.logger.ok(`tombstone(삭제 표시): ${dbPath}`);
+		ctx.logger.ok(t("tombstone(삭제 표시): {path}", { path: dbPath }));
 		return "tombstoned";
 	}
 
@@ -141,7 +149,7 @@ export class Uploader {
 		const existing = await ctx.pouch.get<NoteDoc | AssetDoc>(id);
 		if (!existing || !existing._rev) return "skipped";
 		await ctx.pouch.removeRev(id, existing._rev);
-		ctx.logger.ok(`DB에서 영구 삭제(purge): ${dbPath}`);
+		ctx.logger.ok(t("DB에서 영구 삭제(purge): {path}", { path: dbPath }));
 		return "purged";
 	}
 }
