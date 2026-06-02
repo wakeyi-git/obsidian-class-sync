@@ -174,8 +174,9 @@ export class MirrorApplier {
 		// 내가 만든 tombstone의 에코 → 무시 (내 vault는 이미 처리됨)
 		if (doc.lastModifiedDeviceId === ctx.settings.deviceId) return "skipped-self";
 
-		// 삭제한 쪽의 의도(deleteMode)를 따른다. 없으면 내 설정.
-		const policy = doc.deleteMode ?? ctx.settings.deletePolicy;
+		// 받는 쪽(이 vault)의 정책을 따른다 — 각자 자기 vault의 삭제 처리(보관/즉시삭제/무시)를 제어한다.
+		// (이전엔 tombstone의 deleteMode=삭제자 정책이 우선이라, 받는 쪽 설정이 무시되는 문제가 있었다.)
+		const policy = ctx.settings.deletePolicy;
 		if (policy === "ignore-delete") return "skipped-deleted";
 
 		const localPath = ctx.toLocalPath(doc.path);
