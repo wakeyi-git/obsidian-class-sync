@@ -1,20 +1,31 @@
-import { App, MarkdownView, TFile } from "obsidian";
+import { App, MarkdownView, TFile, View } from "obsidian";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { EditorView } from "@codemirror/view";
 import { CoreServices } from "../CoreServices";
 import { bindView, unbindView } from "./editorBinding";
+import { ExcalidrawBinding, ExcalidrawImperativeApi } from "./excalidrawBinding";
 import { t } from "../../i18n";
 
 interface Session {
 	file: string;
+	kind: "md" | "excalidraw";
 	ydoc: Y.Doc;
-	ytext: Y.Text;
+	ytext?: Y.Text; // md
+	yElements?: Y.Array<Y.Map<any>>; // excalidraw 요소
+	yAssets?: Y.Map<any>; // excalidraw 이미지 asset
 	provider: WebsocketProvider;
 	ready: boolean; // 서버 동기화 + 시드 완료 → 바인딩 가능
-	bound: Set<EditorView>;
+	bound: Set<EditorView>; // md: 바인딩된 CM6
+	exBinding?: ExcalidrawBinding; // excalidraw 바인딩
 	snapTimer?: number; // 주기적 CouchDB 스냅샷 타이머(§19.2)
 	lastSnapshot?: string; // 마지막으로 스냅샷한 내용(중복 쓰기 방지)
+}
+
+/** Excalidraw 뷰(타입 느슨). file과 imperative API 접근만 사용. */
+interface ExcalidrawLikeView extends View {
+	file?: TFile;
+	excalidrawAPI?: ExcalidrawImperativeApi;
 }
 
 /** 실시간 스냅샷을 받을 대상(담당 MirrorSync). main이 경로로 해결해 준다. */
@@ -25,10 +36,11 @@ export interface SnapshotTarget {
 const COLORS = ["#e11d48", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
 
 /**
- * Yjs 실시간 공동 편집 관리. 기술문서 §19. 공유 폴더 markdown 문서에만 적용.
+ * Yjs 실시간 공동 편집 관리. 기술문서 §19. 공유 폴더의 markdown(글자 단위) + Excalidraw(요소 단위) 적용.
  *
- * 열린 에디터를 훑어 공유 파일이면 세션(WebSocket provider + Y.Doc)을 띄우고 CM6에 바인딩한다.
- * 파일이 모두 닫히면 세션을 종료하며 vault에 스냅샷을 저장(→ CouchDB로 영속).
+ * 열린 에디터를 훑어 공유 파일이면 세션(WebSocket provider + Y.Doc)을 띄우고
+ * markdown은 CM6(Y.Text), Excalidraw는 imperative API(Y.Map 요소)에 바인딩한다.
+ * 파일이 모두 닫히면 세션을 종료하며 vault/CouchDB에 스냅샷을 저장(→ 비실시간 멤버에 영속).
  */
 export class RealtimeManager {
 	private sessions = new Map<string, Session>();
@@ -62,39 +74,49 @@ export class RealtimeManager {
 		}
 	}
 
-	/** 열린 markdown 에디터를 훑어 세션을 맞춘다. workspace 이벤트마다 호출. */
+	/** 열린 markdown/excalidraw 에디터를 훑어 세션을 맞춘다. workspace 이벤트마다 호출. */
 	syncOpenEditors(): void {
 		const s = this.settings;
 		const on = s.realtimeEnabled && !!s.yjsServerUrl && !!s.yjsToken;
 
-		// 열린 공유 markdown 파일 → 뷰들
-		const byPath = new Map<string, MarkdownView[]>();
+		type Target = { kind: "md"; views: MarkdownView[] } | { kind: "excalidraw"; view: ExcalidrawLikeView };
+		const targets = new Map<string, Target>();
 		if (on) {
+			// 공유 markdown 파일(excalidraw 파일은 제외 — 아래 excalidraw 처리가 담당)
 			for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
 				const view = leaf.view as MarkdownView;
 				const file = view?.file;
-				if (!file || file.extension !== "md") continue;
+				if (!file || file.extension !== "md" || this.isExcalidrawPath(file.path)) continue;
 				if (!this.spaceFor(file.path)) continue;
-				const arr = byPath.get(file.path) ?? [];
-				arr.push(view);
-				byPath.set(file.path, arr);
+				const cur = targets.get(file.path);
+				if (cur && cur.kind === "md") cur.views.push(view);
+				else targets.set(file.path, { kind: "md", views: [view] });
+			}
+			// 공유 excalidraw 그림
+			for (const leaf of this.app.workspace.getLeavesOfType("excalidraw")) {
+				const view = leaf.view as ExcalidrawLikeView;
+				const file = view?.file;
+				if (!file || !this.spaceFor(file.path)) continue;
+				targets.set(file.path, { kind: "excalidraw", view });
 			}
 		}
 
 		// 더는 열려 있지 않은 세션 종료
 		for (const path of [...this.sessions.keys()]) {
-			if (!byPath.has(path)) void this.endSession(path);
+			if (!targets.has(path)) void this.endSession(path);
 		}
 
 		// 열린 공유 파일에 세션 보장 + 바인딩
-		for (const [path, views] of byPath) {
+		for (const [path, tgt] of targets) {
 			let session = this.sessions.get(path);
-			if (!session) session = this.startSession(path);
-			if (session?.ready) this.bindViews(session, views);
+			if (!session) session = this.startSession(path, tgt.kind);
+			if (!session?.ready) continue;
+			if (session.kind === "md" && tgt.kind === "md") this.bindViews(session, tgt.views);
+			else if (session.kind === "excalidraw" && tgt.kind === "excalidraw") this.bindExcalidraw(session, tgt.view);
 		}
 	}
 
-	private startSession(path: string): Session | undefined {
+	private startSession(path: string, kind: "md" | "excalidraw"): Session | undefined {
 		const file = this.app.vault.getAbstractFileByPath(path);
 		if (!(file instanceof TFile)) return undefined;
 		const space = this.spaceFor(path);
@@ -105,7 +127,6 @@ export class RealtimeManager {
 		const dbPath = path.slice(space.folder.length + 1);
 
 		const ydoc = new Y.Doc();
-		const ytext = ydoc.getText("content");
 		const provider = new WebsocketProvider(this.settings.yjsServerUrl, room, ydoc, {
 			params: { token: this.settings.yjsToken },
 		});
@@ -113,7 +134,19 @@ export class RealtimeManager {
 		const color = COLORS[Math.abs(hash(this.settings.deviceId)) % COLORS.length];
 		provider.awareness.setLocalStateField("user", { name: this.settings.displayName || t("사용자"), color });
 
-		const session: Session = { file: path, ydoc, ytext, provider, ready: false, bound: new Set() };
+		const session: Session =
+			kind === "md"
+				? { file: path, kind, ydoc, ytext: ydoc.getText("content"), provider, ready: false, bound: new Set() }
+				: {
+						file: path,
+						kind,
+						ydoc,
+						yElements: ydoc.getArray("elements"),
+						yAssets: ydoc.getMap("assets"),
+						provider,
+						ready: false,
+						bound: new Set(),
+					};
 		this.sessions.set(path, session);
 
 		provider.on("status", (e: { status: string }) => {
@@ -131,8 +164,16 @@ export class RealtimeManager {
 	private async onSynced(session: Session, file: TFile): Promise<void> {
 		// 이미 교체/종료된 세션이면(setTimeout 대기 중 endSession 발생) 무시 — 좀비 타이머/바인딩 방지.
 		if (this.sessions.get(session.file) !== session) return;
+
+		if (session.kind === "excalidraw") {
+			// 시드는 바인딩(ExcalidrawBinding)이 첫 진입자일 때 처리한다.
+			session.ready = true;
+			this.syncOpenEditors();
+			return;
+		}
+
 		try {
-			if (session.ytext.length === 0) {
+			if (session.ytext && session.ytext.length === 0) {
 				// 단일 시드: 나 혼자일 때만 파일 내용으로 시드. 다른 참여자가 있으면 그들의 공유 내용을 받는다.
 				// (여러 명이 서로 다른 파일 내용을 시드하면 문서가 뒤섞여 깨진다.)
 				const others = session.provider.awareness.getStates().size; // 본인 포함
@@ -152,7 +193,7 @@ export class RealtimeManager {
 			/* 읽기 실패 무시 */
 		}
 		session.ready = true;
-		session.lastSnapshot = session.ytext.toString();
+		session.lastSnapshot = session.ytext?.toString() ?? "";
 		this.maybeStartSnapshot(session);
 		this.syncOpenEditors(); // 이제 바인딩
 	}
@@ -167,7 +208,7 @@ export class RealtimeManager {
 
 	private async snapshotTick(session: Session): Promise<void> {
 		try {
-			if (!session.ready || !this.isSnapshotLeader(session)) return;
+			if (!session.ready || !session.ytext || !this.isSnapshotLeader(session)) return;
 			const content = session.ytext.toString();
 			if (content === session.lastSnapshot || content.length === 0) return; // 변화 없음/빈 내용 방지
 			const target = this.getSyncForPath(session.file);
@@ -244,6 +285,8 @@ export class RealtimeManager {
 	}
 
 	private bindViews(session: Session, views: MarkdownView[]): void {
+		const ytext = session.ytext;
+		if (!ytext) return;
 		for (const view of views) {
 			const cm = (view.editor as unknown as { cm?: EditorView }).cm;
 			if (!cm) {
@@ -254,7 +297,7 @@ export class RealtimeManager {
 			}
 			if (session.bound.has(cm)) continue;
 			try {
-				bindView(cm, session.ytext, session.provider.awareness);
+				bindView(cm, ytext, session.provider.awareness);
 				session.bound.add(cm);
 			} catch (e) {
 				this.core.logger.error(
@@ -265,6 +308,60 @@ export class RealtimeManager {
 				);
 			}
 		}
+	}
+
+	/** Excalidraw 그림에 Yjs 바인딩(1회). 첫 진입자(awareness≤1 & 비어있음)면 현재 씬을 시드. */
+	private bindExcalidraw(session: Session, view: ExcalidrawLikeView): void {
+		if (session.exBinding || !session.yElements || !session.yAssets) return;
+		const api = this.getExcalidrawApi(view);
+		if (!api) {
+			this.core.logger.warn(
+				t("실시간: Excalidraw API 접근 불가 — {file} (Excalidraw 플러그인 최신인지 확인)", { file: session.file }),
+			);
+			return;
+		}
+		const containerEl = (view as unknown as { contentEl?: HTMLElement; containerEl?: HTMLElement }).contentEl
+			?? (view as unknown as { containerEl?: HTMLElement }).containerEl;
+		// Excalidraw collaborator color는 {background, stroke} 객체를 기대(마크다운 yCollab는 문자열) → 여기서 객체로 재설정.
+		const hex = COLORS[Math.abs(hash(this.settings.deviceId)) % COLORS.length];
+		session.provider.awareness.setLocalStateField("user", {
+			name: this.settings.displayName || t("사용자"),
+			color: { background: hex, stroke: hex },
+		});
+		try {
+			session.exBinding = new ExcalidrawBinding(session.yElements, session.yAssets, api, {
+				awareness: session.provider.awareness,
+				containerEl,
+			});
+			this.core.logger.ok(t("실시간 Excalidraw 바인딩: {file}", { file: session.file }));
+		} catch (e) {
+			this.core.logger.error(
+				t("실시간 바인딩 실패: {file} — {error}", {
+					file: session.file,
+					error: e instanceof Error ? e.message : String(e),
+				}),
+			);
+		}
+	}
+
+	/** excalidraw 파일 경로 여부(.excalidraw 또는 .excalidraw.md). markdown 처리에서 제외용. */
+	private isExcalidrawPath(p: string): boolean {
+		const lower = p.toLowerCase();
+		return lower.endsWith(".excalidraw") || lower.endsWith(".excalidraw.md");
+	}
+
+	/** Excalidraw 뷰의 imperative API 획득. 뷰 속성 → ExcalidrawAutomate 순으로 시도. */
+	private getExcalidrawApi(view: ExcalidrawLikeView): ExcalidrawImperativeApi | null {
+		if (view.excalidrawAPI && typeof view.excalidrawAPI.onChange === "function") return view.excalidrawAPI;
+		const plugin = (this.app as any).plugins?.plugins?.["obsidian-excalidraw-plugin"];
+		const ea = plugin?.ea;
+		try {
+			const api = ea?.getAPI?.(view)?.getExcalidrawAPI?.();
+			if (api && typeof api.onChange === "function") return api as ExcalidrawImperativeApi;
+		} catch {
+			/* EA 버전에 따라 미지원 */
+		}
+		return null;
 	}
 
 	private async endSession(path: string): Promise<void> {
@@ -290,27 +387,47 @@ export class RealtimeManager {
 				/* 뷰가 이미 사라졌을 수 있음 */
 			}
 		}
+		session.exBinding?.destroy();
 
-		// 스냅샷 영속: Y.Text → vault (변경 시) → LocalWatcher가 CouchDB 업로드
-		try {
-			const file = this.app.vault.getAbstractFileByPath(path);
-			if (file instanceof TFile) {
-				const content = session.ytext.toString();
-				const current = await this.app.vault.read(file);
-				if (content !== current) {
-					// 안전장치: 빈 내용으로 기존 내용을 덮어쓰지 않음(데이터 손실 방지)
-					if (content.length === 0 && current.length > 0) {
-						this.core.logger.warn(t("실시간 스냅샷 생략(빈 내용 덮어쓰기 방지): {path}", { path }));
-					} else {
-						await this.app.vault.modify(file, content);
-						this.core.logger.ok(t("실시간 스냅샷 저장: {path}", { path }));
+		if (session.kind === "excalidraw") {
+			// Excalidraw 파일은 플러그인이 onChange 때 디스크에 저장한다. 세션 종료 후 그 파일을
+			// CouchDB로 한 번 올려 비실시간 멤버에게 전파(세션 중엔 isRealtimeActive로 업로드 보류됨).
+			try {
+				const file = this.app.vault.getAbstractFileByPath(path);
+				if (file instanceof TFile) {
+					const content = await this.app.vault.read(file);
+					if (content.length > 0) {
+						const res = await this.getSyncForPath(path)?.snapshotNote(path, content);
+						if (res) this.core.logger.ok(t("실시간 스냅샷 저장: {path}", { path }));
 					}
 				}
+			} catch (e) {
+				this.core.logger.error(
+					t("스냅샷 저장 실패: {path} — {error}", { path, error: e instanceof Error ? e.message : String(e) }),
+				);
 			}
-		} catch (e) {
-			this.core.logger.error(
-				t("스냅샷 저장 실패: {path} — {error}", { path, error: e instanceof Error ? e.message : String(e) }),
-			);
+		} else {
+			// 스냅샷 영속: Y.Text → vault (변경 시) → LocalWatcher가 CouchDB 업로드
+			try {
+				const file = this.app.vault.getAbstractFileByPath(path);
+				if (file instanceof TFile) {
+					const content = session.ytext?.toString() ?? "";
+					const current = await this.app.vault.read(file);
+					if (content !== current) {
+						// 안전장치: 빈 내용으로 기존 내용을 덮어쓰지 않음(데이터 손실 방지)
+						if (content.length === 0 && current.length > 0) {
+							this.core.logger.warn(t("실시간 스냅샷 생략(빈 내용 덮어쓰기 방지): {path}", { path }));
+						} else {
+							await this.app.vault.modify(file, content);
+							this.core.logger.ok(t("실시간 스냅샷 저장: {path}", { path }));
+						}
+					}
+				}
+			} catch (e) {
+				this.core.logger.error(
+					t("스냅샷 저장 실패: {path} — {error}", { path, error: e instanceof Error ? e.message : String(e) }),
+				);
+			}
 		}
 
 		session.provider.destroy();

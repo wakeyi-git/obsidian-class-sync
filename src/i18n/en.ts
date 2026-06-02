@@ -4,6 +4,11 @@
  * {name} 자리표시자는 양 언어에서 동일하게 유지한다.
  */
 export const EN: Record<string, string> = {
+	// === 실시간 Excalidraw (PoC) ===
+	"실시간 Excalidraw 바인딩: {file}": "Realtime Excalidraw bound: {file}",
+	"실시간: Excalidraw API 접근 불가 — {file} (Excalidraw 플러그인 최신인지 확인)":
+		"Realtime: cannot access Excalidraw API — {file} (check that the Excalidraw plugin is up to date)",
+
 	// === 공통 ===
 	"취소": "Cancel",
 	"적용": "Apply",
