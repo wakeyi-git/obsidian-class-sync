@@ -1,7 +1,23 @@
 import { LinkStatus } from "../../core/sync/MirrorContext";
 import { computeChildRoots } from "../../core/sync/childRoots";
 import { DashboardRow, PanelHost, PanelSection, panelButton } from "./PanelSection";
+import { computeSyncSummary, SyncSummary } from "./syncSummary";
 import { t } from "../../i18n";
+
+function overallLabel(o: SyncSummary["overall"]): string {
+	switch (o) {
+		case "ok":
+			return t("🟢 정상");
+		case "attention":
+			return t("🟠 조치 필요");
+		case "offline":
+			return t("⚪ 오프라인");
+		case "autosync-off":
+			return t("⏸ 자동 동기화 꺼짐");
+		case "empty":
+			return t("⚪ 대기");
+	}
+}
 
 function stateLabel(state: LinkStatus["state"]): string {
 	switch (state) {
@@ -82,11 +98,9 @@ export class SyncStatusSection implements PanelSection {
 			return;
 		}
 
-		const totalConflicts = rows.reduce((n, r) => n + r.conflicts, 0);
-		wrap.createDiv({
-			cls: "class-sync-dash-summary",
-			text: t("링크 {links}개 · 충돌 {conflicts}건", { links: rows.length, conflicts: totalConflicts }),
-		});
+		const summary = computeSyncSummary(rows, this.host.settings);
+		this.renderBanner(wrap, summary);
+		this.renderActionCards(wrap, summary);
 
 		const table = wrap.createEl("table", { cls: "class-sync-dash-table" });
 		const thead = table.createEl("thead").createEl("tr");
@@ -122,10 +136,79 @@ export class SyncStatusSection implements PanelSection {
 			tr.createEl("td", { text: fmtTime(r.lastDownloadAt) });
 			const cTd = tr.createEl("td", { text: String(r.conflicts) });
 			if (r.conflicts > 0) cTd.addClass("class-sync-dash-conflict");
-			const sTd = tr.createEl("td", { text: stateLabel(r.state) });
-			if (r.state === "error" && r.lastError) sTd.setAttribute("title", r.lastError);
+			const sTd = tr.createEl("td");
+			sTd.createSpan({ text: stateLabel(r.state) });
+			if (r.state === "error" && r.lastError) {
+				sTd.setAttribute("title", r.lastError);
+				sTd.createDiv({ cls: "class-sync-dash-err", text: shortErr(r.lastError) });
+			}
+		}
+
+		// 좁은 패널/모바일용 카드 목록(같은 데이터). CSS container query로 표↔카드 전환.
+		this.renderCards(wrap, rows, allRoots);
+	}
+
+	private renderBanner(wrap: HTMLElement, s: SyncSummary): void {
+		const banner = wrap.createDiv({ cls: `class-sync-dash-banner is-${s.overall}` });
+		banner.createSpan({ cls: "class-sync-dash-banner-status", text: overallLabel(s.overall) });
+		const parts =
+			this.host.settings.role === "teacher"
+				? [
+						t("학생 {invited}/{total}", { invited: s.invited, total: s.students }),
+						t("공유 {n}", { n: s.shared }),
+						t("충돌 {n}", { n: s.conflicts }),
+					]
+				: [t("공유 {n}", { n: s.shared }), t("충돌 {n}", { n: s.conflicts })];
+		if (s.lastSyncAt) parts.push(t("마지막 {time}", { time: fmtTime(s.lastSyncAt) }));
+		banner.createSpan({ cls: "class-sync-dash-banner-meta", text: parts.join(" · ") });
+	}
+
+	private renderActionCards(wrap: HTMLElement, s: SyncSummary): void {
+		const cards: Array<{ text: string; cta: string; run: () => void | Promise<void>; warn?: boolean }> = [];
+		if (s.notInvited > 0)
+			cards.push({
+				text: t("초대 필요 {n}명", { n: s.notInvited }),
+				cta: t("학생 설정 열기"),
+				run: () => this.host.openSettings(),
+				warn: true,
+			});
+		if (s.conflicts > 0)
+			cards.push({ text: t("충돌 {n}건", { n: s.conflicts }), cta: t("충돌 목록"), run: () => this.host.openConflictModal(), warn: true });
+		if (s.problems > 0)
+			cards.push({ text: t("연결 문제 {n}건", { n: s.problems }), cta: t("연결 테스트"), run: () => this.host.testConnection(), warn: true });
+		if (s.realtimeTokenMissing)
+			cards.push({ text: t("실시간 토큰 없음"), cta: t("설정 열기"), run: () => this.host.openSettings(), warn: true });
+		if (s.autoSyncOff)
+			cards.push({ text: t("자동 동기화 꺼짐"), cta: t("켜기"), run: () => void this.host.toggleAutoSync() });
+		if (cards.length === 0) return;
+		const box = wrap.createDiv({ cls: "class-sync-dash-cards-actions" });
+		for (const c of cards) {
+			const card = box.createDiv({ cls: `class-sync-action-card${c.warn ? " is-warn" : ""}` });
+			card.createSpan({ text: c.text });
+			panelButton(card, c.cta, c.run);
 		}
 	}
+
+	private renderCards(wrap: HTMLElement, rows: DashboardRow[], allRoots: string[]): void {
+		const box = wrap.createDiv({ cls: "class-sync-dash-cards" });
+		for (const r of rows) {
+			const card = box.createDiv({ cls: "class-sync-dash-card" });
+			const head = card.createDiv({ cls: "class-sync-dash-card-head" });
+			head.createSpan({ cls: "class-sync-dash-card-name", text: r.studentName || r.studentId || "—" });
+			head.createSpan({ text: stateLabel(r.state) });
+			const meta = card.createDiv({ cls: "class-sync-dash-card-meta" });
+			meta.createSpan({ text: t("수신 {time}", { time: fmtTime(r.lastDownloadAt) }) });
+			const conf = meta.createSpan({ text: t("충돌 {n}", { n: r.conflicts }) });
+			if (r.conflicts > 0) conf.addClass("class-sync-dash-conflict");
+			const children = computeChildRoots(r.localRoot, allRoots);
+			if (children.length > 0) meta.createSpan({ cls: "class-sync-nested-tag", text: t(" ↳ 중첩 {n}", { n: children.length }) });
+			if (r.state === "error" && r.lastError) card.createDiv({ cls: "class-sync-dash-err", text: shortErr(r.lastError) });
+		}
+	}
+}
+
+function shortErr(msg: string): string {
+	return msg.length > 80 ? msg.slice(0, 79) + "…" : msg;
 }
 
 function fmtTime(ts?: number): string {

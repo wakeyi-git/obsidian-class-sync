@@ -47,6 +47,9 @@
 }
 
 .class-sync-panel-tab {
+	display: flex;
+	align-items: center;
+	min-height: 36px; /* 터치 타겟 */
 	padding: 6px 10px;
 	font-size: 13px;
 	color: var(--text-muted);
@@ -119,6 +122,33 @@
 	font-weight: 600;
 }
 
+/* 설정 검증 경고 박스(상단) */
+.class-sync-issues {
+	border: 1px solid var(--text-warning);
+	border-radius: 8px;
+	padding: 8px 10px;
+	margin: 8px 0 12px;
+	background: var(--background-secondary);
+}
+
+.class-sync-issues-title {
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+
+.class-sync-issue {
+	font-size: 13px;
+	padding: 2px 0;
+}
+
+.class-sync-issue.is-error {
+	color: var(--text-error);
+}
+
+.class-sync-issue.is-warn {
+	color: var(--text-warning);
+}
+
 /* 목록 그룹의 "추가" 버튼 행: 빈 정보 영역을 없애고 풀폭 버튼으로 그룹에 자연스럽게 붙인다. */
 .class-sync-add-row {
 	border-top: none;
@@ -141,6 +171,118 @@
 .class-sync-dashboard {
 	padding: 8px 12px;
 	overflow: auto;
+	container-type: inline-size; /* 패널 폭 기준 표↔카드 전환(@container) */
+}
+
+/* 상단 상태 배너 */
+.class-sync-dash-banner {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 10px;
+	margin: 4px 0 10px;
+	padding: 8px 10px;
+	border-radius: 8px;
+	background: var(--background-secondary);
+	border-left: 3px solid var(--background-modifier-border);
+}
+
+.class-sync-dash-banner.is-ok {
+	border-left-color: var(--text-success);
+}
+.class-sync-dash-banner.is-attention {
+	border-left-color: var(--text-warning);
+}
+.class-sync-dash-banner.is-offline,
+.class-sync-dash-banner.is-autosync-off {
+	border-left-color: var(--text-muted);
+}
+
+.class-sync-dash-banner-status {
+	font-weight: 600;
+}
+
+.class-sync-dash-banner-meta {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+/* 조치 카드(다음 행동 안내) */
+.class-sync-dash-cards-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.class-sync-action-card {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 10px;
+	border-radius: 8px;
+	font-size: 13px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+}
+
+.class-sync-action-card.is-warn {
+	border-color: var(--text-warning);
+}
+
+.class-sync-action-card button {
+	flex: 0 0 auto;
+}
+
+/* 오류 요약(표·카드 공통) */
+.class-sync-dash-err {
+	color: var(--text-error);
+	font-size: 11px;
+	white-space: normal;
+	margin-top: 2px;
+}
+
+/* 좁은 패널용 카드 목록(기본 숨김, container query로 표시) */
+.class-sync-dash-cards {
+	display: none;
+}
+
+.class-sync-dash-card {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 8px 10px;
+	margin: 6px 0;
+	background: var(--background-secondary);
+}
+
+.class-sync-dash-card-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.class-sync-dash-card-name {
+	font-weight: 600;
+}
+
+.class-sync-dash-card-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 10px;
+	margin-top: 4px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+@container (max-width: 460px) {
+	.class-sync-dash-table {
+		display: none;
+	}
+	.class-sync-dash-cards {
+		display: block;
+	}
 }
 
 .class-sync-dash-header {

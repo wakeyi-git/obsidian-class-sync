@@ -3,7 +3,30 @@ import { ClassSyncSettings, StudentConfig, SharedSpace } from "./types";
 import { ExportModal, ImportModal } from "../ui/BackupModal";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { validateFolderName, foldersOverlap } from "../core/path/path";
+import { validateSettings, SettingsIssue } from "./validateSettings";
 import { t } from "../i18n";
+
+/** 검증 이슈 코드 → 사용자 메시지(i18n). validateSettings는 순수(코드만), 문구는 여기서. */
+function issueMessage(i: SettingsIssue): string {
+	switch (i.code) {
+		case "dup-studentId":
+			return t("학생 ID 중복: {value}", { value: String(i.params?.value) });
+		case "dup-username":
+			return t("계정(username) 중복: {value}", { value: String(i.params?.value) });
+		case "dup-remoteDb":
+			return t("Mirror DB 이름 중복: {value}", { value: String(i.params?.value) });
+		case "folder-overlap":
+			return t("폴더 겹침: ‘{a}’와 ‘{b}’ (이중 동기화 혼란)", { a: String(i.params?.a), b: String(i.params?.b) });
+		case "couch-url":
+			return t("CouchDB URL은 http(s)://로 시작해야 합니다.");
+		case "yjs-wss":
+			return t("Yjs 서버 URL은 wss://(보안) 사용을 권장합니다.");
+		case "rt-no-url":
+			return t("실시간이 켜져 있지만 Yjs 서버 URL이 비어 있습니다.");
+		case "rt-no-token":
+			return t("실시간이 켜져 있지만 토큰/공간 시크릿이 비어 있습니다.");
+	}
+}
 
 /** SettingsTab가 의존하는 플러그인 동작 (순환 import 방지용 인터페이스). */
 export interface SettingsHost extends Plugin {
@@ -40,6 +63,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		// 탭 제목이 이미 플러그인 이름을 표시하므로 상단 제목/그룹 헤딩은 두지 않는다(Obsidian 가이드).
 		this.renderRole(s);
 		this.renderLanguage(s);
+		this.renderIssues(s);
 
 		if (s.role === "teacher") this.renderTeacher(s);
 		else this.renderStudent(s);
@@ -47,6 +71,18 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		this.renderSyncOptions(s);
 		this.renderBackup();
 		this.renderApplyAndReset(s);
+	}
+
+	// --- 설정 검증 경고(상단 지속 표시) ---
+	private renderIssues(s: ClassSyncSettings): void {
+		const issues = validateSettings(s);
+		if (issues.length === 0) return;
+		const box = this.containerEl.createDiv({ cls: "class-sync-issues" });
+		box.createDiv({ cls: "class-sync-issues-title", text: t("확인이 필요한 설정 {n}건", { n: issues.length }) });
+		for (const i of issues) {
+			const row = box.createDiv({ cls: `class-sync-issue is-${i.level}` });
+			row.setText((i.level === "error" ? "⛔ " : "⚠ ") + issueMessage(i));
+		}
 	}
 
 	// --- 언어 ---

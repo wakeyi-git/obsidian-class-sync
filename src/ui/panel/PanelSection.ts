@@ -36,6 +36,8 @@ export interface PanelHost {
 	realtimeStatus(): Promise<void>;
 	openResetModal(): void;
 	refreshShares(): Promise<void>;
+	/** 플러그인 설정 탭 열기(대시보드 조치 카드 CTA용). */
+	openSettings(): void;
 	/** 원본 경로(파일/폴더)를 선택 학생들에게 복사. 기술문서 §20. */
 	bulkCopy(sourcePath: string, opts: CopyOptions, studentIds: string[]): Promise<CopyResult & { error?: string }>;
 	deployShared(space: SharedSpace): Promise<void>;

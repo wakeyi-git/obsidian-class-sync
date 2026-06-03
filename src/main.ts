@@ -530,6 +530,13 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		}
 	}
 
+	/** 플러그인 설정 탭 열기(대시보드 조치 카드 CTA용). */
+	openSettings(): void {
+		const setting = (this.app as unknown as { setting?: { open?: () => void; openTabById?: (id: string) => void } }).setting;
+		setting?.open?.();
+		setting?.openTabById?.(this.manifest.id);
+	}
+
 	/** 설정 탭에서 초기화 모달 실행(교사 전용). */
 	openResetModal(): void {
 		if (this.settings.role !== "teacher") {
