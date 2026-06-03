@@ -18,10 +18,24 @@ jobs:
         with:
           node-version: "20.x"
 
-      - name: Build
+      - name: Install
+        run: npm install
+
+      - name: Test
+        run: npm run test
+
+      - name: Check i18n duplicate keys
         run: |
-          npm install
-          npm run build
+          node -e "
+          const ko=require('fs').readFileSync('src/i18n/en.ts','utf8');
+          const keys=[...ko.matchAll(/^\t\"((?:[^\"\\\\]|\\\\.)*)\":/gm)].map(m=>m[1]);
+          const seen=new Set(),dups=[];for(const k of keys){seen.has(k)?dups.push(k):seen.add(k);}
+          if(dups.length){console.error('Duplicate i18n keys:',dups);process.exit(1);}
+          console.log('i18n keys:',keys.length,'dups: 0');
+          "
+
+      - name: Build
+        run: npm run build
 
       - name: Create release
         env:

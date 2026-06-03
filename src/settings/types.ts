@@ -13,6 +13,8 @@ export interface SharedSpace {
 	folder: string; // 각 vault 내 폴더명
 	members: string[]; // studentId[]
 	provisioned?: boolean;
+	/** 이 공간의 실시간 서명 토큰(HMAC 모드). 배포 시 발급되어 shares 문서로 학생에 전달된다. */
+	token?: string;
 }
 
 /** 교사가 관리하는 학생 1명. 기술문서 §12.1. */
@@ -99,7 +101,11 @@ export interface ClassSyncSettings {
 	/** 실시간 공동 편집(Yjs) — 공유 폴더 문서에만 적용. 기술문서 §19. */
 	realtimeEnabled: boolean;
 	yjsServerUrl: string; // wss://yjs.example.com
-	yjsToken: string; // 공유 비밀 토큰
+	yjsToken: string; // 레거시 전역 토큰(서버 YJS_TOKEN 모드)
+	/** Yjs 공간 시크릿(교사 전용, HMAC 키). 설정 시 공유 공간별 서명 토큰을 발급한다. 서버 YJS_SECRET와 동일. */
+	yjsSecret?: string;
+	/** 공간 토큰 만료(일). 0/미설정=무만료. 주기적 재배포로 폐기하려면 값을 둔다. */
+	yjsTokenTtlDays?: number;
 
 	/** 실시간 세션 중 CouchDB 스냅샷 주기(초). 0=끔. 기술문서 §19.2. 교사 설정 → rtconfig로 전파. */
 	realtimeSnapshotSec: number;

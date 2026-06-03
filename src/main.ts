@@ -14,6 +14,7 @@ import { ConflictModal, ConflictRow, ConflictHost } from "./ui/ConflictModal";
 import { ResolveChoice } from "./core/sync/ConflictManager";
 import { BulkCopy, CopyOptions, CopyResult } from "./modes/teacher/BulkCopy";
 import { RealtimeManager } from "./core/realtime/RealtimeManager";
+import { mintSpaceToken } from "./core/realtime/spaceToken";
 import { realtimeEditorExtension } from "./core/realtime/editorBinding";
 import { FeedbackStore } from "./core/feedback/FeedbackStore";
 import { promptAddFeedback } from "./ui/FeedbackView";
@@ -203,16 +204,17 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	}
 
 	// --- 학생 프로비저닝 + 초대 (Teacher) ---
-	async inviteStudent(student: StudentConfig): Promise<void> {
+	/** 성공(프로비저닝+초대 표시) 시 true. 실패 시 false(호출자가 로컬 상태를 되돌릴 수 있게). */
+	async inviteStudent(student: StudentConfig): Promise<boolean> {
 		await this.activatePanel("log");
 		const s = this.settings;
 		if (!s.couchdbUrl || !s.username || !s.password) {
 			this.logger.warn(t("관리자 계정(CouchDB URL/사용자/비밀번호)을 먼저 입력하세요."), true);
-			return;
+			return false;
 		}
 		if (!student.studentId) {
 			this.logger.warn(t("학생 ID를 입력하세요."), true);
-			return;
+			return false;
 		}
 		// 기본값 보정
 		if (!student.username) student.username = student.studentId;
@@ -229,7 +231,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		});
 		if (!res.ok) {
 			this.logger.error(t("프로비저닝 실패: {err}", { err: res.error ?? "" }), true);
-			return;
+			return false;
 		}
 		student.provisioned = true;
 		await this.saveSettings();
@@ -247,6 +249,29 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			password: student.password,
 		};
 		new InviteModal(this.app, payload).open();
+		return true;
+	}
+
+	/**
+	 * 학생 비밀번호 재발급(회전). 새 비밀번호로 _users를 갱신하므로 **이전 초대 코드는 즉시 무효**가 된다.
+	 * 잃어버린/유출된 초대를 폐기하는 용도. 새 초대 코드를 바로 보여준다.
+	 *
+	 * 서버 갱신이 실패하면 로컬 비밀번호를 이전 값으로 되돌려, 로컬만 새 비밀번호로 바뀐 불일치를 막는다.
+	 */
+	async rotateStudentPassword(student: StudentConfig): Promise<void> {
+		if (this.settings.role !== "teacher") return;
+		if (!student.studentId) {
+			this.logger.warn(t("학생 ID를 입력하세요."), true);
+			return;
+		}
+		const prev = student.password;
+		student.password = genPassword(); // 새 비밀번호 후보
+		this.logger.info(t("비밀번호 재발급(이전 초대 무효): {id}", { id: student.studentId }), true);
+		const ok = await this.inviteStudent(student); // 재프로비저닝(_users 갱신) + 새 초대 표시
+		if (!ok) {
+			student.password = prev; // 서버 실패 → 로컬 되돌림(이전 비밀번호/초대 유지)
+			this.logger.warn(t("비밀번호 재발급 실패 — 이전 비밀번호를 유지합니다."), true);
+		}
 	}
 
 	// --- 공유 공간 배포 (Teacher, Phase 6a) ---
@@ -276,13 +301,26 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			return;
 		}
 		space.provisioned = true;
+
+		// HMAC 모드(yjsSecret 설정): 배포 때마다 **모든** 공유 공간 토큰을 재발급한다. 이 배포에서 모든 학생의
+		// shares 문서가 다시 기록되므로, 시크릿 변경/TTL 만료 시 구 토큰이 그대로 다시 내려가는 일을 막는다.
+		// (유출 시 해당 공간 room만 접근 가능 — 학급 전체 아님.)
+		if (s.yjsSecret) {
+			const ttl =
+				s.yjsTokenTtlDays && s.yjsTokenTtlDays > 0
+					? Math.floor(Date.now() / 1000) + s.yjsTokenTtlDays * 86400
+					: undefined;
+			for (const sp of s.sharedSpaces) {
+				sp.token = await mintSpaceToken(s.yjsSecret, { classId: s.classId, spaceId: sp.id, exp: ttl });
+			}
+		}
 		await this.saveSettings();
 
 		// 모든 학생의 shares + rtconfig 문서 갱신(추가/제거 학생 모두 반영)
 		for (const st of s.students) {
 			const spaces = s.sharedSpaces
 				.filter((sp) => sp.members.includes(st.studentId))
-				.map((sp) => ({ id: sp.id, name: sp.name, remoteDb: sp.remoteDb, folder: sp.folder }));
+				.map((sp) => ({ id: sp.id, name: sp.name, remoteDb: sp.remoteDb, folder: sp.folder, token: sp.token }));
 			const r = await admin.putDoc(st.remoteDb, { _id: SHARES_DOC_ID, type: "shares", spaces });
 			if (!r.ok) this.logger.error(t("shares 기록 실패({id}): {err}", { id: st.studentId, err: r.error ?? "" }));
 			const rc = await admin.putDoc(st.remoteDb, {

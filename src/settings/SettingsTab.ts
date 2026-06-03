@@ -12,7 +12,8 @@ export interface SettingsHost extends Plugin {
 	restartMode(): Promise<void>;
 	requestApply(): void;
 	resetSetup(): Promise<void>;
-	inviteStudent(student: StudentConfig): Promise<void>;
+	inviteStudent(student: StudentConfig): Promise<boolean>;
+	rotateStudentPassword(student: StudentConfig): Promise<void>;
 	ingestInvite(code: string): Promise<void>;
 	deployShared(space: SharedSpace): Promise<void>;
 	exportSettingsJson(): string;
@@ -159,6 +160,33 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		);
 		rt.addSetting((set) =>
 			set
+				.setName(t("Yjs 공간 시크릿 (HMAC, 권장)"))
+				.setDesc(t("설정하면 공유 공간별 서명 토큰을 발급합니다(유출돼도 해당 공간만 접근). 서버 YJS_SECRET와 동일하게 두고 공유하지 마세요. 재배포 시 토큰이 갱신됩니다."))
+				.addText((txt) => {
+					txt.setPlaceholder(t("서버 YJS_SECRET와 동일")).setValue(s.yjsSecret ?? "").onChange(async (v) => {
+						s.yjsSecret = v.trim() || undefined;
+						await this.host.saveSettings();
+					});
+					txt.inputEl.type = "password";
+					noAutoCorrect(txt.inputEl);
+				}),
+		);
+		rt.addSetting((set) =>
+			set
+				.setName(t("공간 토큰 만료(일)"))
+				.setDesc(t("0=무만료. 값을 두면 주기적 재배포로 토큰을 무효화할 수 있습니다."))
+				.addText((txt) => {
+					txt.setPlaceholder("0").setValue(String(s.yjsTokenTtlDays ?? 0));
+					txt.inputEl.type = "number";
+					txt.onChange(async (v) => {
+						const n = Number(v);
+						s.yjsTokenTtlDays = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+						await this.host.saveSettings();
+					});
+				}),
+		);
+		rt.addSetting((set) =>
+			set
 				.setName(t("세션 중 스냅샷 주기(초)"))
 				.setDesc(t("실시간 세션 중 일정 주기로 CouchDB에 본문을 저장해 오프라인 멤버에 반영합니다(0=끔)."))
 				.addText((txt) => {
@@ -241,7 +269,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 	private renderStudentCard(group: SettingGroup, st: StudentConfig, index: number): void {
 		const card = group.listEl.createDiv({ cls: "class-sync-student-card" });
 
-		new Setting(card)
+		const head = new Setting(card)
 			.setName(st.studentName || st.studentId || t("학생 {n}", { n: index + 1 }))
 			.setHeading()
 			.addButton((b) =>
@@ -249,7 +277,16 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 					.setButtonText(st.provisioned ? t("초대 재발급") : t("초대"))
 					.setCta()
 					.onClick(() => this.runAsync(b, async () => { await this.host.inviteStudent(st); this.display(); })),
-			)
+			);
+		if (st.provisioned) {
+			head.addButton((b) =>
+				b
+					.setButtonText(t("비밀번호 재발급"))
+					.setTooltip(t("새 비밀번호로 바꿔 이전 초대 코드를 무효화합니다."))
+					.onClick(() => this.runAsync(b, async () => { await this.host.rotateStudentPassword(st); this.display(); })),
+			);
+		}
+		head
 			.addButton((b) =>
 				b
 					.setButtonText(t("삭제"))

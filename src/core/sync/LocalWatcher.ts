@@ -1,6 +1,7 @@
 import { EventRef, Platform, TAbstractFile, TFile } from "obsidian";
 import { MirrorContext } from "./MirrorContext";
 import { Uploader } from "./Uploader";
+import { exceedsAttachmentLimit } from "./attachment";
 import { sha256 } from "../hash/hash";
 import { t } from "../../i18n";
 
@@ -81,6 +82,9 @@ export class LocalWatcher {
 			const c = await this.ctx.readVaultFile(localPath);
 			return c == null ? null : await sha256(c);
 		}
+		// 큰 첨부는 메모리에 읽기 전에 크기 한도를 본다(업로드와 동일 — 모바일 보호). 초과면 추적/업로드 대상 아님.
+		const size = this.ctx.getFile(localPath)?.stat.size ?? 0;
+		if (exceedsAttachmentLimit(size, this.ctx.settings.maxAttachmentMB || 0)) return null;
 		const b = await this.ctx.readVaultBinary(localPath);
 		return b == null ? null : await sha256(b);
 	}

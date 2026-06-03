@@ -44,12 +44,14 @@ const COLORS = ["#e11d48", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#0891b2"
  */
 export class RealtimeManager {
 	private sessions = new Map<string, Session>();
+	/** 지원하지 않는 excalidraw 형식 경고를 경로당 1회만 내기 위한 집합. */
+	private warnedUnsupportedExcalidraw = new Set<string>();
 
 	constructor(
 		private app: App,
 		private core: CoreServices,
 		/** 현재 사용자의 공유 공간 목록(교사=설정, 학생=shares). main이 주입. */
-		private getSpaces: () => Array<{ id: string; folder: string }>,
+		private getSpaces: () => Array<{ id: string; folder: string; token?: string }>,
 		/** 로컬 경로 → 담당 동기화 링크(스냅샷 쓰기용). main이 현재 mode 기준으로 주입. */
 		private getSyncForPath: (localPath: string) => SnapshotTarget | undefined = () => undefined,
 	) {}
@@ -77,7 +79,8 @@ export class RealtimeManager {
 	/** 열린 markdown/excalidraw 에디터를 훑어 세션을 맞춘다. workspace 이벤트마다 호출. */
 	syncOpenEditors(): void {
 		const s = this.settings;
-		const on = s.realtimeEnabled && !!s.yjsServerUrl && !!s.yjsToken;
+		// 토큰은 공간별(HMAC) 또는 전역(레거시) — startSession이 공간별로 확인하므로 여기선 서버 URL만 본다.
+		const on = s.realtimeEnabled && !!s.yjsServerUrl;
 
 		type Target = { kind: "md"; views: MarkdownView[] } | { kind: "excalidraw"; view: ExcalidrawLikeView };
 		const targets = new Map<string, Target>();
@@ -92,11 +95,24 @@ export class RealtimeManager {
 				if (cur && cur.kind === "md") cur.views.push(view);
 				else targets.set(file.path, { kind: "md", views: [view] });
 			}
-			// 공유 excalidraw 그림
+			// 공유 excalidraw 그림 — .excalidraw.md만 지원(세션 종료 스냅샷이 markdown 업로드 경로를 타야 함).
+			// 순수 .excalidraw는 비-markdown이라 스냅샷이 CouchDB에 저장되지 않으므로 실시간을 켜지 않는다.
 			for (const leaf of this.app.workspace.getLeavesOfType("excalidraw")) {
 				const view = leaf.view as ExcalidrawLikeView;
 				const file = view?.file;
 				if (!file || !this.spaceFor(file.path)) continue;
+				if (!this.isSupportedExcalidraw(file.path)) {
+					if (!this.warnedUnsupportedExcalidraw.has(file.path)) {
+						this.warnedUnsupportedExcalidraw.add(file.path);
+						this.core.logger.warn(
+							t("실시간 미지원: {path} — Excalidraw 실시간은 .excalidraw.md 형식만 지원합니다(저장이 전파되지 않음).", {
+								path: file.path,
+							}),
+							true,
+						);
+					}
+					continue;
+				}
 				targets.set(file.path, { kind: "excalidraw", view });
 			}
 		}
@@ -126,9 +142,13 @@ export class RealtimeManager {
 		if (!room) return undefined;
 		const dbPath = path.slice(space.folder.length + 1);
 
+		// 공간별 토큰(HMAC 모드)이 있으면 그것을, 없으면 레거시 전역 토큰을 쓴다.
+		const token = space.token || this.settings.yjsToken;
+		if (!token) return undefined; // 토큰 없으면 이 공간 실시간 비활성
+
 		const ydoc = new Y.Doc();
 		const provider = new WebsocketProvider(this.settings.yjsServerUrl, room, ydoc, {
-			params: { token: this.settings.yjsToken },
+			params: { token },
 		});
 
 		const color = COLORS[Math.abs(hash(this.settings.deviceId)) % COLORS.length];
@@ -243,11 +263,14 @@ export class RealtimeManager {
 	diagnose(): void {
 		const s = this.settings;
 		const log = this.core.logger;
+		const spaces = this.getSpaces();
+		const withToken = spaces.filter((x) => x.token).length;
 		log.info(
-			t("실시간 점검 — enabled={enabled}, url={url}, token={token}", {
+			t("실시간 점검 — enabled={enabled}, url={url}, 전역토큰={legacy}, 공간토큰={spaceTokens}", {
 				enabled: String(s.realtimeEnabled),
 				url: s.yjsServerUrl ? t("설정됨") : t("없음"),
-				token: s.yjsToken ? t("설정됨") : t("없음"),
+				legacy: s.yjsToken ? t("설정됨") : t("없음"),
+				spaceTokens: `${withToken}/${spaces.length}`,
 			}),
 			true,
 		);
@@ -259,9 +282,10 @@ export class RealtimeManager {
 		const f = this.app.workspace.getActiveFile();
 		const space = f ? this.spaceFor(f.path) : null;
 		log.info(
-			t("활성 파일: {file} → 공유공간: {space}", {
+			t("활성 파일: {file} → 공유공간: {space} (공간토큰={spaceToken})", {
 				file: f?.path ?? t("(없음)"),
 				space: f ? (space?.id ?? t("아님(공유폴더 밖)")) : "-",
+				spaceToken: space ? (space.token ? t("설정됨") : s.yjsToken ? t("전역 사용") : t("없음")) : "-",
 			}),
 		);
 		// room 이름(교사·학생이 정확히 같아야 실시간 공유됨)
@@ -367,6 +391,11 @@ export class RealtimeManager {
 		return lower.endsWith(".excalidraw") || lower.endsWith(".excalidraw.md");
 	}
 
+	/** 실시간 지원 excalidraw 형식(.excalidraw.md만). 스냅샷이 markdown 업로드 경로를 타야 전파된다. */
+	private isSupportedExcalidraw(p: string): boolean {
+		return p.toLowerCase().endsWith(".excalidraw.md");
+	}
+
 	/** Excalidraw 뷰의 imperative API 획득. 뷰 속성 → ExcalidrawAutomate 순으로 시도. */
 	private getExcalidrawApi(view: ExcalidrawLikeView): ExcalidrawImperativeApi | null {
 		if (view.excalidrawAPI && typeof view.excalidrawAPI.onChange === "function") return view.excalidrawAPI;
@@ -415,7 +444,17 @@ export class RealtimeManager {
 					const content = await this.app.vault.read(file);
 					if (content.length > 0) {
 						const res = await this.getSyncForPath(path)?.snapshotNote(path, content);
-						if (res) this.core.logger.ok(t("실시간 스냅샷 저장: {path}", { path }));
+						if (res === "uploaded" || res === "skipped-same") {
+							this.core.logger.ok(t("실시간 스냅샷 저장: {path}", { path }));
+						} else if (res) {
+							this.core.logger.warn(
+								t("실시간 스냅샷 미저장({reason}): {path} — 비실시간 멤버에 전파되지 않을 수 있습니다.", {
+									reason: String(res),
+									path,
+								}),
+								true,
+							);
+						}
 					}
 				}
 			} catch (e) {
@@ -459,7 +498,7 @@ export class RealtimeManager {
 	}
 
 	/** 파일 경로가 속한 공유 공간(있으면). 보관/충돌/제외 폴더 아래 파일은 실시간 대상이 아니다. */
-	private spaceFor(localPath: string): { id: string; folder: string } | null {
+	private spaceFor(localPath: string): { id: string; folder: string; token?: string } | null {
 		for (const sp of this.getSpaces()) {
 			if (!sp.folder) continue;
 			if (localPath === sp.folder || localPath.startsWith(sp.folder + "/")) {

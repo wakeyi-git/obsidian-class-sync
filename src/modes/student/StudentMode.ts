@@ -54,7 +54,7 @@ export class StudentMode implements ClassSyncMode {
 			const s = this.core.settings;
 			await this.applyRtConfig(); // 교사가 배포한 실시간 설정 수신
 			const spaces = await this.readShares();
-			this.core.sharedSpaces = spaces.map((sp) => ({ id: sp.id, folder: sp.folder }));
+			this.core.sharedSpaces = spaces.map((sp) => ({ id: sp.id, folder: sp.folder, token: sp.token }));
 			const sharedFolders = spaces.map((sp) => sp.folder);
 			const allRoots = [s.localRoot, ...sharedFolders];
 

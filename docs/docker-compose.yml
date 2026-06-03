@@ -9,8 +9,12 @@ services:
       - HOST=0.0.0.0
       - PORT=1234
       - YPERSISTENCE=/data  # 영속 저장(LevelDB)
-      # 토큰 인증: 아래를 긴 무작위 문자열로 바꾸세요. (예: openssl rand -hex 24)
-      # 비워 두거나 줄을 지우면 인증이 꺼집니다(테스트용).
-      - YJS_TOKEN=CHANGE_ME_to_a_long_random_secret
+      # 인증(권장): 아래 주석을 풀고 **반드시 새 무작위 값**으로 바꾸세요. (예: openssl rand -hex 32)
+      # YJS_SECRET = HMAC 시크릿. 플러그인의 ‘Yjs 공간 시크릿’과 동일하게 두면 공유 공간(room)별 서명 토큰을
+      # 검증한다(토큰 유출돼도 해당 공간만 접근). 아래 YJS_TOKEN(레거시 전역)보다 우선합니다.
+      # ⚠ CHANGE_ME_로 시작하거나 16자 미만이면 서버가 기동을 거부합니다(알려진 시크릿 사용 방지).
+      # - YJS_SECRET=replace-with-output-of-openssl-rand-hex-32
+      # 레거시 전역 토큰 모드(하위호환). YJS_SECRET을 쓰면 무시됩니다. 둘 다 비우면 인증 off(테스트용).
+      # - YJS_TOKEN=replace-with-a-long-random-secret
     volumes:
       - ./data:/data

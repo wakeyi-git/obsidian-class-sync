@@ -2,7 +2,7 @@ import { ClassSyncSettings } from "./types";
 import { t } from "../i18n";
 
 /** 내보낼 때 제외할 자격증명/기기 고유 키. 기술문서 §22.4. */
-const SECRET_KEYS: Array<keyof ClassSyncSettings> = ["password", "yjsToken"];
+const SECRET_KEYS: Array<keyof ClassSyncSettings> = ["password", "yjsToken", "yjsSecret"];
 const DEVICE_KEYS: Array<keyof ClassSyncSettings> = ["deviceId", "lastSeqByDb"];
 
 /** 가져올 때 구조/옵션으로 병합할 키(현재 기기의 secret·device·role은 보존). */
@@ -45,6 +45,9 @@ export function exportSettings(s: ClassSyncSettings): string {
 	for (const k of [...SECRET_KEYS, ...DEVICE_KEYS]) delete copy[k];
 	if (Array.isArray(copy.students)) {
 		for (const st of copy.students) delete st.password; // 학생 비밀번호는 내보내지 않음
+	}
+	if (Array.isArray(copy.sharedSpaces)) {
+		for (const sp of copy.sharedSpaces) delete sp.token; // 공간 실시간 토큰(베어러)도 내보내지 않음
 	}
 	const payload: PortablePayload = {
 		_meta: { app: "class-sync", version: 1, exportedAt: new Date().toISOString() },

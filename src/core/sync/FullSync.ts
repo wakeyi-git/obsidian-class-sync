@@ -12,6 +12,7 @@ import {
 	exceedsBulkThreshold,
 } from "./LinkManifest";
 import { NoteDoc, AssetDoc, noteId, assetId } from "../model/types";
+import { exceedsAttachmentLimit } from "./attachment";
 import { sha256 } from "../hash/hash";
 import { t } from "../../i18n";
 
@@ -231,6 +232,9 @@ export class FullSync {
 			const content = await ctx.readVaultFile(localPath);
 			localHash = content == null ? null : await sha256(content);
 		} else {
+			// 업로드와 동일하게 크기 한도를 먼저 본다 — 큰 파일을 메모리에 읽지 않는다(모바일 보호).
+			const size = ctx.getFile(localPath)?.stat.size ?? 0;
+			if (exceedsAttachmentLimit(size, ctx.settings.maxAttachmentMB || 0)) return null;
 			const bin = await ctx.readVaultBinary(localPath);
 			localHash = bin == null ? null : await sha256(bin);
 		}
