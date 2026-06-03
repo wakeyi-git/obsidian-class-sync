@@ -30,8 +30,7 @@ export interface StudentConfig {
 
 /**
  * Class Sync 설정. 기술문서 §5.1 / §11.1 / §12.1.
- * Phase 1(단일 학생 양방향 미러)에 필요한 필드. Teacher의 다중 학생 배열(§12.1 students[])은
- * Phase 2에서 추가하며, Phase 1은 localRoot 1건으로 동작한다.
+ * 학생 모드는 localRoot 1건(개인 vault), 교사 모드는 students[] 다중 링크 + sharedSpaces[]로 동작한다.
  */
 export interface ClassSyncSettings {
 	/** 최초 1회 역할 선택 완료 여부. true면 역할이 잠긴다(기술문서 §5.4 보강). */
@@ -95,7 +94,7 @@ export interface ClassSyncSettings {
 	/** mirror DB별 로컬 changes 체크포인트(local seq). vault 적용 증분 재개에 사용. */
 	lastSeqByDb: Record<string, string>;
 
-	/** 충돌 정책. Phase 1은 preserve-local 고정(정식 처리는 Phase 3). */
+	/** 충돌 정책: preserve-local(로컬 유지 + 원격본을 _충돌/에 보존, 충돌 목록 UI로 해소). */
 	conflictPolicy: ConflictPolicy;
 
 	/** 실시간 공동 편집(Yjs) — 공유 폴더 문서에만 적용. 기술문서 §19. */

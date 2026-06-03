@@ -10,7 +10,7 @@ import { t } from "../../i18n";
  *
  * ⚠️ 시작 시점이 중요하다: Obsidian은 앱 시작 시 기존 전 파일에 'create'를 한 번씩 발생시킨다.
  * 따라서 workspace.onLayoutReady() 이후에만 이벤트를 등록해 시작 시 전체 재업로드를 막는다.
- * Phase 1은 create/modify만 다룬다(이동/이름변경/삭제는 Phase 3).
+ * create/modify(업로드) + rename/delete(tombstone)를 모두 다룬다.
  */
 export class LocalWatcher {
 	private refs: EventRef[] = [];

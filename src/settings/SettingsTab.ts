@@ -1,6 +1,7 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting, SettingGroup } from "obsidian";
 import { ClassSyncSettings, StudentConfig, SharedSpace } from "./types";
 import { ExportModal, ImportModal } from "../ui/BackupModal";
+import { ConfirmModal } from "../ui/ConfirmModal";
 import { validateFolderName, foldersOverlap } from "../core/path/path";
 import { t } from "../i18n";
 
@@ -218,12 +219,21 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 				b
 					.setButtonText(t("삭제"))
 					.setWarning()
-					.onClick(async () => {
-						s.sharedSpaces.splice(index, 1);
-						await this.host.saveSettings();
-						this.host.requestApply();
-						this.display();
-					}),
+					.onClick(() =>
+						new ConfirmModal(this.host.app, {
+							title: t("공유 공간 삭제: {name}", { name: sp.name || sp.id }),
+							message: t(
+								"이 공유 공간을 목록에서 제거합니다.\n서버 데이터(공유 DB)는 유지되며 동기화 링크만 사라집니다.\n서버까지 지우려면 관리 탭의 ‘서버 데이터 초기화’를 사용하세요.",
+							),
+							warning: true,
+							onConfirm: async () => {
+								s.sharedSpaces.splice(index, 1);
+								await this.host.saveSettings();
+								this.host.requestApply();
+								this.display();
+							},
+						}).open(),
+					),
 			);
 
 		new Setting(card).setName(t("이름")).addText((txt) => {
@@ -291,12 +301,21 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 				b
 					.setButtonText(t("삭제"))
 					.setWarning()
-					.onClick(async () => {
-						this.host.settings.students.splice(index, 1);
-						await this.host.saveSettings();
-						this.host.requestApply();
-						this.display();
-					}),
+					.onClick(() =>
+						new ConfirmModal(this.host.app, {
+							title: t("학생 삭제: {name}", { name: st.studentName || st.studentId || t("학생") }),
+							message: t(
+								"이 학생을 목록에서 제거합니다.\n서버 데이터(계정·Mirror DB)는 유지되며 동기화 링크만 사라집니다.\n서버까지 지우려면 관리 탭의 ‘서버 데이터 초기화’를 사용하세요.",
+							),
+							warning: true,
+							onConfirm: async () => {
+								this.host.settings.students.splice(index, 1);
+								await this.host.saveSettings();
+								this.host.requestApply();
+								this.display();
+							},
+						}).open(),
+					),
 			);
 
 		this.studentField(card, t("이름"), st, "studentName", t("학생A"));

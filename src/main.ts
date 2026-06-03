@@ -30,7 +30,7 @@ import { ResetModal } from "./ui/ResetModal";
 import { initI18n, t } from "./i18n";
 
 /**
- * Class Sync for Obsidian — Phase 1 진입점.
+ * Class Sync for Obsidian — 플러그인 진입점.
  *
  * 역할은 최초 1회 선택 후 잠긴다(기술문서 §5.4 보강). 실행 시 저장된 last_seq부터 증분 재개하고,
  * 전체 동기화는 최초 1회와 수동 명령에서만 수행한다.
@@ -96,7 +96,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			await this.startMode();
 		}
 
-		this.logger.info(t("Class Sync 로드됨 [Phase 2] (role={role}, setup={setup}).", { role: this.settings.role, setup: String(this.settings.setupComplete) }));
+		this.logger.info(t("Class Sync 로드됨 (role={role}, setup={setup}).", { role: this.settings.role, setup: String(this.settings.setupComplete) }));
 	}
 
 	async onunload(): Promise<void> {
@@ -274,7 +274,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		}
 	}
 
-	// --- 공유 공간 배포 (Teacher, Phase 6a) ---
+	// --- 공유 공간 배포 (Teacher) ---
 	async deployShared(space: SharedSpace): Promise<void> {
 		await this.activatePanel("log");
 		const s = this.settings;

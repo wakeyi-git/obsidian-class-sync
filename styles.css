@@ -1,4 +1,4 @@
-/* Class Sync — Phase 0 POC */
+/* Class Sync — styles */
 
 .class-sync-log-toolbar {
 	padding: 6px 12px;
@@ -89,6 +89,18 @@
 	font-size: 12px;
 	color: var(--text-muted);
 	margin: 2px 0 6px;
+}
+
+/* 관리 탭: 버튼 + 한 줄 설명 묶음 */
+.class-sync-manage-item {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-bottom: 12px;
+}
+
+.class-sync-manage-item button {
+	align-self: flex-start;
 }
 
 .class-sync-panel-row {

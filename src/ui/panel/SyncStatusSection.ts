@@ -72,7 +72,13 @@ export class SyncStatusSection implements PanelSection {
 		wrap.empty();
 
 		if (rows.length === 0) {
-			wrap.createEl("p", { text: t("표시할 링크가 없습니다. (교사: 학생을 초대하세요)") });
+			wrap.createEl("p", {
+				cls: "class-sync-feedback-empty",
+				text:
+					this.host.settings.role === "teacher"
+						? t("아직 동기화할 학생이 없습니다. 설정에서 학생을 추가하고 ‘초대’하세요.")
+						: t("아직 연결되지 않았습니다. 교사가 준 QR/초대 코드를 적용하세요."),
+			});
 			return;
 		}
 

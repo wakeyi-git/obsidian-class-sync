@@ -115,7 +115,9 @@ export const EN: Record<string, string> = {
 	"초대": "Invite",
 	"학생 ID": "Student ID",
 	"Mirror DB (비우면 자동)": "Mirror DB (auto if empty)",
+	"mirror_<학생ID>": "mirror_<studentID>",
 	"폴더 (비우면 자동)": "Folder (auto if empty)",
+	"<이름 또는 학생ID>": "<name or studentID>",
 	"상태: 프로비저닝됨 ✓": "Status: Provisioned ✓",
 	"상태: 미프로비저닝 — ‘초대’를 누르면 계정/DB가 생성됩니다.": "Status: Not provisioned — pressing ‘Invite’ creates the account and DB.",
 	"초대로 연결": "Connect via invite",
@@ -222,6 +224,18 @@ export const EN: Record<string, string> = {
 	"로컬 캐시 초기화": "Reset local cache",
 	"서버 데이터 초기화…": "Reset server data…",
 	"공유 공간 새로고침": "Refresh shared spaces",
+	"CouchDB 서버 연결과 DB 읽기/쓰기 권한을 확인합니다.": "Checks the CouchDB connection and read/write permissions on the DBs.",
+	"서버 도달·링크별 권한·실시간 상태를 한 번에 점검합니다.": "Checks server reachability, per-link permissions, and realtime status at once.",
+	"현재 파일의 실시간 세션·접속자·토큰 상태를 로그에 출력합니다.": "Logs the current file's realtime session, participants, and token status.",
+	"로컬 PouchDB를 비우고 서버에서 다시 받습니다(서버 데이터는 그대로).": "Clears the local PouchDB and re-fetches from the server (server data is kept).",
+	"서버의 학생·공유 DB를 삭제합니다(파괴적 — 확인 단어 입력 필요).": "Deletes the student/shared DBs on the server (destructive — requires typing a confirm word).",
+	"교사가 배포한 공유 공간 목록을 서버에서 다시 받습니다.": "Re-fetches the shared spaces deployed by the teacher from the server.",
+	"아직 동기화할 학생이 없습니다. 설정에서 학생을 추가하고 ‘초대’하세요.": "No students to sync yet. Add students in settings and ‘Invite’ them.",
+	"아직 연결되지 않았습니다. 교사가 준 QR/초대 코드를 적용하세요.": "Not connected yet. Apply the QR / invite code from your teacher.",
+	"공유 공간 삭제: {name}": "Delete shared space: {name}",
+	"이 공유 공간을 목록에서 제거합니다.\n서버 데이터(공유 DB)는 유지되며 동기화 링크만 사라집니다.\n서버까지 지우려면 관리 탭의 ‘서버 데이터 초기화’를 사용하세요.": "Removes this shared space from the list.\nServer data (the shared DB) is kept — only the sync link is removed.\nTo also delete server data, use ‘Reset server data’ in the Manage tab.",
+	"학생 삭제: {name}": "Delete student: {name}",
+	"이 학생을 목록에서 제거합니다.\n서버 데이터(계정·Mirror DB)는 유지되며 동기화 링크만 사라집니다.\n서버까지 지우려면 관리 탭의 ‘서버 데이터 초기화’를 사용하세요.": "Removes this student from the list.\nServer data (account & mirror DB) is kept — only the sync link is removed.\nTo also delete server data, use ‘Reset server data’ in the Manage tab.",
 
 	// === 모달: Invite ===
 	"학생 초대 — {name}": "Invite student — {name}",
@@ -319,7 +333,7 @@ export const EN: Record<string, string> = {
 
 	// === main: 명령 / 리본 / Notice / 로그 ===
 	"Class Sync 패널 열기": "Open Class Sync panel",
-	"Class Sync 로드됨 [Phase 2] (role={role}, setup={setup}).": "Class Sync loaded [Phase 2] (role={role}, setup={setup}).",
+	"Class Sync 로드됨 (role={role}, setup={setup}).": "Class Sync loaded (role={role}, setup={setup}).",
 	"Teacher Mode 설정 완료. 설정에서 관리자 계정 입력 후 학생을 추가하세요.": "Teacher Mode setup complete. Enter the admin account in settings, then add students.",
 	"Student Mode 설정 완료. 교사 초대(QR/코드)로 연결하세요.": "Student Mode setup complete. Connect using the teacher's invite (QR/code).",
 	"역할/동기화 상태/로컬 캐시를 초기화했습니다. 역할을 다시 선택하세요.": "Reset the role, sync state, and local cache. Please select a role again.",

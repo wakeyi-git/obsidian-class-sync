@@ -11,7 +11,7 @@ export interface LogEntry {
 type Listener = (entry: LogEntry) => void;
 
 /**
- * POC 로그 패널용 단순 로거.
+ * 로그 패널용 단순 로거.
  * 콘솔 + 인메모리 버퍼 + 리스너(LogView)로 전달하고, 중요한 항목은 Notice로도 띄운다.
  */
 export class Logger {

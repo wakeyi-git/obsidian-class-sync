@@ -24,15 +24,8 @@ jobs:
       - name: Test
         run: npm run test
 
-      - name: Check i18n duplicate keys
-        run: |
-          node -e "
-          const ko=require('fs').readFileSync('src/i18n/en.ts','utf8');
-          const keys=[...ko.matchAll(/^\t\"((?:[^\"\\\\]|\\\\.)*)\":/gm)].map(m=>m[1]);
-          const seen=new Set(),dups=[];for(const k of keys){seen.has(k)?dups.push(k):seen.add(k);}
-          if(dups.length){console.error('Duplicate i18n keys:',dups);process.exit(1);}
-          console.log('i18n keys:',keys.length,'dups: 0');
-          "
+      - name: Check i18n (duplicate keys fail, missing keys warn)
+        run: npm run i18n:check
 
       - name: Build
         run: npm run build
