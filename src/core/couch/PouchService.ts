@@ -278,12 +278,23 @@ export class PouchService {
 
 	// --- 로컬 ↔ 원격 live replication ---
 
+	/** 1회성 push만(로컬→원격). 수동 "업로드만"에서 원격 변경을 끌어오지 않기 위해 사용. */
+	async replicatePushOnce(): Promise<number> {
+		const push = await this.localDb().replicate.to(this.remote);
+		return push?.docs_written ?? 0;
+	}
+
+	/** 1회성 pull만(원격→로컬). 수동 "다운로드만"에서 로컬 변경을 밀어올리지 않기 위해 사용. */
+	async replicatePullOnce(): Promise<number> {
+		const pull = await this.localDb().replicate.from(this.remote);
+		return pull?.docs_written ?? 0;
+	}
+
 	/** 1회성 양방향 동기화(push 후 pull). 자동 동기화가 꺼진 상태의 수동 전체 동기화에 사용. */
 	async replicateOnce(): Promise<{ pushed: number; pulled: number }> {
-		const db = this.localDb();
-		const push = await db.replicate.to(this.remote);
-		const pull = await db.replicate.from(this.remote);
-		return { pushed: push?.docs_written ?? 0, pulled: pull?.docs_written ?? 0 };
+		const pushed = await this.replicatePushOnce();
+		const pulled = await this.replicatePullOnce();
+		return { pushed, pulled };
 	}
 
 	/** 양방향 live 동기화 시작. retry:true로 오프라인/재연결을 자동 처리. */

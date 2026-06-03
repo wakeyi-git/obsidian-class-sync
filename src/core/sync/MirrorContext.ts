@@ -3,7 +3,7 @@ import { CoreServices } from "../CoreServices";
 import { PouchService } from "../couch/PouchService";
 import { NoteDoc, AssetDoc, assetId } from "../model/types";
 import { sha256 } from "../hash/hash";
-import { dbPathToLocal, localPathToDb, normalizePath, validateVaultPath } from "../path/path";
+import { dbPathToLocal, localPathToDb, normalizePath, validateVaultPath, insertLabelBeforeExt } from "../path/path";
 import { t } from "../../i18n";
 
 /** 파일명에 쓸 수 없는 문자를 _로 치환. */
@@ -139,9 +139,7 @@ export class MirrorContext {
 	 * 교사 vault에서 여러 학생 충돌을 구분할 수 있도록 상대방(학생 이름/교사)을 파일명에 넣는다.
 	 */
 	conflictLocalPath(dbPath: string): string {
-		const label = sanitizeFileLabel(this.conflictPeerLabel());
-		const withTag = dbPath.replace(/\.md$/i, `.${label}.md`);
-		const tagged = withTag === dbPath ? `${dbPath}.${label}.md` : withTag;
+		const tagged = insertLabelBeforeExt(dbPath, sanitizeFileLabel(this.conflictPeerLabel()));
 		return obsidianNormalize(dbPathToLocal(this.localRoot, `${this.settings.conflictFolder}/${tagged}`));
 	}
 
@@ -153,9 +151,7 @@ export class MirrorContext {
 
 	/** 내 편집 백업 경로: 상대가 충돌을 해소해 내 편집이 덮일 때 보존. _충돌/<base>.내편집.md */
 	localBackupPath(dbPath: string): string {
-		const label = t("내편집");
-		const withTag = dbPath.replace(/\.md$/i, `.${label}.md`);
-		const tagged = withTag === dbPath ? `${dbPath}.${label}.md` : withTag;
+		const tagged = insertLabelBeforeExt(dbPath, sanitizeFileLabel(t("내편집")));
 		return obsidianNormalize(dbPathToLocal(this.localRoot, `${this.settings.conflictFolder}/${tagged}`));
 	}
 

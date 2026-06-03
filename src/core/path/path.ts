@@ -25,8 +25,36 @@ export function validateVaultPath(dbPath: string): boolean {
 	if (p.startsWith("/")) return false; // 절대 경로
 	if (/^[a-zA-Z]:/.test(p)) return false; // C:\...
 	if (p.split("/").some((seg) => seg === "..")) return false; // 상위 탈출
-	if (p.startsWith(".obsidian/")) return false; // 플러그인 내부
+	if (p === ".obsidian" || p.startsWith(".obsidian/")) return false; // 플러그인 내부(단독 경로 포함)
 	return true;
+}
+
+/**
+ * 충돌/백업 사본 이름: 파일명의 마지막 확장자 **앞**에 `.label`을 끼운다.
+ * ex) `a/b.png` + `학생A` → `a/b.학생A.png`, `notes/day.md` → `notes/day.학생A.md`, `README` → `README.학생A`.
+ * (바이너리에 `.md`가 덧붙어 마크다운으로 오인되던 문제를 막는다.)
+ */
+export function insertLabelBeforeExt(dbPath: string, label: string): string {
+	const slash = dbPath.lastIndexOf("/");
+	const dir = slash >= 0 ? dbPath.slice(0, slash + 1) : "";
+	const base = slash >= 0 ? dbPath.slice(slash + 1) : dbPath;
+	const dot = base.lastIndexOf(".");
+	if (dot <= 0) return `${dir}${base}.${label}`; // 확장자 없음 또는 숨김파일(.x) → 뒤에 붙임
+	return `${dir}${base.slice(0, dot)}.${label}${base.slice(dot)}`;
+}
+
+/** 사용자 입력 폴더 경로 검증(빈 값/`..`/절대경로/드라이브/.obsidian 차단). validateVaultPath와 동일 규칙. */
+export function validateFolderName(folder: string): boolean {
+	return validateVaultPath(folder);
+}
+
+/** 두 폴더 경로가 같거나 한쪽이 다른 쪽을 포함(중첩)하면 true. 빈 값은 겹침 아님. */
+export function foldersOverlap(a: string, b: string): boolean {
+	const x = normalizePath(a);
+	const y = normalizePath(b);
+	if (!x || !y) return false;
+	if (x === y) return true;
+	return x.startsWith(y + "/") || y.startsWith(x + "/");
 }
 
 /** 경로 세그먼트 안전 결합. 빈 root는 무시. */

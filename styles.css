@@ -171,6 +171,14 @@
 	font-weight: 600;
 }
 
+/* 대시보드 폴더 셀의 중첩 root 표식 */
+.class-sync-nested-tag {
+	color: var(--text-muted);
+	font-size: 11px;
+	margin-left: 4px;
+	cursor: help;
+}
+
 /* 충돌 카드 */
 .class-sync-conflict-card {
 	border: 1px solid var(--background-modifier-border);

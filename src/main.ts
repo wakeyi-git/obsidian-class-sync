@@ -164,12 +164,20 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.promptRoleSetup();
 	}
 
-	/** 현재 역할의 모든 mirror DB 로컬 캐시(IndexedDB)를 삭제. */
-	private async destroyLocalCaches(): Promise<void> {
+	/** 현재 역할이 로컬 캐시를 가진 모든 DB(개인/학생 mirror + 공유 공간). 중복 제거. */
+	private collectLocalDbs(): string[] {
+		const s = this.settings;
 		const dbs =
-			this.settings.role === "teacher"
-				? this.settings.students.map((s) => s.remoteDb).filter((d) => d)
-				: [this.settings.remoteDb].filter((d) => d);
+			s.role === "teacher"
+				? s.students.map((st) => st.remoteDb)
+				: [s.remoteDb];
+		dbs.push(...s.sharedSpaces.map((sp) => sp.remoteDb));
+		return [...new Set(dbs.filter((d) => d))];
+	}
+
+	/** 현재 역할의 모든 mirror DB + 공유 공간 DB 로컬 캐시(IndexedDB)를 삭제. */
+	private async destroyLocalCaches(): Promise<void> {
+		const dbs = this.collectLocalDbs();
 		for (const db of dbs) {
 			try {
 				const p = this.core.createPouch(db);

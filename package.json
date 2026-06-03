@@ -1,11 +1,12 @@
 {
 	"name": "class-sync-for-obsidian",
-	"version": "0.11.2",
+	"version": "0.12.0",
 	"description": "교사용 vault의 학생별 폴더와 학생 개인 vault를 CouchDB mirror DB로 양방향 동기화하는 Obsidian 플러그인 (Phase 0 POC)",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
-		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"test": "vitest run"
 	},
 	"keywords": [
 		"obsidian",
@@ -29,6 +30,7 @@
 		"esbuild": "^0.20.0",
 		"events": "^3.3.0",
 		"obsidian": "latest",
-		"typescript": "^5.4.0"
+		"typescript": "^5.4.0",
+		"vitest": "^4.1.8"
 	}
 }

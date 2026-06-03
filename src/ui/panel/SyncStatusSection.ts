@@ -1,4 +1,5 @@
 import { LinkStatus } from "../../core/sync/MirrorContext";
+import { computeChildRoots } from "../../core/sync/childRoots";
 import { DashboardRow, PanelHost, PanelSection, panelButton } from "./PanelSection";
 import { t } from "../../i18n";
 
@@ -94,12 +95,23 @@ export class SyncStatusSection implements PanelSection {
 		]) {
 			thead.createEl("th", { text: h });
 		}
+		// 중첩 root 감지: 다른 링크 폴더 안에 든 폴더는 그 안쪽 링크가 담당한다(이중 동기화 방지).
+		const allRoots = rows.map((r) => r.localRoot);
+
 		const tbody = table.createEl("tbody");
 		for (const r of rows) {
 			const tr = tbody.createEl("tr");
 			tr.createEl("td", { text: r.studentName || r.studentId || "—" });
 			tr.createEl("td", { text: r.remoteDb });
-			tr.createEl("td", { text: r.localRoot || t("(root)") });
+			const fTd = tr.createEl("td", { text: r.localRoot || t("(root)") });
+			const children = computeChildRoots(r.localRoot, allRoots);
+			if (children.length > 0) {
+				fTd.setAttribute(
+					"title",
+					t("이 폴더 안의 {roots}은(는) 다른 링크가 담당합니다(이중 동기화 제외).", { roots: children.join(", ") }),
+				);
+				fTd.createSpan({ cls: "class-sync-nested-tag", text: t(" ↳ 중첩 {n}", { n: children.length }) });
+			}
 			tr.createEl("td", { text: fmtTime(r.lastUploadAt) });
 			tr.createEl("td", { text: fmtTime(r.lastDownloadAt) });
 			const cTd = tr.createEl("td", { text: String(r.conflicts) });

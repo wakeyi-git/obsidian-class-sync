@@ -1,6 +1,7 @@
-import { App, Plugin, PluginSettingTab, Setting, SettingGroup } from "obsidian";
+import { App, Notice, Plugin, PluginSettingTab, Setting, SettingGroup } from "obsidian";
 import { ClassSyncSettings, StudentConfig, SharedSpace } from "./types";
 import { ExportModal, ImportModal } from "../ui/BackupModal";
+import { validateFolderName, foldersOverlap } from "../core/path/path";
 import { t } from "../i18n";
 
 /** SettingsTab가 의존하는 플러그인 동작 (순환 import 방지용 인터페이스). */
@@ -208,7 +209,9 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		});
 		new Setting(card).setName(t("폴더")).addText((txt) => {
 			txt.setPlaceholder(t("모둠1")).setValue(sp.folder).onChange(async (v) => {
-				sp.folder = v.trim();
+				const v2 = v.trim();
+				if (!this.okFolder(v2)) return;
+				sp.folder = v2;
 				await this.host.saveSettings();
 			});
 			noAutoCorrect(txt.inputEl);
@@ -396,7 +399,13 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 				.setDesc(t("‘보관 폴더로 이동’ 정책에서 삭제 파일이 모이며, 여기서 지우면 DB에서도 영구 삭제됩니다."))
 				.addText((txt) =>
 					txt.setPlaceholder(t("_삭제됨")).setValue(s.archiveFolder).onChange(async (v) => {
-						s.archiveFolder = v.trim() || "_삭제됨";
+						const v2 = v.trim();
+						if (!this.okFolder(v2)) return;
+						if (v2 && foldersOverlap(v2, s.conflictFolder)) {
+							new Notice(t("보관 폴더와 충돌 폴더가 겹칩니다. 다른 경로를 쓰세요."));
+							return;
+						}
+						s.archiveFolder = v2 || "_삭제됨";
 						await this.host.saveSettings();
 					}),
 				),
@@ -408,7 +417,13 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 				.setDesc(t("충돌 시 원격 버전이 꺼내지는 폴더로, ‘충돌 목록 열기’ 명령으로 해소합니다."))
 				.addText((txt) =>
 					txt.setPlaceholder(t("_충돌")).setValue(s.conflictFolder).onChange(async (v) => {
-						s.conflictFolder = v.trim() || "_충돌";
+						const v2 = v.trim();
+						if (!this.okFolder(v2)) return;
+						if (v2 && foldersOverlap(v2, s.archiveFolder)) {
+							new Notice(t("보관 폴더와 충돌 폴더가 겹칩니다. 다른 경로를 쓰세요."));
+							return;
+						}
+						s.conflictFolder = v2 || "_충돌";
 						await this.host.saveSettings();
 					}),
 				),
@@ -420,7 +435,13 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 				.setDesc(t("동기화에서 제외할 폴더를 쉼표로 구분해 입력합니다."))
 				.addText((txt) =>
 					txt.setValue(s.excludeFolders.join(", ")).onChange(async (v) => {
-						s.excludeFolders = v.split(",").map((x) => x.trim()).filter((x) => x.length > 0);
+						const folders = v.split(",").map((x) => x.trim()).filter((x) => x.length > 0);
+						const bad = folders.find((f) => !validateFolderName(f));
+						if (bad) {
+							new Notice(t("잘못된 폴더 경로입니다: {path} (‘..’·절대경로·.obsidian 불가)", { path: bad }));
+							return;
+						}
+						s.excludeFolders = folders;
 						await this.host.saveSettings();
 					}),
 				),
@@ -485,12 +506,24 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		return g;
 	}
 
+	/** 폴더 경로 입력 검증: 비었으면 통과(기본값 대체), 잘못된 경로면 Notice 후 false. */
+	private okFolder(value: string): boolean {
+		if (!value) return true;
+		if (!validateFolderName(value)) {
+			new Notice(t("잘못된 폴더 경로입니다: {path} (‘..’·절대경로·.obsidian 불가)", { path: value }));
+			return false;
+		}
+		return true;
+	}
+
 	private studentField(card: HTMLElement, name: string, st: StudentConfig, key: keyof StudentConfig, placeholder: string): void {
 		new Setting(card).setName(name).addText((t) => {
 			t.setPlaceholder(placeholder)
 				.setValue(String(st[key] ?? ""))
 				.onChange(async (v) => {
-					(st[key] as unknown as string) = v.trim();
+					const v2 = v.trim();
+					if (key === "localRoot" && !this.okFolder(v2)) return; // 잘못된 폴더 경로는 저장하지 않음
+					(st[key] as unknown as string) = v2;
 					await this.host.saveSettings();
 				});
 			noAutoCorrect(t.inputEl);

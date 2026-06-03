@@ -54,10 +54,8 @@ export class MirrorApplier {
 		// 삭제(tombstone) 처리. 기술문서 §10.4 / §15.
 		if (doc.deleted) return await this.applyDeletion(doc);
 
-		// 업로드 대기 중인 로컬 편집이면 덮지 않음(레이스 방지) — 업로드가 곧 정합한다.
-		if (ctx.isPending(doc.path)) return "skipped-pending";
-
 		// 실시간 세션 중이면 Yjs가 권위 → 원격 적용으로 라이브 에디터를 덮지 않는다.
+		// (세션 종료 스냅샷이 정합하므로 별도 보존 불필요.)
 		if (ctx.core.isRealtimeActive(localPath)) return "skipped-pending";
 
 		const local = await ctx.readVaultFile(localPath);
@@ -67,6 +65,26 @@ export class MirrorApplier {
 		if (localHash === doc.contentHash) {
 			await this.conflicts.cleanupCopy(doc.path);
 			return "skipped-same";
+		}
+
+		// 업로드 대기 중인 로컬 편집이면 vault를 덮지 않는다(레이스 방지) — 곧 업로드가 정합한다.
+		// 단, 다른 기기의 원격 변경이 들어온 것이면 그 업로드가 원격본을 선형으로 덮어 _conflicts 분기조차
+		// 남기지 않으므로(데이터 손실), 덮이기 전에 원격본을 _충돌/에 보존한다. 기술문서 §14.
+		if (ctx.isPending(doc.path)) {
+			if (doc.lastModifiedDeviceId !== ctx.settings.deviceId) {
+				await this.conflicts.materialize(doc);
+				if (!this.loggedConflicts.has(doc.path)) {
+					this.loggedConflicts.add(doc.path);
+					ctx.logger.warn(
+						t(
+							"편집 중 원격 변경 수신: {path} — 내 편집 유지, 원격본을 _충돌/에 보존했습니다. '충돌 목록'에서 확인하세요.",
+							{ path: localPath },
+						),
+						true,
+					);
+				}
+			}
+			return "skipped-pending";
 		}
 
 		const hasConflict = !!doc._conflicts && doc._conflicts.length > 0;
@@ -144,21 +162,20 @@ export class MirrorApplier {
 
 		if (doc.deleted) return await this.applyDeletion(doc);
 		if (!ctx.settings.syncAssets) return "skipped-nonmd";
-		if (ctx.isPending(doc.path)) return "skipped-pending";
 
 		const local = await ctx.readVaultBinary(localPath);
 		const localHash = local == null ? null : await sha256(local);
 		if (localHash === doc.contentHash) return "skipped-same";
 
+		// 업로드 대기 중인 로컬 편집이면 덮지 않되, 다른 기기의 원격 바이너리는 곧 덮여 사라지므로 _충돌/에 보존.
+		if (ctx.isPending(doc.path)) {
+			if (doc.lastModifiedDeviceId !== ctx.settings.deviceId) await this.preserveRemoteAsset(doc, localPath);
+			return "skipped-pending";
+		}
+
 		const hasConflict = !!doc._conflicts && doc._conflicts.length > 0;
 		if (hasConflict) {
-			if (!this.loggedConflicts.has(doc.path)) {
-				this.loggedConflicts.add(doc.path);
-				ctx.logger.warn(
-					t("첨부 충돌 보류(preserve-local): {path} — 로컬 유지. (바이너리는 수동 정리)", { path: localPath }),
-					true,
-				);
-			}
+			await this.preserveRemoteAsset(doc, localPath);
 			return "conflict";
 		}
 		if (doc.lastModifiedDeviceId === ctx.settings.deviceId) return "skipped-self";
@@ -174,6 +191,30 @@ export class MirrorApplier {
 		ctx.status.lastDownloadAt = Date.now();
 		ctx.logger.ok(t("원격→로컬 적용(첨부): {path}", { path: localPath }));
 		return "applied";
+	}
+
+	/**
+	 * pending/충돌로 원격 바이너리가 곧 로컬 업로드에 덮일 때, 현재(=원격) 바이너리를 _충돌/에 보존.
+	 * 바이너리는 비교/병합 UI가 없으므로 파일로 꺼내 두고 경고만 1회 남긴다.
+	 */
+	private async preserveRemoteAsset(doc: AssetDoc, localPath: string): Promise<void> {
+		const ctx = this.ctx;
+		const data = await ctx.pouch.getAssetBinary(assetId(doc.path));
+		if (data == null) return;
+		try {
+			await ctx.writeVaultBinary(ctx.conflictLocalPath(doc.path), data);
+			if (!this.loggedConflicts.has(doc.path)) {
+				this.loggedConflicts.add(doc.path);
+				ctx.logger.warn(
+					t("첨부 충돌 보류(preserve-local): {path} — 로컬 유지, 원격본을 _충돌/에 보존했습니다.", { path: localPath }),
+					true,
+				);
+			}
+		} catch (e) {
+			ctx.logger.error(
+				t("첨부 충돌본 기록 실패: {path} — {err}", { path: localPath, err: e instanceof Error ? e.message : String(e) }),
+			);
+		}
 	}
 
 	/** tombstone 적용: 정책(archive/propagate-delete/ignore-delete)대로 로컬 파일 처리. */
