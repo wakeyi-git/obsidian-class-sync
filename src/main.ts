@@ -12,8 +12,7 @@ import { RoleSetupModal } from "./ui/RoleSetupModal";
 import { InviteModal } from "./ui/InviteModal";
 import { ConflictModal, ConflictRow, ConflictHost } from "./ui/ConflictModal";
 import { ResolveChoice } from "./core/sync/ConflictManager";
-import { BulkCopyModal } from "./ui/BulkCopyModal";
-import { BulkCopy, CopyOptions } from "./modes/teacher/BulkCopy";
+import { BulkCopy, CopyOptions, CopyResult } from "./modes/teacher/BulkCopy";
 import { RealtimeManager } from "./core/realtime/RealtimeManager";
 import { realtimeEditorExtension } from "./core/realtime/editorBinding";
 import { FeedbackStore } from "./core/feedback/FeedbackStore";
@@ -556,14 +555,9 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			callback: () => this.activatePanel("sync"),
 		});
 		this.addCommand({
-			id: "class-sync-copy-file",
-			name: t("현재 파일을 학생에게 복사"),
-			callback: () => this.openBulkCopy("file"),
-		});
-		this.addCommand({
-			id: "class-sync-copy-folder",
-			name: t("현재 폴더를 학생에게 복사"),
-			callback: () => this.openBulkCopy("folder"),
+			id: "class-sync-deploy",
+			name: t("학생에게 복사 (배포 탭 열기)"),
+			callback: () => this.activatePanel("deploy"),
 		});
 		this.addCommand({
 			id: "class-sync-realtime-status",
@@ -610,32 +604,32 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		else await this.restartMode();
 	}
 
-	// --- 교사 편의: 학생에게 복사 (기술문서 §12.5 / §20) ---
-	openBulkCopy(kind: "file" | "folder"): void {
+	// --- 교사 편의: 경로(파일/폴더)를 학생에게 복사 (기술문서 §12.5 / §20). 배포 탭에서 호출. ---
+	async bulkCopy(
+		sourcePath: string,
+		opts: CopyOptions,
+		studentIds: string[],
+	): Promise<CopyResult & { error?: string }> {
 		if (this.settings.role !== "teacher") {
-			new Notice(t("Class Sync: 교사 모드에서만 사용할 수 있습니다."));
-			return;
+			return { written: 0, skipped: 0, error: t("교사 모드에서만 사용할 수 있습니다.") };
 		}
-		if (this.settings.students.length === 0) {
-			new Notice(t("Class Sync: 학생이 없습니다. 설정에서 학생을 추가하세요."));
-			return;
+		const src = this.app.vault.getAbstractFileByPath(sourcePath);
+		if (!(src instanceof TFile) && !(src instanceof TFolder)) {
+			return { written: 0, skipped: 0, error: t("경로를 찾을 수 없습니다: {path}", { path: sourcePath }) };
 		}
-		const file = this.app.workspace.getActiveFile();
-		if (!file) {
-			new Notice(t("Class Sync: 복사할 파일을 먼저 여세요."));
-			return;
-		}
-		const source = kind === "folder" ? file.parent : file;
-		if (!source || (kind === "folder" && !(source instanceof TFolder))) {
-			new Notice(t("Class Sync: 대상을 찾을 수 없습니다."));
-			return;
+		const targets = this.settings.students.filter((st) => studentIds.includes(st.studentId));
+		if (targets.length === 0) {
+			return { written: 0, skipped: 0, error: t("대상 학생이 없습니다.") };
 		}
 		const bulk = new BulkCopy(this.app, this.settings);
-		new BulkCopyModal(this.app, source, {
-			students: this.settings.students,
-			run: (targets, opts: CopyOptions) =>
-				source instanceof TFolder ? bulk.copyFolder(source, targets, opts) : bulk.copyFile(source as TFile, targets, opts),
-		}).open();
+		try {
+			if (src instanceof TFolder) return await bulk.copyFolder(src, targets, opts);
+			// 파일: 대상 경로가 비어 있으면 원본 파일명으로 보낸다.
+			const fileOpts = opts.destPath ? opts : { ...opts, destPath: src.name };
+			return await bulk.copyFile(src, targets, fileOpts);
+		} catch (e) {
+			return { written: 0, skipped: 0, error: e instanceof Error ? e.message : String(e) };
+		}
 	}
 
 	// --- 동기화 상태 (PanelHost) ---

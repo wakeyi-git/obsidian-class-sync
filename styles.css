@@ -85,6 +85,12 @@
 	margin: 12px 0 6px;
 }
 
+.class-sync-panel-hint {
+	font-size: 12px;
+	color: var(--text-muted);
+	margin: 2px 0 6px;
+}
+
 .class-sync-panel-row {
 	display: flex;
 	align-items: center;

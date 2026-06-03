@@ -3,6 +3,7 @@ import { Logger } from "../../core/log/Logger";
 import { FeedbackStore } from "../../core/feedback/FeedbackStore";
 import { ClassSyncSettings, SharedSpace } from "../../settings/types";
 import { LinkStatus } from "../../core/sync/MirrorContext";
+import { CopyOptions, CopyResult } from "../../modes/teacher/BulkCopy";
 
 /** 통합 패널 탭 식별자. */
 export type PanelTab = "feedback" | "deploy" | "sync" | "manage" | "log";
@@ -35,7 +36,8 @@ export interface PanelHost {
 	realtimeStatus(): Promise<void>;
 	openResetModal(): void;
 	refreshShares(): Promise<void>;
-	openBulkCopy(kind: "file" | "folder"): void;
+	/** 원본 경로(파일/폴더)를 선택 학생들에게 복사. 기술문서 §20. */
+	bulkCopy(sourcePath: string, opts: CopyOptions, studentIds: string[]): Promise<CopyResult & { error?: string }>;
 	deployShared(space: SharedSpace): Promise<void>;
 }
 
