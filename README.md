@@ -15,12 +15,13 @@ TeacherVault/
 
 핵심 특징:
 - **오프라인 우선** — 로컬 PouchDB ↔ 원격 CouchDB live replication. 끊겨도 큐에 쌓였다 재연결 시 전파.
-- **QR/코드 초대** — 교사가 학생을 초대하면 학생은 admin 자격증명 없이 **자기 mirror DB만 접근**하는 최소 권한 계정으로 자동 설정.
+- **QR/코드 초대** — 교사가 학생을 초대하면 학생은 admin 자격증명 없이 **자기 mirror DB만 접근**하는 최소 권한 계정으로 자동 설정. 초대가 유출되면 교사가 **'비밀번호 재발급'** 으로 이전 초대를 즉시 무효화.
 - **서버 강제 격리** — 학생별 데이터는 CouchDB 데이터베이스별 권한(`_security`)으로 서버에서 격리.
 - **마크다운 + 첨부파일** — 노트뿐 아니라 이미지·PDF 등 첨부도 동기화(PouchDB attachment).
-- **충돌 보존** — 양쪽 동시 편집 시 로컬을 지키고 충돌 해소 UI로 비교/선택.
+- **충돌 보존** — 양쪽 동시 편집 시 로컬을 지키고 충돌 해소 UI로 비교/선택. 마크다운·첨부 모두 원격본을 `_충돌/`에 보존.
 - **공유 폴더** — 모둠/학급이 한 폴더를 공유(전용 DB + 멤버 권한), 교사 배포로 학생에게 자동 전파.
-- **실시간 공동 편집** — 공유 폴더 문서를 Yjs로 글자 단위 동시 편집(커서·이름 표시). **Excalidraw 그림**도 요소 단위 실시간 공동 편집(이름 커서, 이미지 동기화 — Excalidraw 플러그인 필요). 별도 WebSocket 서버 필요.
+- **실시간 공동 편집** — 공유 폴더 문서를 Yjs로 글자 단위 동시 편집(커서·이름 표시). **Excalidraw 그림**도 요소 단위 실시간 공동 편집(이름 커서 + **참가자 칩**으로 모바일에서도 이름 표시, 이미지 동기화 — Excalidraw 플러그인 필요). 별도 WebSocket 서버 필요.
+- **실시간 보안** — 실시간 토큰을 **공유 공간별 HMAC 서명 토큰**으로 발급해, 한 토큰이 유출돼도 **그 공간 room에만** 접근(학급 전체 X). 서버는 알려진 placeholder 시크릿이면 기동을 거부.
 - **피드백 레이어** — 본문을 고치지 않고 텍스트에 앵커를 단 댓글로 의견 전달(공유·개인 노트 모두). 세션 중 주기적 스냅샷도 지원.
 - **운영 편의** — 설정 내보내기/가져오기(자격증명 제외), 종합 진단(서버·읽기/쓰기 권한·실시간), 모바일 절전(백그라운드 동기화 일시정지·대용량 파일 사전 검사).
 
@@ -29,7 +30,7 @@ TeacherVault/
 ### 요구사항
 - **Obsidian 1.11.0 이상** (데스크톱·모바일 모두 지원).
 - **자가 호스팅 CouchDB** (시놀로지 NAS 등) — 필수 중앙 서버. [설정 방법](#couchdb-준비-시놀로지-nas-docker-예시).
-- **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택 ([docs/yjs-server-synology.md](docs/yjs-server-synology.md)).
+- **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택. 공유 공간별 HMAC 토큰(`YJS_SECRET`) 권장 ([docs/yjs-server-synology.md](docs/yjs-server-synology.md)).
 - **Excalidraw 플러그인** — Excalidraw 그림 실시간 공동 편집을 쓸 때만 선택(미설치 시 해당 기능만 자동 비활성).
 
 ---
@@ -62,6 +63,7 @@ TeacherVault/
 | **6b** | Yjs 기반 글자 단위 실시간 공동 편집 | ✅ |
 | **6c** | 피드백 레이어(앵커 댓글) + 세션 중 주기적 CouchDB 스냅샷 | ✅ |
 | **안정화** | 설정 내보내기/가져오기 · 종합 진단(읽기/쓰기 권한) · 모바일 절전(백그라운드 정지·대용량 사전검사·디바운스) | ✅ |
+| **보안·정합 하드닝** | 공유 공간별 HMAC 실시간 토큰 · 초대 비밀번호 재발급(폐기) · manifest 기반 오프라인 삭제 정합(대량삭제 임계치) · 첨부 충돌 보존 · 단위 테스트 + CI 게이트 | ✅ |
 
 ---
 
@@ -136,7 +138,7 @@ docker run -d --name couchdb -p 5984:5984 \
 | 로컬 캐시 초기화 | 로컬 PouchDB 삭제 후 서버에서 다시 받기 |
 | 충돌 목록 열기 | 충돌 비교/해소 (로컬 유지·원격 적용·두 버전 보관) |
 | 대시보드 열기 | 학생별 동기화 상태 표 (👥 리본으로도) |
-| 현재 파일/폴더를 학생에게 복사 | 템플릿 배포 (교사) — `{{studentName}}` 등 변수 치환 |
+| 학생에게 복사 (배포 탭 열기) | 배포 탭에서 경로(파일/폴더) 선택 후 학생에게 배포 — `{{studentName}}` 등 변수 치환 |
 | 로그 패널 열기 | 동기화 로그 보기 (🔄 리본으로도) |
 
 삭제한 파일은 **보관 폴더(`_삭제됨/`, 설정 가능)** 로 이동하며, 그 폴더에서 지우면 DB에서도 영구 삭제됩니다.
@@ -151,9 +153,9 @@ docker run -d --name couchdb -p 5984:5984 \
 *첨부 최대 크기(MB)* 로 제어합니다(모바일 보호). 첨부 충돌은 로컬 보존 + 로그(비교 UI는 마크다운만).
 
 ### 교사 배포 (Phase 4)
-`템플릿/` 등 학생 폴더 밖에 원본을 두고, `현재 파일/폴더를 학생에게 복사`로 선택·전체 학생에게 배포합니다.
-`{{studentName}}` `{{studentId}}` `{{classId}}` `{{date}}` 변수가 학생별로 치환되고, 기존 파일은
-건너뛰기(기본)/덮어쓰기/새 이름 정책으로 처리합니다.
+`템플릿/` 등 학생 폴더 밖에 원본을 두고, **배포 탭**에서 경로를 골라(빠른 버튼: 현재 파일/현재 폴더, 대상 경로는
+비우면 원본 이름) 선택·전체 학생에게 배포합니다. `{{studentName}}` `{{studentId}}` `{{classId}}` `{{date}}`
+변수가 학생별로 치환되고, 기존 파일은 건너뛰기(기본)/덮어쓰기/새 이름 정책으로 처리합니다.
 
 ### 공유 폴더 (Phase 6a)
 교사 설정의 *공유 공간*에서 모둠/학급 공간을 만들고 멤버 학생을 고른 뒤 **배포**하면, 전용 DB(`share_*`)와
@@ -162,16 +164,25 @@ docker run -d --name couchdb -p 5984:5984 \
 
 ### 실시간 공동 편집 (Phase 6b)
 공유 폴더 문서를 글자 단위로 동시에 편집합니다(Yjs). 별도 **Yjs WebSocket 서버**가 필요하며
-([docs/yjs-server-synology.md](docs/yjs-server-synology.md) 참고), 교사가 설정에 서버 URL/토큰을 입력하고
+([docs/yjs-server-synology.md](docs/yjs-server-synology.md) 참고), 교사가 설정에 서버 URL과 토큰을 입력하고
 공유 공간을 배포하면 학생에게 자동 전파됩니다. 공유 폴더 문서를 편집 모드로 열면 실시간 세션이 연결되고,
 서로의 커서·이름이 표시됩니다. 편집 중에는 Yjs가 권위이며, 문서를 닫을 때 스냅샷이 CouchDB로 저장되어
 오프라인 멤버에게 반영됩니다. 설정에서 **세션 중 스냅샷 주기(초)** 를 켜면, 편집을 닫기 전에도 일정 주기로
 CouchDB에 본문이 저장되어 비실시간/오프라인 멤버가 더 빨리 최신본을 받습니다(리더 1인만 기록해 충돌 방지).
 
+**실시간 토큰 보안** — 서버에 `YJS_SECRET`을 설정하고 플러그인 설정의 **'Yjs 공간 시크릿(HMAC)'** 에 같은 값을
+넣으면, 교사가 공간을 배포할 때마다 **공유 공간별 서명 토큰**이 발급되어 학생에게 전달됩니다. 토큰 payload에
+`classId`·`spaceId`(+선택 만료)가 들어가고 서버가 접속 room이 `class_<c>/share/<s>/`로 시작하는지 검증하므로,
+한 토큰이 유출돼도 **그 공간 room에만** 접근할 수 있습니다(학급 전체 X). 시크릿/멤버 변경 시 재배포로 토큰이
+갱신되고, **'공간 토큰 만료(일)'** 로 TTL을 둘 수 있습니다. (시크릿 없이 단일 `YJS_TOKEN`만 쓰는 레거시 모드도
+지원하지만 공간 격리가 없습니다.)
+
 **Excalidraw 그림**도 공유 폴더에서 **요소 단위 실시간 공동 편집**을 지원합니다(추가·이동·삭제, 이름·색 커서, 이미지 동기화).
 [Excalidraw 플러그인](https://github.com/zsviczian/obsidian-excalidraw-plugin)이 설치돼 있어야 하며(미설치 시 자동 비활성),
 바인딩은 [`y-excalidraw`](https://github.com/RahulBadenkal/y-excalidraw)(MIT)를 사용합니다. 각자 줌/스크롤은 독립적이고
-도형·커서는 씬 좌표로 공유됩니다(세션 종료 시 파일이 CouchDB로 전파).
+도형·커서는 씬 좌표로 공유됩니다. 캔버스에 **참가자 칩**(이름 + 색)이 상시 표시되어 마우스를 쓰지 않는 태블릿·모바일에서도
+누가 함께 편집 중인지 보입니다. 실시간은 **`.excalidraw.md` 형식만** 지원합니다(세션 종료 스냅샷이 CouchDB로 전파되려면
+마크다운 경로가 필요 — 순수 `.excalidraw`는 자동 비활성 + 안내).
 
 ### 피드백 레이어 (Phase 6c)
 본문을 직접 수정하지 않고 의견을 남기는 **앵커 기반 댓글**입니다(기술문서 §19.5). 노트에서 텍스트를 선택하고
@@ -194,7 +205,7 @@ src/
 │  │  ├─ obsidianFetch.ts      # requestUrl 기반 fetch shim (모바일 CORS 우회)
 │  │  └─ CouchAdmin.ts         # 학생 계정/DB/_security 프로비저닝 (admin)
 │  ├─ invite/invite.ts         # 초대 페이로드 인코딩 + obsidian:// 딥링크
-│  ├─ realtime/                # Yjs 실시간 (RealtimeManager · editorBinding · 주기 스냅샷)
+│  ├─ realtime/                # Yjs 실시간 (RealtimeManager · editorBinding · excalidrawBinding · spaceToken=공간별 HMAC 토큰)
 │  ├─ feedback/FeedbackStore.ts # 피드백 레이어(앵커 댓글) 저장/조회/동기화
 │  ├─ guard/RemoteApplyGuard.ts# 동기화 루프 차단
 │  ├─ sync/
@@ -203,14 +214,15 @@ src/
 │  │  ├─ Uploader.ts           # 로컬→원격 (해시 dedupe, tombstone, purge)
 │  │  ├─ LocalWatcher.ts       # vault 감시 (create/modify/rename/delete)
 │  │  ├─ LocalApplier.ts       # 로컬 changes → vault 반영 (last_seq 증분)
-│  │  ├─ FullSync.ts           # 전체 정합 (up/down/both)
+│  │  ├─ FullSync.ts           # 전체 정합 (up/down/both) + manifest 기반 오프라인 삭제 정합
+│  │  ├─ LinkManifest.ts       # 링크별 보유 기준선(_local) — 안전한 삭제 정합/대량삭제 임계치
 │  │  ├─ ConflictManager.ts    # 충돌 원격본 생성/해소/내편집 보존
 │  │  ├─ MirrorSync.ts         # 위를 엮은 학생↔DB 링크 엔진 + 상태
 │  │  └─ connectionTest.ts     # 연결/권한 테스트
 │  ├─ path/  hash/  log/       # 경로 매핑 · contentHash · 로거
 │  └─ model/types.ts           # 문서 모델 (note / asset / tombstone)
 ├─ modes/                      # ClassSyncMode / StudentMode / TeacherMode / teacher/BulkCopy
-└─ ui/                         # LogView · RoleSetupModal · InviteModal · ConflictModal · DashboardView · BulkCopyModal
+└─ ui/                         # 통합 패널(피드백·배포·동기화·관리·로그) · RoleSetupModal · InviteModal · ConflictModal · ResetModal · BackupModal
 ```
 
 **동기화 구조 (오프라인 우선)**
@@ -223,9 +235,16 @@ Vault  ◄──(LocalWatcher / LocalApplier)──►  로컬 PouchDB  ◄─�
 
 ## 보안 메모
 
-- 초대 코드에는 학생 전용 비밀번호가 포함됩니다(교실 1회 온보딩용). 만료 토큰은 후속 과제입니다.
+- **초대 코드**에는 학생 전용 비밀번호가 포함됩니다(교실 1회 온보딩용, base64 인코딩). 자체 만료는 없지만,
+  유출이 의심되면 교사가 학생 카드의 **'비밀번호 재발급'** 으로 비밀번호를 회전해 **이전 초대를 즉시 무효화**합니다.
+- **실시간 토큰**은 공유 공간별 **HMAC 서명 토큰**으로 발급되어, 유출돼도 해당 공간 room에만 접근됩니다
+  (`classId`·`spaceId` 바인딩 + 선택 만료). 서버는 `CHANGE_ME` 같은 placeholder/너무 짧은 시크릿이면 기동을 거부하고,
+  토큰은 WSS로 전송되므로 전송 중 노출이 없습니다(서버/프록시 로그 마스킹은 [가이드 §9.1](docs/yjs-server-synology.md) 참고).
+- **설정 내보내기**는 자격증명을 제외합니다 — 관리자 비밀번호, 학생 비밀번호, `yjsToken`, `yjsSecret`, 공간 토큰, 기기 고유값.
 - 교사 관리자 자격증명은 교사 기기에만 저장되며, 학생은 admin 권한을 일절 다루지 않습니다.
 - 학생 간 데이터는 CouchDB `_security`로 서버에서 격리됩니다(다른 학생 DB 접근 시 403).
+- **오프라인 삭제 정합**은 기기별 manifest 기준선(내용 검증 + rev/hash 비교)과 **대량 삭제 임계치**로, 폴더 오설정 시
+  대량 tombstone 사고를 막습니다. `localRoot`가 바뀌면 기준선이 무효화되어 삭제 정합을 건너뜁니다.
 
 ---
 
