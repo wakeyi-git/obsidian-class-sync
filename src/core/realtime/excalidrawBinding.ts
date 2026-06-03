@@ -1,6 +1,7 @@
 import * as Y from "yjs";
 import { Awareness } from "y-protocols/awareness";
 import { ExcalidrawBinding as YExcalidrawBinding } from "y-excalidraw";
+import { clientColor } from "./clientColor";
 
 /** Excalidraw imperative API 중 우리가 쓰는 부분(obsidian-excalidraw-plugin의 getExcalidrawAPI() 반환). */
 export interface ExcalidrawImperativeApi {
@@ -84,11 +85,10 @@ export class ExcalidrawBinding {
 			const user = state?.user;
 			if (!user) return;
 			const name = (user.name as string) || "?";
-			// 마크다운은 색이 문자열, excalidraw는 {background,stroke} 객체 → 둘 다 처리.
-			const color = typeof user.color === "string" ? user.color : user.color?.background || "#888";
+			// Excalidraw가 커서·선택 영역에 쓰는 색과 동일 공식(clientId 해시) → 칩-커서-선택 색 일치.
 			const chip = el.createDiv({ cls: "class-sync-excal-chip" });
 			const dot = chip.createSpan({ cls: "class-sync-excal-dot" });
-			dot.style.backgroundColor = color;
+			dot.style.backgroundColor = clientColor(String(clientId));
 			chip.createSpan({ text: name });
 			count++;
 		});

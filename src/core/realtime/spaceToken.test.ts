@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mintSpaceToken, verifySpaceToken } from "./spaceToken";
+import { clientColor } from "./clientColor";
 
 const SECRET = "test-secret-key";
 const NOW = 1_700_000_000;
@@ -40,5 +41,24 @@ describe("spaceToken", () => {
 	it("형식이 잘못된 토큰은 거부", async () => {
 		expect(await verifySpaceToken(SECRET, "no-dot-here", "c1", "s1", NOW)).toBe(false);
 		expect(await verifySpaceToken(SECRET, "", "c1", "s1", NOW)).toBe(false);
+	});
+});
+
+describe("clientColor (Excalidraw getClientColor 동일 공식)", () => {
+	// Excalidraw clients.ts와 정확히 같은 값이어야 커서·선택 영역과 칩 색이 일치한다.
+	it("알려진 clientId에 대해 Excalidraw와 동일한 HSL을 만든다", () => {
+		expect(clientColor("0")).toBe("hsl(110, 100%, 83%)");
+		expect(clientColor("1")).toBe("hsl(120, 100%, 83%)");
+		expect(clientColor("12345")).toBe("hsl(20, 100%, 83%)");
+		expect(clientColor("987654321")).toBe("hsl(270, 100%, 83%)");
+	});
+
+	it("결정적이고 hue는 10단위(0..360)", () => {
+		const m = clientColor("abc").match(/^hsl\((\d+), 100%, 83%\)$/);
+		expect(m).not.toBeNull();
+		const hue = Number(m![1]);
+		expect(hue % 10).toBe(0);
+		expect(hue).toBeGreaterThanOrEqual(0);
+		expect(hue).toBeLessThanOrEqual(360);
 	});
 });
