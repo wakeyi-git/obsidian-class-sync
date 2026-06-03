@@ -220,6 +220,46 @@
 	font-size: 12px;
 }
 
+/* 실시간 Excalidraw 참가자 칩: 캔버스 우상단에 현재 편집자 이름 상시 표시(터치 기기 대응) */
+.class-sync-excal-presence {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	z-index: 50;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 4px;
+	pointer-events: none; /* 캔버스 조작을 가리지 않음 */
+}
+
+.class-sync-excal-presence.is-empty {
+	display: none;
+}
+
+.class-sync-excal-chip {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	max-width: 160px;
+	padding: 2px 8px;
+	border-radius: 10px;
+	font-size: 11px;
+	font-weight: 600;
+	color: #fff;
+	background: rgba(0, 0, 0, 0.55);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.class-sync-excal-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex: 0 0 auto;
+}
+
 /* 실시간 커서: 편집자 이름 라벨 항상 표시 (y-codemirror.next) */
 .cm-ySelectionInfo {
 	opacity: 1 !important;

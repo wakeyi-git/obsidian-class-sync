@@ -27,6 +27,8 @@ export class ExcalidrawBinding {
 	private containerEl: HTMLElement | null;
 	private onPointerMove: ((e: PointerEvent) => void) | null = null;
 	private lastSent = 0;
+	private presenceEl: HTMLElement | null = null;
+	private onAwareness: (() => void) | null = null;
 
 	constructor(
 		yElements: Y.Array<Y.Map<any>>,
@@ -59,6 +61,38 @@ export class ExcalidrawBinding {
 			};
 			this.containerEl.addEventListener("pointermove", this.onPointerMove);
 		}
+
+		// 참가자 칩 오버레이: 포인터(커서)에 의존하지 않고 현재 편집자 이름을 항상 표시.
+		// 터치 기기(태블릿/모바일)는 손을 떼면 커서 라벨이 사라지므로, 모서리에 상시 목록을 띄운다.
+		if (this.awareness && this.containerEl) {
+			this.presenceEl = this.containerEl.createDiv({ cls: "class-sync-excal-presence" });
+			this.onAwareness = () => this.renderPresence();
+			this.awareness.on("change", this.onAwareness);
+			this.renderPresence();
+		}
+	}
+
+	/** awareness 상태에서 원격 편집자(자기 제외)를 읽어 색 점 + 이름 칩으로 렌더. */
+	private renderPresence(): void {
+		const aw = this.awareness;
+		const el = this.presenceEl;
+		if (!aw || !el) return;
+		el.empty();
+		let count = 0;
+		aw.getStates().forEach((state: any, clientId: number) => {
+			if (clientId === aw.clientID) return; // 자기 자신 제외
+			const user = state?.user;
+			if (!user) return;
+			const name = (user.name as string) || "?";
+			// 마크다운은 색이 문자열, excalidraw는 {background,stroke} 객체 → 둘 다 처리.
+			const color = typeof user.color === "string" ? user.color : user.color?.background || "#888";
+			const chip = el.createDiv({ cls: "class-sync-excal-chip" });
+			const dot = chip.createSpan({ cls: "class-sync-excal-dot" });
+			dot.style.backgroundColor = color;
+			chip.createSpan({ text: name });
+			count++;
+		});
+		el.toggleClass("is-empty", count === 0); // 아무도 없으면 숨김(CSS)
 	}
 
 	/** viewport(client) → scene 좌표. 캔버스 실제 위치(rect) + appState(scroll/zoom) 사용. */
@@ -79,11 +113,15 @@ export class ExcalidrawBinding {
 		if (this.onPointerMove && this.containerEl) {
 			this.containerEl.removeEventListener("pointermove", this.onPointerMove);
 		}
+		if (this.awareness && this.onAwareness) this.awareness.off("change", this.onAwareness);
+		this.presenceEl?.remove();
 		try {
 			this.inner.destroy();
 		} catch {
 			/* noop */
 		}
 		this.onPointerMove = null;
+		this.onAwareness = null;
+		this.presenceEl = null;
 	}
 }
