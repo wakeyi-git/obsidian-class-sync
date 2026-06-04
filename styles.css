@@ -94,6 +94,18 @@
 	margin: 2px 0 6px;
 }
 
+/* 배포 미리보기: 치환 결과 샘플 */
+.class-sync-deploy-sample {
+	font-size: 11px;
+	background: var(--background-primary-alt);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 6px 8px;
+	max-height: 120px;
+	overflow: auto;
+	white-space: pre-wrap;
+}
+
 /* 교사 시작하기(마법사) 단계 카드 */
 .class-sync-setup-step {
 	border: 1px solid var(--background-modifier-border);

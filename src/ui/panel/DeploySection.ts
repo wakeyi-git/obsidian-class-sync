@@ -1,6 +1,6 @@
 import { Notice, Setting, TFile, TFolder } from "obsidian";
 import { PanelHost, PanelSection, panelButton } from "./PanelSection";
-import { ExistingPolicy } from "../../modes/teacher/BulkCopy";
+import { ExistingPolicy, CopyResult, CopyPlan } from "../../modes/teacher/BulkCopy";
 import { t } from "../../i18n";
 
 /** 배포 탭(교사) — 경로 선택 복사(현재 파일/폴더 빠른 입력) + 공유 공간 배포. 기술문서 §20. */
@@ -12,6 +12,8 @@ export class DeploySection implements PanelSection {
 	private substitute = true;
 	private selected = new Set<string>();
 	private infoEl: HTMLElement | null = null;
+	private lastPlan: CopyPlan | null = null;
+	private lastResult: (CopyResult & { error?: string }) | null = null;
 
 	constructor(private host: PanelHost) {
 		for (const st of host.settings.students) if (st.studentId) this.selected.add(st.studentId);
@@ -102,12 +104,62 @@ export class DeploySection implements PanelSection {
 				);
 		}
 
-		new Setting(container).addButton((b) =>
-			b
-				.setButtonText(t("학생에게 복사"))
-				.setCta()
-				.onClick(() => void this.runCopy()),
-		);
+		const runRow = container.createDiv({ cls: "class-sync-panel-actions" });
+		panelButton(runRow, t("미리보기"), () => this.runPreview());
+		panelButton(runRow, t("학생에게 복사"), () => this.runCopy(), { cta: true });
+
+		this.renderResult(container);
+	}
+
+	/** 직전 미리보기/실행 결과를 패널에 유지해 보여준다. */
+	private renderResult(container: HTMLElement): void {
+		if (this.lastPlan) {
+			const plan = this.lastPlan;
+			container.createDiv({ cls: "class-sync-panel-label", text: t("미리보기") });
+			const table = container.createEl("table", { cls: "class-sync-dash-table" });
+			const tr = table.createEl("thead").createEl("tr");
+			for (const h of [t("학생"), t("생성"), t("덮어씀"), t("건너뜀"), t("새 이름")]) tr.createEl("th", { text: h });
+			const tb = table.createEl("tbody");
+			for (const sp of plan.students) {
+				const c = { create: 0, overwrite: 0, skip: 0, rename: 0 };
+				for (const e of sp.entries) c[e.action]++;
+				const row = tb.createEl("tr");
+				row.createEl("td", { text: sp.studentName || sp.studentId });
+				row.createEl("td", { text: String(c.create) });
+				row.createEl("td", { text: String(c.overwrite) });
+				row.createEl("td", { text: String(c.skip) });
+				row.createEl("td", { text: String(c.rename) });
+			}
+			if (plan.sampleAfter !== undefined) {
+				container.createDiv({ cls: "class-sync-panel-hint", text: t("치환 결과 미리보기(첫 학생):") });
+				container.createEl("pre", { cls: "class-sync-deploy-sample", text: plan.sampleAfter });
+			}
+		}
+
+		if (this.lastResult && !this.lastResult.error) {
+			const res = this.lastResult;
+			container.createDiv({ cls: "class-sync-panel-label", text: t("복사 결과") });
+			const table = container.createEl("table", { cls: "class-sync-dash-table" });
+			const tr = table.createEl("thead").createEl("tr");
+			for (const h of [t("학생"), t("작성"), t("건너뜀"), t("결과")]) tr.createEl("th", { text: h });
+			const tb = table.createEl("tbody");
+			for (const d of res.details) {
+				const row = tb.createEl("tr");
+				row.createEl("td", { text: d.studentName || d.studentId });
+				row.createEl("td", { text: String(d.written) });
+				row.createEl("td", { text: String(d.skipped) });
+				const note = row.createEl("td", { text: d.error ? t("실패") : "✓" });
+				if (d.error) {
+					note.addClass("class-sync-dash-conflict");
+					note.setAttribute("title", d.error);
+				}
+			}
+			const failed = res.details.filter((d) => d.error).map((d) => d.studentId);
+			if (failed.length > 0) {
+				const row = container.createDiv({ cls: "class-sync-panel-actions" });
+				panelButton(row, t("실패한 {n}명만 재시도", { n: failed.length }), () => this.runCopy(failed), { warning: true });
+			}
+		}
 	}
 
 	private fillCurrent(kind: "file" | "folder"): void {
@@ -141,23 +193,46 @@ export class DeploySection implements PanelSection {
 		if (this.container) this.render(this.container);
 	}
 
-	private async runCopy(): Promise<void> {
+	private opts() {
+		return { destPath: this.destPath, policy: this.policy, substitute: this.substitute };
+	}
+
+	/** 선택/원본 검증 후 대상 학생 ID 반환(없으면 null + Notice). */
+	private targetIds(override?: string[]): string[] | null {
 		if (!this.sourcePath) {
 			new Notice(t("Class Sync: 원본 경로를 입력하세요."));
-			return;
+			return null;
 		}
-		const ids = [...this.selected];
+		const ids = override ?? [...this.selected];
 		if (ids.length === 0) {
 			new Notice(t("Class Sync: 대상 학생을 선택하세요."));
+			return null;
+		}
+		return ids;
+	}
+
+	private async runPreview(): Promise<void> {
+		const ids = this.targetIds();
+		if (!ids) return;
+		const plan = await this.host.bulkCopyPreview(this.sourcePath, this.opts(), ids);
+		if (plan.error) {
+			new Notice(t("미리보기 실패: {error}", { error: plan.error }));
 			return;
 		}
-		const res = await this.host.bulkCopy(
-			this.sourcePath,
-			{ destPath: this.destPath, policy: this.policy, substitute: this.substitute },
-			ids,
-		);
+		this.lastPlan = plan;
+		this.lastResult = null;
+		if (this.container) this.render(this.container);
+	}
+
+	private async runCopy(override?: string[]): Promise<void> {
+		const ids = this.targetIds(override);
+		if (!ids) return;
+		const res = await this.host.bulkCopy(this.sourcePath, this.opts(), ids);
+		this.lastResult = res;
+		this.lastPlan = null;
 		if (res.error) new Notice(t("복사 실패: {error}", { error: res.error }));
 		else new Notice(t("복사 완료: {written}개 작성, {skipped}개 건너뜀", { written: res.written, skipped: res.skipped }));
+		if (this.container) this.render(this.container);
 	}
 
 	// --- 공유 공간 배포 ---

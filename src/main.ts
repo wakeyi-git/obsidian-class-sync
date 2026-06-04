@@ -12,7 +12,7 @@ import { RoleSetupModal } from "./ui/RoleSetupModal";
 import { InviteModal } from "./ui/InviteModal";
 import { ConflictModal, ConflictRow, ConflictHost } from "./ui/ConflictModal";
 import { ResolveChoice } from "./core/sync/ConflictManager";
-import { BulkCopy, CopyOptions, CopyResult } from "./modes/teacher/BulkCopy";
+import { BulkCopy, CopyOptions, CopyResult, CopyPlan } from "./modes/teacher/BulkCopy";
 import { RealtimeManager } from "./core/realtime/RealtimeManager";
 import { mintSpaceToken } from "./core/realtime/spaceToken";
 import { realtimeEditorExtension } from "./core/realtime/editorBinding";
@@ -671,26 +671,47 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		opts: CopyOptions,
 		studentIds: string[],
 	): Promise<CopyResult & { error?: string }> {
-		if (this.settings.role !== "teacher") {
-			return { written: 0, skipped: 0, error: t("교사 모드에서만 사용할 수 있습니다.") };
-		}
-		const src = this.app.vault.getAbstractFileByPath(sourcePath);
-		if (!(src instanceof TFile) && !(src instanceof TFolder)) {
-			return { written: 0, skipped: 0, error: t("경로를 찾을 수 없습니다: {path}", { path: sourcePath }) };
-		}
-		const targets = this.settings.students.filter((st) => studentIds.includes(st.studentId));
-		if (targets.length === 0) {
-			return { written: 0, skipped: 0, error: t("대상 학생이 없습니다.") };
-		}
-		const bulk = new BulkCopy(this.app, this.settings);
+		const r = this.resolveCopy(sourcePath, opts, studentIds);
+		if ("error" in r) return { written: 0, skipped: 0, details: [], error: r.error };
 		try {
-			if (src instanceof TFolder) return await bulk.copyFolder(src, targets, opts);
-			// 파일: 대상 경로가 비어 있으면 원본 파일명으로 보낸다.
-			const fileOpts = opts.destPath ? opts : { ...opts, destPath: src.name };
-			return await bulk.copyFile(src, targets, fileOpts);
+			return r.src instanceof TFolder
+				? await r.bulk.copyFolder(r.src, r.targets, r.opts)
+				: await r.bulk.copyFile(r.src, r.targets, r.opts);
 		} catch (e) {
-			return { written: 0, skipped: 0, error: e instanceof Error ? e.message : String(e) };
+			return { written: 0, skipped: 0, details: [], error: e instanceof Error ? e.message : String(e) };
 		}
+	}
+
+	/** 배포 미리보기(dry-run) — 아무것도 쓰지 않고 학생별 대상/동작 예상. 배포 탭에서 호출. */
+	async bulkCopyPreview(
+		sourcePath: string,
+		opts: CopyOptions,
+		studentIds: string[],
+	): Promise<CopyPlan & { error?: string }> {
+		const r = this.resolveCopy(sourcePath, opts, studentIds);
+		if ("error" in r) return { students: [], error: r.error };
+		try {
+			return await r.bulk.preview(r.src, r.targets, r.opts);
+		} catch (e) {
+			return { students: [], error: e instanceof Error ? e.message : String(e) };
+		}
+	}
+
+	/** 복사/미리보기 공통: 경로·대상 학생 해석 + 파일일 때 빈 대상경로 보정. */
+	private resolveCopy(
+		sourcePath: string,
+		opts: CopyOptions,
+		studentIds: string[],
+	): { src: TFile | TFolder; targets: StudentConfig[]; bulk: BulkCopy; opts: CopyOptions } | { error: string } {
+		if (this.settings.role !== "teacher") return { error: t("교사 모드에서만 사용할 수 있습니다.") };
+		const src = this.app.vault.getAbstractFileByPath(sourcePath);
+		if (!(src instanceof TFile) && !(src instanceof TFolder))
+			return { error: t("경로를 찾을 수 없습니다: {path}", { path: sourcePath }) };
+		const targets = this.settings.students.filter((st) => studentIds.includes(st.studentId));
+		if (targets.length === 0) return { error: t("대상 학생이 없습니다.") };
+		// 파일: 대상 경로가 비어 있으면 원본 파일명으로.
+		const finalOpts = src instanceof TFile && !opts.destPath ? { ...opts, destPath: src.name } : opts;
+		return { src, targets, bulk: new BulkCopy(this.app, this.settings), opts: finalOpts };
 	}
 
 	// --- 동기화 상태 (PanelHost) ---

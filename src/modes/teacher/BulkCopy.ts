@@ -1,5 +1,9 @@
 import { App, TFile, TFolder, normalizePath } from "obsidian";
 import { ClassSyncSettings, StudentConfig } from "../../settings/types";
+import { ExistingPolicy, CopyAction, decideAction } from "./copyAction";
+
+export { decideAction };
+export type { ExistingPolicy, CopyAction };
 
 /** 로컬 시간대 기준 YYYY-MM-DD. */
 function localDate(): string {
@@ -8,8 +12,6 @@ function localDate(): string {
 	return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-export type ExistingPolicy = "skip" | "overwrite" | "rename";
-
 export interface CopyOptions {
 	/** 단일 파일 복사 시 학생 폴더 내 대상 상대 경로. */
 	destPath: string;
@@ -17,9 +19,35 @@ export interface CopyOptions {
 	substitute: boolean;
 }
 
+/** 학생 1명의 복사 결과(성공/건너뜀 수 + 오류). */
+export interface CopyDetail {
+	studentId: string;
+	studentName: string;
+	written: number;
+	skipped: number;
+	error?: string;
+}
+
 export interface CopyResult {
 	written: number;
 	skipped: number;
+	details: CopyDetail[];
+}
+
+/** 미리보기(dry-run) — 학생별 최종 대상 경로·동작 예상 + 치환 샘플. */
+export interface PlanEntry {
+	destPath: string;
+	action: CopyAction;
+}
+export interface StudentPlan {
+	studentId: string;
+	studentName: string;
+	entries: PlanEntry[];
+}
+export interface CopyPlan {
+	students: StudentPlan[];
+	sampleBefore?: string;
+	sampleAfter?: string;
 }
 
 /**
@@ -37,32 +65,68 @@ export class BulkCopy {
 	/** 단일 파일을 선택 학생들에게 복사. */
 	async copyFile(file: TFile, students: StudentConfig[], opts: CopyOptions): Promise<CopyResult> {
 		const content = await this.app.vault.read(file);
-		const res: CopyResult = { written: 0, skipped: 0 };
-		for (const st of students) {
-			const r = await this.writeForStudent(st, opts.destPath, content, opts);
-			if (r === "written") res.written++;
-			else res.skipped++;
-		}
-		return res;
+		return this.run(students, [{ rel: opts.destPath, content }], opts);
 	}
 
 	/** 폴더 아래 markdown 전체를 선택 학생들에게 복사(폴더 내부 구조 유지, 폴더명은 제외). */
 	async copyFolder(folder: TFolder, students: StudentConfig[], opts: CopyOptions): Promise<CopyResult> {
 		const files = this.markdownIn(folder);
-		const res: CopyResult = { written: 0, skipped: 0 };
+		const items: Array<{ rel: string; content: string }> = [];
+		for (const f of files) items.push({ rel: f.path.slice(folder.path.length + 1), content: await this.app.vault.read(f) });
+		return this.run(students, items, opts);
+	}
+
+	/** dry-run: 아무것도 쓰지 않고 학생별 대상 경로·동작 예상 + 치환 샘플을 만든다. */
+	async preview(src: TFile | TFolder, students: StudentConfig[], opts: CopyOptions): Promise<CopyPlan> {
+		const rels = src instanceof TFolder ? this.markdownIn(src).map((f) => f.path.slice(src.path.length + 1)) : [opts.destPath];
+		const plan: CopyPlan = { students: [] };
 		for (const st of students) {
-			for (const f of files) {
-				const rel = f.path.slice(folder.path.length + 1); // 폴더 접두 제거
-				const content = await this.app.vault.read(f);
-				const r = await this.writeForStudent(st, rel, content, opts);
-				if (r === "written") res.written++;
-				else res.skipped++;
+			const entries: PlanEntry[] = rels.map((rel) => {
+				let destPath = normalizePath(`${st.localRoot}/${rel}`);
+				const existing = this.app.vault.getAbstractFileByPath(destPath) instanceof TFile;
+				const action = decideAction(existing, opts.policy);
+				if (action === "rename") destPath = this.availableName(destPath);
+				return { destPath, action };
+			});
+			plan.students.push({ studentId: st.studentId, studentName: st.studentName, entries });
+		}
+		// 치환 샘플: 첫 파일 + 첫 학생
+		if (opts.substitute && students[0]) {
+			const first = src instanceof TFolder ? this.markdownIn(src)[0] : src;
+			if (first) {
+				const content = await this.app.vault.read(first);
+				plan.sampleBefore = content.slice(0, 200);
+				plan.sampleAfter = this.substitute(content, students[0]).slice(0, 200);
 			}
 		}
-		return res;
+		return plan;
 	}
 
 	// --- 내부 ---
+
+	private async run(
+		students: StudentConfig[],
+		items: Array<{ rel: string; content: string }>,
+		opts: CopyOptions,
+	): Promise<CopyResult> {
+		const res: CopyResult = { written: 0, skipped: 0, details: [] };
+		for (const st of students) {
+			const d: CopyDetail = { studentId: st.studentId, studentName: st.studentName, written: 0, skipped: 0 };
+			try {
+				for (const it of items) {
+					const r = await this.writeForStudent(st, it.rel, it.content, opts);
+					if (r === "written") d.written++;
+					else d.skipped++;
+				}
+			} catch (e) {
+				d.error = e instanceof Error ? e.message : String(e);
+			}
+			res.written += d.written;
+			res.skipped += d.skipped;
+			res.details.push(d);
+		}
+		return res;
+	}
 
 	private async writeForStudent(
 		st: StudentConfig,

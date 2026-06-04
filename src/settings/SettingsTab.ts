@@ -2,6 +2,7 @@ import { App, Notice, Plugin, PluginSettingTab, Setting, SettingGroup } from "ob
 import { ClassSyncSettings, StudentConfig, SharedSpace } from "./types";
 import { ExportModal, ImportModal } from "../ui/BackupModal";
 import { ConfirmModal } from "../ui/ConfirmModal";
+import { StudentBulkImportModal } from "../ui/StudentBulkImportModal";
 import { validateFolderName, foldersOverlap } from "../core/path/path";
 import { validateSettings, SettingsIssue } from "./validateSettings";
 import { t } from "../i18n";
@@ -142,16 +143,32 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		);
 		s.students.forEach((st, i) => this.renderStudentCard(students, st, i));
 		students.addSetting((set) =>
-			set.setClass("class-sync-add-row").addButton((b) =>
-				b
-					.setButtonText(t("+ 학생 추가"))
-					.setCta()
-					.onClick(async () => {
-						s.students.push({ studentId: "", studentName: "", remoteDb: "", localRoot: "", username: "" });
-						await this.host.saveSettings();
-						this.display();
-					}),
-			),
+			set
+				.setClass("class-sync-add-row")
+				.addButton((b) =>
+					b
+						.setButtonText(t("+ 학생 추가"))
+						.setCta()
+						.onClick(async () => {
+							s.students.push({ studentId: "", studentName: "", remoteDb: "", localRoot: "", username: "" });
+							await this.host.saveSettings();
+							this.display();
+						}),
+				)
+				.addButton((b) =>
+					b.setButtonText(t("명단 붙여넣기")).onClick(() =>
+						new StudentBulkImportModal(
+							this.host.app,
+							s.students.map((st) => st.studentId).filter((id) => id),
+							async (added) => {
+								s.students.push(...added);
+								await this.host.saveSettings();
+								this.host.requestApply();
+								this.display();
+							},
+						).open(),
+					),
+				),
 		);
 
 		// 공유 공간 (모둠/학급)
