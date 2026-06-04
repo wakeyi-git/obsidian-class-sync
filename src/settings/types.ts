@@ -106,9 +106,12 @@ export interface ClassSyncSettings {
 	/** 실시간 공동 편집(Yjs) — 공유 폴더 문서에만 적용. 기술문서 §19. */
 	realtimeEnabled: boolean;
 	yjsServerUrl: string; // wss://yjs.example.com
-	yjsToken: string; // 레거시 전역 토큰(서버 YJS_TOKEN 모드)
+	yjsToken: string; // 레거시 전역 토큰(서버 YJS_TOKEN 모드) — 교사는 secretStorage로 이전(평문 폴백/학생 수신용)
 	/** Yjs 공간 시크릿(교사 전용, HMAC 키). 설정 시 공유 공간별 서명 토큰을 발급한다. 서버 YJS_SECRET와 동일. */
 	yjsSecret?: string;
+	/** 비밀값이 secretStorage에 저장됐는지 표시(평문 아님, data.json에 안전). UI/검증용. */
+	yjsSecretSet?: boolean;
+	yjsTokenSet?: boolean;
 	/** 공간 토큰 만료(일). 0/미설정=무만료. 주기적 재배포로 폐기하려면 값을 둔다. */
 	yjsTokenTtlDays?: number;
 

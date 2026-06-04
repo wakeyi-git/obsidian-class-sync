@@ -141,7 +141,7 @@ export class BulkCopy {
 		if (existing instanceof TFile) {
 			if (opts.policy === "skip") return "skipped";
 			if (opts.policy === "overwrite") {
-				await this.app.vault.modify(existing, body);
+				await this.app.vault.process(existing, () => body); // 백그라운드 쓰기: 가이드라인 권장
 				return "written";
 			}
 			// rename: 빈 이름 찾기

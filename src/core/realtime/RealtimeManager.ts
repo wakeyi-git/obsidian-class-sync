@@ -6,6 +6,7 @@ import { CoreServices } from "../CoreServices";
 import { bindView, unbindView } from "./editorBinding";
 import { PresenceChips } from "./presenceChips";
 import { clientColor } from "./clientColor";
+import { getSecretValue, YJS_TOKEN_ID } from "../secret";
 import { ExcalidrawBinding, ExcalidrawImperativeApi } from "./excalidrawBinding";
 import { t } from "../../i18n";
 
@@ -145,8 +146,8 @@ export class RealtimeManager {
 		if (!room) return undefined;
 		const dbPath = path.slice(space.folder.length + 1);
 
-		// 공간별 토큰(HMAC 모드)이 있으면 그것을, 없으면 레거시 전역 토큰을 쓴다.
-		const token = space.token || this.settings.yjsToken;
+		// 공간별 토큰(HMAC 모드)이 있으면 그것을, 없으면 레거시 전역 토큰(Secret Storage/평문)을 쓴다.
+		const token = space.token || getSecretValue(this.app, YJS_TOKEN_ID, this.settings.yjsToken);
 		if (!token) return undefined; // 토큰 없으면 이 공간 실시간 비활성
 
 		const ydoc = new Y.Doc();
@@ -273,7 +274,7 @@ export class RealtimeManager {
 			t("실시간 점검 — enabled={enabled}, url={url}, 전역토큰={legacy}, 공간토큰={spaceTokens}", {
 				enabled: String(s.realtimeEnabled),
 				url: s.yjsServerUrl ? t("설정됨") : t("없음"),
-				legacy: s.yjsToken ? t("설정됨") : t("없음"),
+				legacy: getSecretValue(this.app, YJS_TOKEN_ID, s.yjsToken) ? t("설정됨") : t("없음"),
 				spaceTokens: `${withToken}/${spaces.length}`,
 			}),
 			true,
@@ -289,7 +290,13 @@ export class RealtimeManager {
 			t("활성 파일: {file} → 공유공간: {space} (공간토큰={spaceToken})", {
 				file: f?.path ?? t("(없음)"),
 				space: f ? (space?.id ?? t("아님(공유폴더 밖)")) : "-",
-				spaceToken: space ? (space.token ? t("설정됨") : s.yjsToken ? t("전역 사용") : t("없음")) : "-",
+				spaceToken: space
+					? space.token
+						? t("설정됨")
+						: getSecretValue(this.app, YJS_TOKEN_ID, s.yjsToken)
+							? t("전역 사용")
+							: t("없음")
+					: "-",
 			}),
 		);
 		// room 이름(교사·학생이 정확히 같아야 실시간 공유됨)
@@ -487,7 +494,7 @@ export class RealtimeManager {
 						if (content.length === 0 && current.length > 0) {
 							this.core.logger.warn(t("실시간 스냅샷 생략(빈 내용 덮어쓰기 방지): {path}", { path }));
 						} else {
-							await this.app.vault.modify(file, content);
+							await this.app.vault.process(file, () => content); // 백그라운드 쓰기: 가이드라인 권장
 							this.core.logger.ok(t("실시간 스냅샷 저장: {path}", { path }));
 						}
 					}

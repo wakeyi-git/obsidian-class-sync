@@ -15,6 +15,7 @@ import { ResolveChoice } from "./core/sync/ConflictManager";
 import { BulkCopy, CopyOptions, CopyResult, CopyPlan } from "./modes/teacher/BulkCopy";
 import { RealtimeManager } from "./core/realtime/RealtimeManager";
 import { mintSpaceToken } from "./core/realtime/spaceToken";
+import { getSecretValue, setSecretValue, hasSecretStorage, YJS_SECRET_ID, YJS_TOKEN_ID } from "./core/secret";
 import { realtimeEditorExtension } from "./core/realtime/editorBinding";
 import { FeedbackStore } from "./core/feedback/FeedbackStore";
 import { promptAddFeedback } from "./ui/FeedbackView";
@@ -53,6 +54,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		initI18n(this.settings.language); // 모든 t() 이전에 로케일 확정
+		this.migrateSecrets(); // 평문 yjsSecret/yjsToken을 Secret Storage로 1회 이전(교사)
 
 		this.core = new CoreServices(this.app, this.settings, this.logger);
 		this.core.save = () => this.saveData(this.settings);
@@ -114,6 +116,25 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	// --- 설정 ---
 	async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+	}
+
+	/** 교사의 평문 Yjs 비밀값을 Secret Storage로 1회 이전하고 data.json에서 제거(평문 노출 방지). */
+	private migrateSecrets(): void {
+		if (this.settings.role !== "teacher" || !hasSecretStorage(this.app)) return;
+		let changed = false;
+		if (this.settings.yjsSecret) {
+			setSecretValue(this.app, YJS_SECRET_ID, this.settings.yjsSecret);
+			this.settings.yjsSecretSet = true;
+			this.settings.yjsSecret = undefined;
+			changed = true;
+		}
+		if (this.settings.yjsToken) {
+			setSecretValue(this.app, YJS_TOKEN_ID, this.settings.yjsToken);
+			this.settings.yjsTokenSet = true;
+			this.settings.yjsToken = "";
+			changed = true;
+		}
+		if (changed) void this.saveSettings();
 	}
 
 	async saveSettings(): Promise<void> {
@@ -312,14 +333,15 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 
 		// HMAC 모드(yjsSecret 설정): 배포 때마다 **모든** 공유 공간 토큰을 재발급한다. 이 배포에서 모든 학생의
 		// shares 문서가 다시 기록되므로, 시크릿 변경/TTL 만료 시 구 토큰이 그대로 다시 내려가는 일을 막는다.
-		// (유출 시 해당 공간 room만 접근 가능 — 학급 전체 아님.)
-		if (s.yjsSecret) {
+		// (유출 시 해당 공간 room만 접근 가능 — 학급 전체 아님.) 시크릿은 Secret Storage에서 읽는다.
+		const yjsSecret = getSecretValue(this.app, YJS_SECRET_ID, s.yjsSecret);
+		if (yjsSecret) {
 			const ttl =
 				s.yjsTokenTtlDays && s.yjsTokenTtlDays > 0
 					? Math.floor(Date.now() / 1000) + s.yjsTokenTtlDays * 86400
 					: undefined;
 			for (const sp of s.sharedSpaces) {
-				sp.token = await mintSpaceToken(s.yjsSecret, { classId: s.classId, spaceId: sp.id, exp: ttl });
+				sp.token = await mintSpaceToken(yjsSecret, { classId: s.classId, spaceId: sp.id, exp: ttl });
 			}
 		}
 		await this.saveSettings();
@@ -336,7 +358,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 				type: "rtconfig",
 				enabled: s.realtimeEnabled,
 				url: s.yjsServerUrl,
-				token: s.yjsToken,
+				token: getSecretValue(this.app, YJS_TOKEN_ID, s.yjsToken),
 				snapshotSec: s.realtimeSnapshotSec,
 			});
 			if (!rc.ok) this.logger.error(t("rtconfig 기록 실패({id}): {err}", { id: st.studentId, err: rc.error ?? "" }));

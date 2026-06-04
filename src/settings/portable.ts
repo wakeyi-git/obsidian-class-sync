@@ -3,7 +3,8 @@ import { t } from "../i18n";
 
 /** 내보낼 때 제외할 자격증명/기기 고유 키. 기술문서 §22.4. */
 const SECRET_KEYS: Array<keyof ClassSyncSettings> = ["password", "yjsToken", "yjsSecret"];
-const DEVICE_KEYS: Array<keyof ClassSyncSettings> = ["deviceId", "lastSeqByDb"];
+// 비밀값은 Secret Storage에 있고 이전 여부(*Set) 마커는 기기별 상태이므로 내보내지 않는다.
+const DEVICE_KEYS: Array<keyof ClassSyncSettings> = ["deviceId", "lastSeqByDb", "yjsSecretSet", "yjsTokenSet"];
 
 /** 가져올 때 구조/옵션으로 병합할 키(현재 기기의 secret·device·role은 보존). */
 const IMPORT_KEYS: Array<keyof ClassSyncSettings> = [

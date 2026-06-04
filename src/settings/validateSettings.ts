@@ -58,7 +58,9 @@ export function validateSettings(s: ClassSyncSettings): SettingsIssue[] {
 
 	if (s.realtimeEnabled) {
 		if (!s.yjsServerUrl) issues.push({ level: "warn", code: "rt-no-url" });
-		else if (!s.yjsToken && !s.yjsSecret) issues.push({ level: "warn", code: "rt-no-token" });
+		// 비밀값은 평문 또는 Secret Storage(yjs*Set 마커)로 설정될 수 있다.
+		else if (!s.yjsToken && !s.yjsSecret && !s.yjsTokenSet && !s.yjsSecretSet)
+			issues.push({ level: "warn", code: "rt-no-token" });
 	}
 
 	return issues;

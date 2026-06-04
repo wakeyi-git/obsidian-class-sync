@@ -6,6 +6,7 @@ import { StudentBulkImportModal } from "../ui/StudentBulkImportModal";
 import { validateFolderName, foldersOverlap } from "../core/path/path";
 import { validateSettings, SettingsIssue } from "./validateSettings";
 import { sharedSpaceStatus } from "./sharedSpaceStatus";
+import { getSecretValue, setSecretValue, YJS_SECRET_ID, YJS_TOKEN_ID } from "../core/secret";
 import { t } from "../i18n";
 
 /** 검증 이슈 코드 → 사용자 메시지(i18n). validateSettings는 순수(코드만), 문구는 여기서. */
@@ -204,22 +205,31 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		);
 		this.textSetting(rt, t("Yjs 서버 URL"), "yjsServerUrl", "wss://yjs.example.com");
 		rt.addSetting((set) =>
-			set.setName(t("Yjs 토큰")).addText((txt) => {
-				txt.setPlaceholder(t("공유 비밀 토큰")).setValue(s.yjsToken).onChange(async (v) => {
-					s.yjsToken = v.trim();
-					await this.host.saveSettings();
-				});
-				txt.inputEl.type = "password";
-				noAutoCorrect(txt.inputEl);
-			}),
+			set
+				.setName(t("Yjs 토큰"))
+				.setDesc(t("비밀값은 Obsidian Secret Storage에 저장되어 data.json에 평문으로 남지 않습니다."))
+				.addText((txt) => {
+					txt.setPlaceholder(t("공유 비밀 토큰")).setValue(getSecretValue(this.host.app, YJS_TOKEN_ID, s.yjsToken)).onChange(async (v) => {
+						const val = v.trim();
+						setSecretValue(this.host.app, YJS_TOKEN_ID, val);
+						s.yjsTokenSet = !!val;
+						s.yjsToken = ""; // 평문 제거(secretStorage로 이전)
+						await this.host.saveSettings();
+					});
+					txt.inputEl.type = "password";
+					noAutoCorrect(txt.inputEl);
+				}),
 		);
 		rt.addSetting((set) =>
 			set
 				.setName(t("Yjs 공간 시크릿 (HMAC, 권장)"))
-				.setDesc(t("설정하면 공유 공간별 서명 토큰을 발급합니다(유출돼도 해당 공간만 접근). 서버 YJS_SECRET와 동일하게 두고 공유하지 마세요. 재배포 시 토큰이 갱신됩니다."))
+				.setDesc(t("설정하면 공유 공간별 서명 토큰을 발급합니다(유출돼도 해당 공간만 접근). 서버 YJS_SECRET와 동일하게 두고 공유하지 마세요. 비밀값은 Secret Storage에 저장됩니다."))
 				.addText((txt) => {
-					txt.setPlaceholder(t("서버 YJS_SECRET와 동일")).setValue(s.yjsSecret ?? "").onChange(async (v) => {
-						s.yjsSecret = v.trim() || undefined;
+					txt.setPlaceholder(t("서버 YJS_SECRET와 동일")).setValue(getSecretValue(this.host.app, YJS_SECRET_ID, s.yjsSecret)).onChange(async (v) => {
+						const val = v.trim();
+						setSecretValue(this.host.app, YJS_SECRET_ID, val);
+						s.yjsSecretSet = !!val;
+						s.yjsSecret = undefined; // 평문 제거(secretStorage로 이전)
 						await this.host.saveSettings();
 					});
 					txt.inputEl.type = "password";

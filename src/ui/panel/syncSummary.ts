@@ -33,6 +33,7 @@ export function computeSyncSummary(rows: DashboardRow[], s: ClassSyncSettings): 
 		!!s.yjsServerUrl &&
 		shared > 0 &&
 		!s.yjsToken &&
+		!s.yjsTokenSet &&
 		s.sharedSpaces.some((sp) => !sp.token);
 
 	const autoSyncOff = !s.autoSync;

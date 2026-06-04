@@ -1,8 +1,8 @@
 {
 	"id": "class-sync",
 	"name": "Class Sync",
-	"version": "0.16.0",
-	"minAppVersion": "1.11.0",
+	"version": "0.17.0",
+	"minAppVersion": "1.11.4",
 	"description": "Two-way sync between a teacher's per-student folders and each student's vault via CouchDB, with QR onboarding to least-privilege accounts.",
 	"author": "wakeyi",
 	"authorUrl": "https://github.com/wakeyi-git/obsidian-class-sync",
