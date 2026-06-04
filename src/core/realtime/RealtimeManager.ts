@@ -4,6 +4,8 @@ import { WebsocketProvider } from "y-websocket";
 import { EditorView } from "@codemirror/view";
 import { CoreServices } from "../CoreServices";
 import { bindView, unbindView } from "./editorBinding";
+import { PresenceChips } from "./presenceChips";
+import { clientColor } from "./clientColor";
 import { ExcalidrawBinding, ExcalidrawImperativeApi } from "./excalidrawBinding";
 import { t } from "../../i18n";
 
@@ -17,6 +19,7 @@ interface Session {
 	provider: WebsocketProvider;
 	ready: boolean; // 서버 동기화 + 시드 완료 → 바인딩 가능
 	bound: Set<EditorView>; // md: 바인딩된 CM6
+	mdPresence?: Map<EditorView, PresenceChips>; // md: 뷰별 참가자 칩 오버레이
 	exBinding?: ExcalidrawBinding; // excalidraw 바인딩
 	snapTimer?: number; // 주기적 CouchDB 스냅샷 타이머(§19.2)
 	lastSnapshot?: string; // 마지막으로 스냅샷한 내용(중복 쓰기 방지)
@@ -151,12 +154,13 @@ export class RealtimeManager {
 			params: { token },
 		});
 
-		const color = COLORS[Math.abs(hash(this.settings.deviceId)) % COLORS.length];
+		// 커서·이름 색을 Excalidraw와 동일한 clientColor(clientId) 공식으로 통일(칩과도 일치).
+		const color = clientColor(String(provider.awareness.clientID));
 		provider.awareness.setLocalStateField("user", { name: this.settings.displayName || t("사용자"), color });
 
 		const session: Session =
 			kind === "md"
-				? { file: path, kind, ydoc, ytext: ydoc.getText("content"), provider, ready: false, bound: new Set() }
+				? { file: path, kind, ydoc, ytext: ydoc.getText("content"), provider, ready: false, bound: new Set(), mdPresence: new Map() }
 				: {
 						file: path,
 						kind,
@@ -340,6 +344,11 @@ export class RealtimeManager {
 			try {
 				bindView(cm, ytext, session.provider.awareness);
 				session.bound.add(cm);
+				// 뷰 우하단에 참가자 칩(Excalidraw와 동일) — 포인터 없이도 편집자 이름 상시 표시.
+				const host = (view as unknown as { contentEl?: HTMLElement }).contentEl;
+				if (host && session.mdPresence && !session.mdPresence.has(cm)) {
+					session.mdPresence.set(cm, new PresenceChips(host, session.provider.awareness));
+				}
 			} catch (e) {
 				this.core.logger.error(
 					t("실시간 바인딩 실패: {file} — {error}", {
@@ -432,6 +441,10 @@ export class RealtimeManager {
 			} catch {
 				/* 뷰가 이미 사라졌을 수 있음 */
 			}
+		}
+		if (session.mdPresence) {
+			for (const chips of session.mdPresence.values()) chips.destroy();
+			session.mdPresence.clear();
 		}
 		session.exBinding?.destroy();
 
