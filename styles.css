@@ -462,16 +462,19 @@
 	flex: 0 0 auto;
 }
 
-/* 실시간 커서: 편집자 이름 라벨 항상 표시 (y-codemirror.next) */
+/* 실시간 커서: 편집자 이름 라벨 항상 표시 (y-codemirror.next)
+   — Excalidraw 포인터 라벨과 동일 스타일: 600 12px sans-serif, padding 5/3, radius 8,
+   배경은 참가자 색(clientColor, 연한 파스텔), 글자는 검정. */
 .cm-ySelectionInfo {
 	opacity: 1 !important;
 	transition-delay: 0s !important;
-	font-size: 11px;
+	font-family: sans-serif;
+	font-size: 12px;
 	font-weight: 600;
-	padding: 1px 5px;
-	border-radius: 4px 4px 4px 0;
+	padding: 3px 5px;
+	border-radius: 8px;
 	white-space: nowrap;
-	color: #fff;
+	color: #000;
 	z-index: 100;
 	pointer-events: none;
 }
