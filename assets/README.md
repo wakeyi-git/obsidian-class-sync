@@ -1,14 +1,12 @@
-# Screenshots
+# 스크린샷 자리
 
-> [한국어](README.ko.md)
+README가 참조하는 이미지 파일을 여기에 넣으세요(파일명 유지 시 자동 표시).
 
-Place the image files referenced by the main README here (kept filenames are shown automatically).
-
-| File | Content |
+| 파일명 | 내용 |
 |---|---|
-| `teacher-settings.png` | Teacher settings tab (Class, Admin account, Students groups) |
-| `qr-invite.png` | Student invite QR modal |
-| `realtime.png` | Realtime co-editing of a shared note (cursors and names) |
-| `feedback.png` | Feedback panel (anchored comment list) |
+| `teacher-settings.png` | 교사 설정 탭(학급·관리자 계정·학생 목록 그룹) |
+| `qr-invite.png` | 학생 초대 QR 모달 |
+| `realtime.png` | 공유 문서 실시간 공동 편집(커서·이름 표시) |
+| `feedback.png` | 피드백 패널(앵커 댓글 목록) |
 
-Recommended: PNG, 800–1200px wide. For community submission, put 1–2 attractive hero images at the top of the README. Mask any sensitive info (server URLs, credentials, QR codes).
+권장: PNG, 너비 800~1200px. 커뮤니티 제출 시 보기 좋은 대표 이미지 1~2장을 README 상단에 둡니다. 민감정보(서버 URL·자격증명·QR)는 가립니다.
