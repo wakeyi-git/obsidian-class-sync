@@ -1,6 +1,7 @@
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import { PanelHost, PanelSection, PanelTab } from "./panel/PanelSection";
 import { FeedbackSection } from "./panel/FeedbackSection";
+import { SetupSection } from "./panel/SetupSection";
 import { SyncStatusSection } from "./panel/SyncStatusSection";
 import { DeploySection } from "./panel/DeploySection";
 import { ManageSection } from "./panel/ManageSection";
@@ -11,6 +12,8 @@ export const PANEL_VIEW_TYPE = "class-sync-panel";
 
 function tabLabel(tab: PanelTab): string {
 	switch (tab) {
+		case "setup":
+			return t("시작하기");
 		case "feedback":
 			return t("피드백");
 		case "deploy":
@@ -50,7 +53,9 @@ export class ClassSyncPanelView extends ItemView {
 
 	private tabs(): PanelTab[] {
 		const teacher = this.host.settings.role === "teacher";
-		return teacher ? ["feedback", "deploy", "sync", "manage", "log"] : ["feedback", "sync", "manage", "log"];
+		return teacher
+			? ["setup", "feedback", "deploy", "sync", "manage", "log"]
+			: ["feedback", "sync", "manage", "log"];
 	}
 
 	async onOpen(): Promise<void> {
@@ -111,6 +116,8 @@ export class ClassSyncPanelView extends ItemView {
 
 	private createSection(tab: PanelTab): PanelSection {
 		switch (tab) {
+			case "setup":
+				return new SetupSection(this.host);
 			case "feedback":
 				return new FeedbackSection(this.host.app, this.host.feedbackStore);
 			case "deploy":

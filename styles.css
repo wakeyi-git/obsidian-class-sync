@@ -94,6 +94,41 @@
 	margin: 2px 0 6px;
 }
 
+/* 교사 시작하기(마법사) 단계 카드 */
+.class-sync-setup-step {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 8px 10px;
+	margin: 8px 0;
+	background: var(--background-secondary);
+}
+
+.class-sync-setup-step.is-done {
+	opacity: 0.7;
+	border-color: var(--text-success);
+}
+
+.class-sync-setup-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.class-sync-setup-check {
+	width: 18px;
+	text-align: center;
+	font-weight: 700;
+	color: var(--text-muted);
+}
+
+.class-sync-setup-step.is-done .class-sync-setup-check {
+	color: var(--text-success);
+}
+
+.class-sync-setup-title {
+	font-weight: 600;
+}
+
 /* 관리 탭: 버튼 + 한 줄 설명 묶음 */
 .class-sync-manage-item {
 	display: flex;

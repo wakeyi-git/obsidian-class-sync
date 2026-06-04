@@ -143,11 +143,13 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 				await this.saveSettings();
 				this.logger.ok(
 					role === "teacher"
-						? t("Teacher Mode 설정 완료. 설정에서 관리자 계정 입력 후 학생을 추가하세요.")
+						? t("Teacher Mode 설정 완료. ‘시작하기’ 마법사를 따라 진행하세요.")
 						: t("Student Mode 설정 완료. 교사 초대(QR/코드)로 연결하세요."),
 					true,
 				);
 				await this.startMode();
+				// 교사는 온보딩 마법사를 자동으로 띄운다(이미 완료/닫았으면 생략).
+				if (role === "teacher" && !this.settings.teacherOnboardingDone) await this.activatePanel("setup");
 			},
 			(code) => void this.ingestInvite(code),
 		).open();
@@ -528,6 +530,12 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		for (const leaf of this.app.workspace.getLeavesOfType(PANEL_VIEW_TYPE)) {
 			if (leaf.view instanceof ClassSyncPanelView) leaf.view.refresh();
 		}
+	}
+
+	/** 교사 온보딩 완료 표시(마법사 자동 노출 중단). */
+	async completeOnboarding(): Promise<void> {
+		this.settings.teacherOnboardingDone = true;
+		await this.saveSettings();
 	}
 
 	/** 플러그인 설정 탭 열기(대시보드 조치 카드 CTA용). */

@@ -6,7 +6,7 @@ import { LinkStatus } from "../../core/sync/MirrorContext";
 import { CopyOptions, CopyResult } from "../../modes/teacher/BulkCopy";
 
 /** 통합 패널 탭 식별자. */
-export type PanelTab = "feedback" | "deploy" | "sync" | "manage" | "log";
+export type PanelTab = "setup" | "feedback" | "deploy" | "sync" | "manage" | "log";
 
 /** 동기화 상태 표 한 행(링크별). */
 export interface DashboardRow extends LinkStatus {
@@ -38,6 +38,10 @@ export interface PanelHost {
 	refreshShares(): Promise<void>;
 	/** 플러그인 설정 탭 열기(대시보드 조치 카드 CTA용). */
 	openSettings(): void;
+	/** 통합 패널의 특정 탭 열기(마법사 → 대시보드 등). */
+	activatePanel(tab?: PanelTab): Promise<void>;
+	/** 교사 온보딩 완료 표시(마법사 자동 노출 중단). */
+	completeOnboarding(): Promise<void>;
 	/** 원본 경로(파일/폴더)를 선택 학생들에게 복사. 기술문서 §20. */
 	bulkCopy(sourcePath: string, opts: CopyOptions, studentIds: string[]): Promise<CopyResult & { error?: string }>;
 	deployShared(space: SharedSpace): Promise<void>;
