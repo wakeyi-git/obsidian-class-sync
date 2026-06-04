@@ -39,6 +39,7 @@ export class SyncStatusSection implements PanelSection {
 	private timer: number | null = null;
 	private tableWrap: HTMLElement | null = null;
 	private autoBtn: HTMLButtonElement | null = null;
+	private renderSeq = 0;
 
 	constructor(private host: PanelHost) {}
 
@@ -72,19 +73,22 @@ export class SyncStatusSection implements PanelSection {
 	}
 
 	private async renderTable(): Promise<void> {
-		const wrap = this.tableWrap;
-		if (!wrap) return;
+		const seq = ++this.renderSeq; // 이 렌더의 순번. 비동기 후 더 새 렌더가 시작됐으면 덮어쓰지 않는다.
+		if (!this.tableWrap) return;
 		let rows: DashboardRow[] = [];
 		try {
 			rows = await this.host.getDashboardRows();
 		} catch (e) {
-			wrap.empty();
-			wrap.createEl("p", {
+			if (seq !== this.renderSeq || !this.tableWrap) return;
+			this.tableWrap.empty();
+			this.tableWrap.createEl("p", {
 				text: t("상태를 불러오지 못했습니다: {error}", { error: e instanceof Error ? e.message : String(e) }),
 			});
 			return;
 		}
-		if (!this.tableWrap) return; // 그 사이 dispose됨
+		// 그 사이 dispose됐거나(=tableWrap null) 더 새 렌더가 시작됐으면(오래된 완료) 중단 — 이전 흔적 방지.
+		if (seq !== this.renderSeq || !this.tableWrap) return;
+		const wrap = this.tableWrap;
 		wrap.empty();
 
 		if (rows.length === 0) {

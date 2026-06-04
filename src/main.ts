@@ -93,12 +93,12 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			void this.ingestInvite(params.d ?? "");
 		});
 
-		if (!this.settings.setupComplete) {
-			// 최초 실행: 역할 선택 후 시작
-			this.promptRoleSetup();
-		} else {
-			await this.startMode();
-		}
+		// 무거운 작업(PouchDB live replication 시작)은 워크스페이스가 준비된 뒤로 미뤄 Obsidian 시작을 막지 않는다.
+		// onLayoutReady는 이미 준비된 상태(플러그인을 나중에 켠 경우)면 즉시 콜백을 실행한다.
+		this.app.workspace.onLayoutReady(() => {
+			if (!this.settings.setupComplete) this.promptRoleSetup(); // 최초 실행: 역할 선택 후 시작
+			else void this.startMode();
+		});
 
 		this.logger.info(t("Class Sync 로드됨 (role={role}, setup={setup}).", { role: this.settings.role, setup: String(this.settings.setupComplete) }));
 	}

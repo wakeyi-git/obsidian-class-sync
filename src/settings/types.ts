@@ -120,6 +120,12 @@ export interface ClassSyncSettings {
 
 	/** 삭제/이름변경 시 상대 vault 처리 정책. 기술문서 §15. 기본 archive. */
 	deletePolicy: DeletePolicy;
+
+	/**
+	 * 전체 동기화 시 한 번에 자동 tombstone(삭제 전파)할 최대 파일 수. 초과하면 보류하고 경고(폴더 오설정 사고 방지).
+	 * 0/미설정 = 자동(max(5, manifest의 50%)). 의도적으로 많은 파일을 삭제했다면 값을 올린다.
+	 */
+	deleteReconcileMax?: number;
 }
 
 export const DEFAULT_SETTINGS: ClassSyncSettings = {
@@ -152,6 +158,7 @@ export const DEFAULT_SETTINGS: ClassSyncSettings = {
 	lastSeqByDb: {},
 	conflictPolicy: "preserve-local",
 	deletePolicy: "archive",
+	deleteReconcileMax: 0,
 	realtimeEnabled: false,
 	yjsServerUrl: "",
 	yjsToken: "",

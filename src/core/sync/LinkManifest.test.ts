@@ -63,4 +63,15 @@ describe("exceedsBulkThreshold", () => {
 		expect(exceedsBulkThreshold(4, 4)).toBe(false); // max(5,2)=5, 4>5 거짓
 		expect(exceedsBulkThreshold(6, 4)).toBe(true);
 	});
+
+	it("configuredMax>0이면 절대값 임계 사용", () => {
+		expect(exceedsBulkThreshold(10, 4, 20)).toBe(false); // 10>20 거짓 → 허용
+		expect(exceedsBulkThreshold(21, 4, 20)).toBe(true);
+		expect(exceedsBulkThreshold(3, 100, 2)).toBe(true); // 사용자가 작게 잡으면 더 엄격
+	});
+
+	it("configuredMax 0/미설정이면 자동 휴리스틱", () => {
+		expect(exceedsBulkThreshold(6, 4, 0)).toBe(true); // floor 5
+		expect(exceedsBulkThreshold(6, 4, undefined)).toBe(true);
+	});
 });

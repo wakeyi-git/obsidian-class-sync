@@ -530,6 +530,21 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
+				.setName(t("삭제 정합 최대 건수"))
+				.setDesc(t("전체 동기화 때 한 번에 자동 삭제 전파할 최대 파일 수. 초과하면 보류하고 경고합니다(폴더 오설정 사고 방지). 0=자동(소수 기준)."))
+				.addText((txt) => {
+					txt.setPlaceholder("0").setValue(String(s.deleteReconcileMax ?? 0));
+					txt.inputEl.type = "number";
+					txt.onChange(async (v) => {
+						const n = parseInt(v, 10);
+						s.deleteReconcileMax = Number.isFinite(n) && n >= 0 ? n : 0;
+						await this.host.saveSettings();
+					});
+				}),
+		);
+
+		g.addSetting((set) =>
+			set
 				.setName(t("보관 폴더"))
 				.setDesc(t("‘보관 폴더로 이동’ 정책에서 삭제 파일이 모이며, 여기서 지우면 DB에서도 영구 삭제됩니다."))
 				.addText((txt) =>

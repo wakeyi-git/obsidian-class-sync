@@ -70,8 +70,12 @@ export function selectManifestOrphans(
 	return out;
 }
 
-/** 후보 수가 임계치를 넘으면(대량 삭제 추정) true → tombstone을 중단해야 한다. */
-export function exceedsBulkThreshold(candidateCount: number, manifestSize: number): boolean {
+/**
+ * 후보 수가 임계치를 넘으면(대량 삭제 추정) true → tombstone을 중단해야 한다.
+ * configuredMax>0이면 그 절대값을 임계로 쓰고, 아니면 자동(max(floor, 50%)).
+ */
+export function exceedsBulkThreshold(candidateCount: number, manifestSize: number, configuredMax?: number): boolean {
+	if (configuredMax && configuredMax > 0) return candidateCount > configuredMax;
 	const threshold = Math.max(ORPHAN_BULK_FLOOR, Math.floor(manifestSize * ORPHAN_BULK_RATIO));
 	return candidateCount > threshold;
 }

@@ -483,6 +483,9 @@
 
 /* 피드백 레이어(§19.5) 패널 */
 .class-sync-feedback-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 	padding: 6px 12px;
 	border-bottom: 1px solid var(--background-modifier-border);
 }

@@ -155,9 +155,9 @@ export class FullSync {
 		const orphans = selectManifestOrphans(baseline.paths, existing, current);
 		if (orphans.length === 0) return;
 
-		if (exceedsBulkThreshold(orphans.length, Object.keys(baseline.paths).length)) {
+		if (exceedsBulkThreshold(orphans.length, Object.keys(baseline.paths).length, ctx.settings.deleteReconcileMax)) {
 			ctx.logger.warn(
-				t("삭제 정합 중단: 사라진 파일이 {found}개로 너무 많습니다(폴더 오설정?). 자동 삭제하지 않았습니다.", {
+				t("삭제 정합 중단: 사라진 파일 {found}개가 한도를 넘었습니다(폴더 오설정 방지). 의도한 삭제면 설정 ‘삭제 정합 최대 건수’를 올리세요.", {
 					found: orphans.length,
 				}),
 				true,
