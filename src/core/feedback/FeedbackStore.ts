@@ -8,6 +8,13 @@ export interface FeedbackAnchor {
 	end: number;
 }
 
+/** 전체 미해결 피드백함 항목(노트 경로·학생 포함). */
+export interface FeedbackItem {
+	doc: FeedbackDoc;
+	localPath: string;
+	studentName: string;
+}
+
 /**
  * 피드백 레이어(§19.5) 저장소. 대상 노트가 사는 DB(mirror_<id> 또는 share_<id>)에 feedback 문서를 읽고 쓴다.
  * 노트 경로 → 담당 MirrorSync 해석은 main이 주입한 resolver에 위임한다(현재 mode 기준).
@@ -21,6 +28,8 @@ export class FeedbackStore {
 		private core: CoreServices,
 		/** 로컬 경로 → 담당 동기화 링크. 없으면(동기화 대상 밖) undefined. */
 		private resolve: (localPath: string) => MirrorSync | undefined,
+		/** 현재 모든 동기화 링크(전체 미해결 피드백함 집계용). */
+		private allSyncs: () => MirrorSync[] = () => [],
 	) {}
 
 	/** 패널 새로고침 구독(LocalApplier의 원격 변경 + 로컬 쓰기 모두 알림). */
@@ -53,6 +62,29 @@ export class FeedbackStore {
 		const prefix = `${FEEDBACK_ID_PREFIX}${dbPath}:`;
 		const docs = await sync.ctx.pouch.allDocsByPrefix<FeedbackDoc>(prefix);
 		return docs.filter((d) => !d.deleted).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+	}
+
+	/** 전체 링크의 **미해결** 피드백(노트 경로 포함, 최근 먼저). 교사가 흩어진 피드백을 한 번에 본다. */
+	async listAllUnresolved(): Promise<FeedbackItem[]> {
+		const out: FeedbackItem[] = [];
+		for (const sync of this.allSyncs()) {
+			let docs: FeedbackDoc[] = [];
+			try {
+				docs = await sync.ctx.pouch.allDocsByPrefix<FeedbackDoc>(FEEDBACK_ID_PREFIX);
+			} catch {
+				continue;
+			}
+			for (const d of docs) {
+				if (d.deleted || d.resolved) continue;
+				out.push({
+					doc: d,
+					localPath: sync.ctx.toLocalPath(d.targetPath),
+					studentName: sync.studentName || sync.studentId,
+				});
+			}
+		}
+		out.sort((a, b) => b.doc.createdAt.localeCompare(a.doc.createdAt));
+		return out;
 	}
 
 	/** 피드백 추가. 동기화 대상이 아니면 false. */

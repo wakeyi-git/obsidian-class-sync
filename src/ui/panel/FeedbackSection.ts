@@ -1,11 +1,11 @@
-import { App, EventRef, Notice } from "obsidian";
+import { App, EventRef, MarkdownView, Notice, TFile } from "obsidian";
 import { FeedbackStore } from "../../core/feedback/FeedbackStore";
 import { FeedbackDoc } from "../../core/model/types";
 import { PanelSection } from "./PanelSection";
-import { promptAddFeedback, resolveMarkdownView } from "../FeedbackView";
+import { promptAddFeedback } from "../FeedbackView";
 import { t } from "../../i18n";
 
-/** 피드백 탭 — 활성 노트의 앵커 댓글(§19.5). (구 FeedbackView 본문) */
+/** 피드백 탭 — 활성 노트의 앵커 댓글(§19.5) + 전체 미해결 피드백함 토글. */
 export class FeedbackSection implements PanelSection {
 	private listEl: HTMLElement | null = null;
 	private currentPath: string | null = null;
@@ -13,6 +13,7 @@ export class FeedbackSection implements PanelSection {
 	private unsubscribe: (() => void) | null = null;
 	private refs: EventRef[] = [];
 	private renderSeq = 0;
+	private viewMode: "current" | "all" = "current";
 
 	constructor(private app: App, private store: FeedbackStore) {}
 
@@ -22,6 +23,15 @@ export class FeedbackSection implements PanelSection {
 		const toolbar = container.createDiv({ cls: "class-sync-feedback-toolbar" });
 		const addBtn = toolbar.createEl("button", { text: t("＋ 피드백 추가") });
 		addBtn.onclick = () => promptAddFeedback(this.app, this.store, this.currentPath);
+		const toggle = toolbar.createEl("button", {
+			text: this.viewMode === "current" ? t("전체 미해결 보기") : t("현재 노트 보기"),
+		});
+		toggle.onclick = () => {
+			this.viewMode = this.viewMode === "current" ? "all" : "current";
+			toggle.setText(this.viewMode === "current" ? t("전체 미해결 보기") : t("현재 노트 보기"));
+			this.renderedPath = null;
+			void this.renderList();
+		};
 
 		this.listEl = container.createDiv({ cls: "class-sync-feedback-list" });
 
@@ -41,8 +51,9 @@ export class FeedbackSection implements PanelSection {
 		this.renderedPath = null;
 	}
 
-	/** 활성 파일이 실제로 바뀐 경우에만 재렌더(패널 포커스 등 동일 파일이면 건드리지 않음). */
+	/** 활성 파일이 실제로 바뀐 경우에만 재렌더. 전체 보기 모드에서는 활성 파일 변화를 무시. */
 	private onLeafChange(): void {
+		if (this.viewMode === "all") return;
 		const path = this.app.workspace.getActiveFile()?.path ?? null;
 		if (path === this.renderedPath) return;
 		void this.renderList();
@@ -51,6 +62,8 @@ export class FeedbackSection implements PanelSection {
 	private async renderList(): Promise<void> {
 		if (!this.listEl) return;
 		const seq = ++this.renderSeq;
+		if (this.viewMode === "all") return this.renderAllList(seq);
+
 		const file = this.app.workspace.getActiveFile();
 		this.currentPath = file?.path ?? null;
 
@@ -81,12 +94,27 @@ export class FeedbackSection implements PanelSection {
 			});
 			return;
 		}
-		for (const doc of items) this.renderItem(doc);
+		for (const doc of items) this.renderCard(doc, this.currentPath);
 	}
 
-	private renderItem(doc: FeedbackDoc): void {
+	/** 전체 미해결 피드백함(모든 링크). 각 항목에 학생·노트 라벨을 붙이고 위치로 시 해당 노트를 연다. */
+	private async renderAllList(seq: number): Promise<void> {
+		const items = await this.store.listAllUnresolved();
+		if (seq !== this.renderSeq || !this.listEl) return;
+		this.listEl.empty();
+		this.renderedPath = "*all*";
+		if (items.length === 0) {
+			this.listEl.createDiv({ cls: "class-sync-feedback-empty", text: t("미해결 피드백이 없습니다.") });
+			return;
+		}
+		for (const it of items) {
+			const note = it.localPath.split("/").pop() || it.localPath;
+			this.renderCard(it.doc, it.localPath, t("{student} · {note}", { student: it.studentName, note }));
+		}
+	}
+
+	private renderCard(doc: FeedbackDoc, localPath: string, label?: string): void {
 		if (!this.listEl) return;
-		const path = this.currentPath!;
 		const card = this.listEl.createDiv({ cls: `class-sync-feedback-card${doc.resolved ? " is-resolved" : ""}` });
 
 		const head = card.createDiv({ cls: "class-sync-feedback-head" });
@@ -95,30 +123,36 @@ export class FeedbackSection implements PanelSection {
 		head.createSpan({ cls: "class-sync-feedback-time", text: new Date(doc.createdAt).toLocaleString() });
 		if (doc.resolved) head.createSpan({ cls: "class-sync-feedback-badge", text: t("해결됨") });
 
+		if (label) card.createDiv({ cls: "class-sync-feedback-target", text: label });
+
 		if (doc.anchor.textQuote) {
 			const quote = card.createDiv({ cls: "class-sync-feedback-quote", text: `“${doc.anchor.textQuote}”` });
-			quote.onclick = () => void this.jumpTo(doc);
+			quote.onclick = () => void this.jumpTo(doc, localPath);
 		}
 		card.createDiv({ cls: "class-sync-feedback-content", text: doc.content });
 
 		const actions = card.createDiv({ cls: "class-sync-feedback-actions" });
-		actions.createEl("button", { text: t("위치로") }).onclick = () => void this.jumpTo(doc);
+		actions.createEl("button", { text: t("위치로") }).onclick = () => void this.jumpTo(doc, localPath);
 		actions.createEl("button", { text: doc.resolved ? t("되돌리기") : t("해결") }).onclick = async () => {
-			await this.store.setResolved(path, doc, !doc.resolved);
+			await this.store.setResolved(localPath, doc, !doc.resolved);
 		};
 		const del = actions.createEl("button", { cls: "mod-warning", text: t("삭제") });
 		del.onclick = async () => {
-			await this.store.remove(path, doc);
+			await this.store.remove(localPath, doc);
 		};
 	}
 
-	/** 앵커 위치로 에디터 스크롤/선택. textQuote 재탐색 후 없으면 오프셋 폴백. */
-	private async jumpTo(doc: FeedbackDoc): Promise<void> {
-		const view = resolveMarkdownView(this.app, this.currentPath);
-		if (!view || !view.file || view.file.path !== this.currentPath) {
-			new Notice(t("Class Sync: 해당 노트를 편집 모드로 열어 주세요."));
+	/** 해당 노트를 열고 앵커 위치로 스크롤/선택. textQuote 재탐색 후 없으면 오프셋 폴백. */
+	private async jumpTo(doc: FeedbackDoc, localPath: string): Promise<void> {
+		const file = this.app.vault.getAbstractFileByPath(localPath);
+		if (!(file instanceof TFile)) {
+			new Notice(t("Class Sync: 노트를 찾을 수 없습니다: {path}", { path: localPath }));
 			return;
 		}
+		const leaf = this.app.workspace.getLeaf(false);
+		await leaf.openFile(file, { active: true });
+		const view = leaf.view;
+		if (!(view instanceof MarkdownView) || !view.editor) return;
 		const editor = view.editor;
 		const content = editor.getValue();
 		let idx = doc.anchor.textQuote ? content.indexOf(doc.anchor.textQuote) : -1;
@@ -126,8 +160,6 @@ export class FeedbackSection implements PanelSection {
 		const len = doc.anchor.textQuote ? doc.anchor.textQuote.length : 0;
 		const from = editor.offsetToPos(idx);
 		const to = editor.offsetToPos(Math.min(idx + len, content.length));
-
-		await view.leaf.openFile(view.file, { active: true, eState: { line: from.line } });
 		editor.focus();
 		editor.setSelection(from, to);
 		editor.scrollIntoView({ from, to }, true);

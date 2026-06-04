@@ -73,6 +73,10 @@ export class InviteModal extends Modal {
 			cls: "class-sync-invite-warn",
 			text: t("⚠ 이 초대에는 학생 전용 비밀번호가 포함됩니다(만료 없음). 본인에게만 안전하게 전달하고, 유출이 의심되면 설정에서 ‘비밀번호 재발급’으로 이 초대를 무효화하세요."),
 		});
+		contentEl.createEl("p", {
+			cls: "setting-item-description",
+			text: t("이미 설정한 학생은 이 새 코드로 ‘초대 코드로 설정’을 다시 적용해야 연결됩니다(재발급 시 이전 코드는 무효)."),
+		});
 	}
 
 	private async copy(text: string, ok: string): Promise<void> {

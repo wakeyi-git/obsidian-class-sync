@@ -5,6 +5,7 @@ import { ConfirmModal } from "../ui/ConfirmModal";
 import { StudentBulkImportModal } from "../ui/StudentBulkImportModal";
 import { validateFolderName, foldersOverlap } from "../core/path/path";
 import { validateSettings, SettingsIssue } from "./validateSettings";
+import { sharedSpaceStatus } from "./sharedSpaceStatus";
 import { t } from "../i18n";
 
 /** 검증 이슈 코드 → 사용자 메시지(i18n). validateSettings는 순수(코드만), 문구는 여기서. */
@@ -309,24 +310,45 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 			this.applyOnBlur(txt.inputEl);
 		});
 
-		const membersEl = card.createDiv({ cls: "class-sync-student-status" });
-		membersEl.createSpan({ text: t("멤버:") });
-		for (const st of s.students) {
-			if (!st.studentId) continue;
+		const memberHead = new Setting(card).setName(t("멤버"));
+		const studentsWithId = s.students.filter((st) => st.studentId);
+		memberHead.addButton((b) =>
+			b.setButtonText(t("전체")).onClick(async () => {
+				sp.members = studentsWithId.map((st) => st.studentId);
+				await this.host.saveSettings();
+				this.display();
+			}),
+		);
+		memberHead.addButton((b) =>
+			b.setButtonText(t("해제")).onClick(async () => {
+				sp.members = [];
+				await this.host.saveSettings();
+				this.display();
+			}),
+		);
+		for (const st of studentsWithId) {
 			new Setting(card).setName(st.studentName || st.studentId).addToggle((tg) =>
 				tg.setValue(sp.members.includes(st.studentId)).onChange(async (v) => {
 					if (v && !sp.members.includes(st.studentId)) sp.members.push(st.studentId);
 					else if (!v) sp.members = sp.members.filter((m) => m !== st.studentId);
 					await this.host.saveSettings();
+					this.display(); // 배지(재배포 필요) 갱신
 				}),
 			);
 		}
-		card.createEl("div", {
+
+		const status = sharedSpaceStatus(sp);
+		const badge =
+			status === "unprovisioned"
+				? t("미배포")
+				: status === "needs-redeploy"
+					? t("멤버 변경됨 — 재배포 필요")
+					: t("배포됨 ✓");
+		const statusEl = card.createEl("div", {
 			cls: "class-sync-student-status",
-			text: sp.provisioned
-				? t("DB: {db} · 프로비저닝됨 ✓", { db: sp.remoteDb })
-				: t("DB: {db} · 미배포", { db: sp.remoteDb }),
+			text: t("DB: {db} · {badge}", { db: sp.remoteDb, badge }),
 		});
+		if (status === "needs-redeploy") statusEl.addClass("class-sync-dash-conflict");
 	}
 
 	private renderStudentCard(group: SettingGroup, st: StudentConfig, index: number): void {
@@ -402,20 +424,24 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 				),
 		);
 
-		const info = this.group(t("연결 정보"), t("초대로 자동 설정됩니다."));
-		this.readonlySetting(info, t("학급 ID"), s.classId);
-		this.readonlySetting(info, t("이름"), s.displayName);
-		this.readonlySetting(info, "CouchDB URL", s.couchdbUrl || t("(미설정)"));
-		this.readonlySetting(info, "Mirror DB", s.remoteDb || t("(미설정)"));
-		this.readonlySetting(info, t("계정"), s.username || t("(미설정)"));
+		// 친화적 요약(내부 용어 최소화). 자세한 실시간 상태는 패널 ‘동기화 상태’ 탭에서.
+		const info = this.group(t("내 연결"), t("자세한 동기화 상태는 Class Sync 패널의 ‘동기화 상태’ 탭에서 볼 수 있어요."));
+		this.readonlySetting(info, t("이름"), s.displayName || t("(미설정)"));
+		this.readonlySetting(info, t("학급 ID"), s.classId || t("(미설정)"));
 		info.addSetting((set) =>
 			set
-				.setName(t("연결 테스트"))
-				.setDesc(t("내 mirror DB 접근/권한을 확인합니다."))
+				.setName(t("연결 확인"))
+				.setDesc(t("선생님과 제대로 연결됐는지 확인합니다."))
 				.addButton((b) =>
 					b.setButtonText(t("테스트 실행")).setCta().onClick(() => this.runAsync(b, () => this.host.testConnection())),
 				),
 		);
+
+		// 고급(문제 해결용) — 내부 식별자는 여기로 접어 둔다.
+		const adv = this.group(t("고급 정보"), t("문제 해결용 — 보통 건드릴 필요가 없습니다."));
+		this.readonlySetting(adv, "CouchDB URL", s.couchdbUrl || t("(미설정)"));
+		this.readonlySetting(adv, "Mirror DB", s.remoteDb || t("(미설정)"));
+		this.readonlySetting(adv, t("계정"), s.username || t("(미설정)"));
 	}
 
 	// --- 공통: 동기화 옵션 ---

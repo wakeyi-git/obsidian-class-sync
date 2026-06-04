@@ -15,6 +15,10 @@ export interface SharedSpace {
 	provisioned?: boolean;
 	/** 이 공간의 실시간 서명 토큰(HMAC 모드). 배포 시 발급되어 shares 문서로 학생에 전달된다. */
 	token?: string;
+	/** 마지막 배포 시각(epoch ms). */
+	lastDeployedAt?: number;
+	/** 마지막 배포 시점의 멤버 스냅샷 — 이후 멤버가 바뀌면 ‘재배포 필요’ 배지. */
+	lastMemberSnapshot?: string[];
 }
 
 /** 교사가 관리하는 학생 1명. 기술문서 §12.1. */

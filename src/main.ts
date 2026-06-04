@@ -68,7 +68,11 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		this.registerEditorExtension(realtimeEditorExtension());
 
 		// 피드백 레이어(§19.5)
-		this.feedback = new FeedbackStore(this.core, (p) => this.syncForLocalPath(p));
+		this.feedback = new FeedbackStore(
+			this.core,
+			(p) => this.syncForLocalPath(p),
+			() => this.mode?.getSyncs() ?? [],
+		);
 		this.core.onFeedbackChange = () => this.feedback.refresh();
 		this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.onWorkspaceChange()));
 		this.registerEvent(this.app.workspace.on("file-open", () => this.onWorkspaceChange()));
@@ -303,6 +307,8 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			return;
 		}
 		space.provisioned = true;
+		space.lastDeployedAt = Date.now();
+		space.lastMemberSnapshot = [...space.members].sort();
 
 		// HMAC 모드(yjsSecret 설정): 배포 때마다 **모든** 공유 공간 토큰을 재발급한다. 이 배포에서 모든 학생의
 		// shares 문서가 다시 기록되므로, 시크릿 변경/TTL 만료 시 구 토큰이 그대로 다시 내려가는 일을 막는다.
@@ -367,6 +373,25 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 
 		await this.activatePanel("log");
 		this.logger.ok(t("초대 적용 완료: {name} ({db}). 동기화를 시작합니다.", { name: payload.studentName, db: payload.remoteDb }), true);
+
+		// 파싱 성공 ≠ 인증 성공. 즉시 인증을 확인해 옛/무효 초대를 명확히 안내한다(네트워크 실패는 startMode가 재시도).
+		try {
+			const probe = this.core.createPouch(s.remoteDb);
+			try {
+				const info = await probe.rawInfo();
+				if (info.status === 401) {
+					new Notice(t("Class Sync: 초대 인증 실패 — 선생님이 초대를 재발급했을 수 있어요. 새 QR/코드를 요청하세요."));
+					this.logger.error(t("초대 인증 실패(401): 선생님이 초대를 재발급했을 수 있습니다. 새 QR/코드를 요청하세요."), true);
+				} else if (info.status === 403) {
+					this.logger.warn(t("초대 권한 오류(403): 이 계정의 DB 접근 권한을 확인하세요."), true);
+				}
+			} finally {
+				await probe.close();
+			}
+		} catch {
+			/* 서버 도달 실패 → startMode 재시도에 맡긴다 */
+		}
+
 		await this.startMode();
 	}
 
