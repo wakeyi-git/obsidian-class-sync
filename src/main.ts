@@ -796,8 +796,13 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			await right.setViewState({ type: PANEL_VIEW_TYPE, active: true });
 			leaf = right;
 		}
-		this.app.workspace.revealLeaf(leaf);
-		if (tab && leaf.view instanceof ClassSyncPanelView) leaf.view.setTab(tab);
+		await this.app.workspace.revealLeaf(leaf);
+		// Deferred views: revealLeaf가 로드를 트리거하지만 view가 즉시 ClassSyncPanelView로
+		// 바뀌지 않을 수 있다(차가운 리프). 탭 전환이 필요할 때만 명시적으로 로드를 보장한다.
+		if (tab) {
+			await leaf.loadIfDeferred?.();
+			if (leaf.view instanceof ClassSyncPanelView) leaf.view.setTab(tab);
+		}
 	}
 
 	/** 로컬 경로를 담당하는 동기화 링크(피드백 저장/조회 + 실시간 스냅샷 대상). 없으면 undefined. */
