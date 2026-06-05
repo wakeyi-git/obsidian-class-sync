@@ -33,7 +33,7 @@ TeacherVault/
 ### 요구사항
 - **Obsidian 1.11.4 이상** (데스크톱·모바일 모두 지원). Secret Storage API 사용으로 1.11.4가 필요합니다.
 - **자가 호스팅 CouchDB** (시놀로지 NAS 등) — 필수 중앙 서버. [설정 방법](#couchdb-준비-시놀로지-nas-docker-예시).
-- **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택. 공유 공간별 HMAC 토큰(`YJS_SECRET`) 권장 ([docs/yjs-server-synology.md](docs/yjs-server-synology.md)).
+- **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택. 공유 공간별 HMAC 토큰(`YJS_SECRET`) 권장 ([docs/Yjs 서버 운영/yjs-server-synology.md](docs/Yjs%20서버%20운영/yjs-server-synology.md)).
 - **Excalidraw 플러그인** — Excalidraw 그림 실시간 공동 편집을 쓸 때만 선택(미설치 시 해당 기능만 자동 비활성).
 
 ---
@@ -170,8 +170,12 @@ docker run -d --name couchdb -p 5984:5984 \
 공유 공간 카드에는 운영 배지(미배포/배포됨/멤버 변경됨-재배포 필요)가 표시됩니다.
 
 ### 실시간 공동 편집
+> **선택(고급) 기능.** Class Sync의 핵심은 CouchDB **파일 동기화**이며 실시간 없이도 완전히 동작합니다.
+> **먼저 파일 동기화를 성공시킨 뒤** 필요할 때 켜세요 — 전제 조건·켜는 순서·문제 해결은
+> **[docs/realtime-advanced.md](docs/realtime-advanced.md)** 에 모았습니다.
+
 공유 폴더 문서를 글자 단위로 동시에 편집합니다(Yjs). 별도 **Yjs WebSocket 서버**가 필요하며
-([docs/yjs-server-synology.md](docs/yjs-server-synology.md) 참고), 교사가 설정에 서버 URL과 토큰을 입력하고
+([docs/Yjs 서버 운영/yjs-server-synology.md](docs/Yjs%20서버%20운영/yjs-server-synology.md) 참고), 교사가 설정에 서버 URL과 토큰을 입력하고
 공유 공간을 배포하면 학생에게 자동 전파됩니다. 공유 폴더 문서를 편집 모드로 열면 실시간 세션이 연결되고,
 서로의 커서·이름이 표시됩니다. 편집 중에는 Yjs가 권위이며, 문서를 닫을 때 스냅샷이 CouchDB로 저장되어
 오프라인 멤버에게 반영됩니다. 설정에서 **세션 중 스냅샷 주기(초)** 를 켜면, 편집을 닫기 전에도 일정 주기로
@@ -249,7 +253,7 @@ Vault  ◄──(LocalWatcher / LocalApplier)──►  로컬 PouchDB  ◄─�
   유출이 의심되면 교사가 학생 카드의 **'비밀번호 재발급'** 으로 비밀번호를 회전해 **이전 초대를 즉시 무효화**합니다.
 - **실시간 토큰**은 공유 공간별 **HMAC 서명 토큰**으로 발급되어, 유출돼도 해당 공간 room에만 접근됩니다
   (`classId`·`spaceId` 바인딩 + 선택 만료). 서버는 `CHANGE_ME` 같은 placeholder/너무 짧은 시크릿이면 기동을 거부하고,
-  토큰은 WSS로 전송되므로 전송 중 노출이 없습니다(서버/프록시 로그 마스킹은 [가이드 §9.1](docs/yjs-server-synology.md) 참고).
+  토큰은 WSS로 전송되므로 전송 중 노출이 없습니다(서버/프록시 로그 마스킹은 [가이드 §9.1](docs/Yjs%20서버%20운영/yjs-server-synology.md) 참고).
 - **Yjs 토큰·공간 시크릿**(교사)은 **Obsidian Secret Storage**(vault별 보관소)에 저장되어 `data.json`에 평문으로 남지 않습니다. 기존 평문 값은 업그레이드 시 자동 이전됩니다.
 - **설정 내보내기**는 자격증명을 제외합니다 — 관리자 비밀번호, 학생 비밀번호, `yjsToken`, `yjsSecret`, 공간 토큰, 기기 고유값.
 - 교사 관리자 자격증명은 교사 기기에만 저장되며, 학생은 admin 권한을 일절 다루지 않습니다.

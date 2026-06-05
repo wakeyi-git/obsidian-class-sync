@@ -33,7 +33,7 @@ Highlights:
 ### Requirements
 - **Obsidian 1.11.4+** (desktop and mobile). 1.11.4 is required because the plugin uses the Secret Storage API.
 - **Self-hosted CouchDB** (e.g. Synology NAS) — the required central server. [Setup](#couchdb-setup-synology-nas-docker-example).
-- **Yjs WebSocket server** — only needed for realtime co-editing. Per-space HMAC tokens (`YJS_SECRET`) recommended ([docs/yjs-server-synology.md](docs/yjs-server-synology.md)).
+- **Yjs WebSocket server** — only needed for realtime co-editing. Per-space HMAC tokens (`YJS_SECRET`) recommended ([docs/Yjs 서버 운영/yjs-server-synology.md](docs/Yjs%20서버%20운영/yjs-server-synology.md)).
 - **Excalidraw plugin** — only needed for realtime co-editing of Excalidraw drawings (that feature auto-disables if not installed).
 
 ---
@@ -172,8 +172,12 @@ from personal sync. Simultaneous edits of the same file are resolved via the con
 operational badge (not deployed / deployed / members changed — redeploy needed).
 
 ### Realtime co-editing
+> **Optional / advanced.** The core of Class Sync is CouchDB **file sync**, which works fully without realtime.
+> Get file sync working first, then enable realtime only when needed — full prerequisites, setup order, and
+> troubleshooting are in **[docs/realtime-advanced.md](docs/realtime-advanced.md)**.
+
 Co-edit shared-folder notes character-by-character (Yjs). A separate **Yjs WebSocket server** is required
-(see [docs/yjs-server-synology.md](docs/yjs-server-synology.md)); once the teacher enters the server URL and token in
+(see [docs/Yjs 서버 운영/yjs-server-synology.md](docs/Yjs%20서버%20운영/yjs-server-synology.md)); once the teacher enters the server URL and token in
 settings and deploys a shared space, it propagates to students automatically. Opening a shared-folder note in edit mode
 connects a realtime session and shows each other's cursors/names. While editing, Yjs is authoritative; when the note
 closes, a snapshot is saved to CouchDB so offline members get it. Enabling **In-session snapshot interval (sec)** in
@@ -253,7 +257,7 @@ The teacher keeps one `MirrorSync` per student to sync many students at once.
 - **Realtime tokens** are issued as per-space **HMAC-signed tokens**, so a leak only grants access to that space's room
   (`classId`·`spaceId` binding + optional expiry). The server refuses to start with a placeholder/too-short secret like
   `CHANGE_ME`, and tokens travel over WSS so they aren't exposed in transit (mask query tokens in server/proxy logs —
-  see [guide §9.1](docs/yjs-server-synology.md)).
+  see [guide §9.1](docs/Yjs%20서버%20운영/yjs-server-synology.md)).
 - **Yjs token and space secret** (teacher) are stored in **Obsidian Secret Storage** (a per-vault store), not left in
   plaintext in `data.json`. Existing plaintext values are migrated automatically on upgrade.
 - **Settings export** excludes credentials — admin password, student passwords, `yjsToken`, `yjsSecret`, space tokens, and device-specific values.
