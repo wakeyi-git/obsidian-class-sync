@@ -16,14 +16,32 @@ export function currentLocale(): "ko" | "en" {
 
 function resolveLocale(setting: LangSetting): "ko" | "en" {
 	if (setting === "ko" || setting === "en") return setting;
-	// Obsidian은 UI 언어를 localStorage["language"]에 저장(영어 기본은 비어있을 수 있음).
-	let lang = "";
+
+	// 1) Obsidian UI 언어(명시 설정). 데스크톱은 보통 여기에 저장된다.
+	let obsidianLang = "";
 	try {
-		lang = window.localStorage.getItem("language") || "";
+		obsidianLang = window.localStorage.getItem("language") || "";
 	} catch {
-		/* 접근 불가 시 기본 */
+		/* 접근 불가 */
 	}
-	return lang.toLowerCase().startsWith("ko") ? "ko" : "en";
+	if (obsidianLang) return obsidianLang.toLowerCase().startsWith("ko") ? "ko" : "en";
+
+	// 2) 모바일 등에서 localStorage["language"]가 비어/읽히지 않으면 기기·앱 언어로 폴백.
+	//    (명시 설정이 있으면 1)에서 이미 반환하므로, 영어를 고른 사용자를 덮어쓰지 않는다.)
+	const fallbacks: string[] = [];
+	try {
+		const m = (window as unknown as { moment?: { locale?: () => string } }).moment?.locale?.();
+		if (m) fallbacks.push(m); // Obsidian이 UI 언어에 맞춰 설정하는 moment 로케일
+	} catch {
+		/* noop */
+	}
+	try {
+		if (navigator?.language) fallbacks.push(navigator.language);
+		if (Array.isArray(navigator?.languages)) fallbacks.push(...navigator.languages);
+	} catch {
+		/* noop */
+	}
+	return fallbacks.some((l) => l?.toLowerCase().startsWith("ko")) ? "ko" : "en";
 }
 
 /**
