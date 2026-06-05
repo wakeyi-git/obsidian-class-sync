@@ -19,6 +19,15 @@ export function realtimeEditorExtension(): Extension {
 
 /** 해당 뷰에 Y.Text ↔ 에디터 실시간 바인딩 부착. */
 export function bindView(view: EditorView, ytext: Y.Text, awareness: Awareness): void {
+	// yCollab(y-codemirror.next)은 바인딩 시 에디터의 기존 내용을 Y.Text 현재 상태로 자동 교체하지 않는다.
+	// 그래서 세션 도중 늦게 참여한 사람은 (디스크에서 읽은) 오래된 내용이 남고 이후 델타만 받아 최신본이 안 보인다.
+	// 바인딩 직전에 에디터를 Y.Text 현재 상태로 맞춘다(Excalidraw가 updateScene으로 하는 것과 동일).
+	// yCollab이 아직 비활성이라 이 교체는 Y.Text로 역전파되지 않는다. 빈 Y.Text로 기존 내용을 지우지는 않는다.
+	const yContent = ytext.toString();
+	const cur = view.state.doc.toString();
+	if (yContent.length > 0 && yContent !== cur) {
+		view.dispatch({ changes: { from: 0, to: cur.length, insert: yContent } });
+	}
 	const ext: Extension = yCollab(ytext, awareness);
 	view.dispatch({ effects: rtCompartment.reconfigure(ext) });
 }
