@@ -58,6 +58,19 @@ describe("버전 히스토리", () => {
 		expect(versions.map((x) => x.content)).toEqual(["4", "3"]); // 최신 2개만
 	});
 
+	it("P2-b: 실시간 스냅샷(uploadContent)도 버전을 남기고 동일 내용은 dedupe", async () => {
+		cluster = new Cluster();
+		const dev = cluster.device({ deviceId: "d", role: "teacher", remoteDb: "mirror_s1" });
+
+		await dev.uploader.uploadContent("rt.md", "v1");
+		expect(await dev.ctx.versions.list("rt.md")).toHaveLength(1);
+		await dev.uploader.uploadContent("rt.md", "v1"); // 동일 내용 → dedupe(스킵)
+		expect(await dev.ctx.versions.list("rt.md")).toHaveLength(1);
+		await dev.uploader.uploadContent("rt.md", "v2");
+		const v = await dev.ctx.versions.list("rt.md");
+		expect(v.map((x) => x.content)).toEqual(["v2", "v1"]);
+	});
+
 	it("versionHistory=false면 스냅샷을 남기지 않는다", async () => {
 		cluster = new Cluster();
 		const dev = cluster.device({

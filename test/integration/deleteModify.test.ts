@@ -75,4 +75,22 @@ describe("삭제/수정 충돌 큐", () => {
 		expect((await a.note("x.md"))?.deleted).toBe(false);
 		expect((await r.listDeleteModify()).some((e) => e.dbPath === "x.md")).toBe(false);
 	});
+
+	it("P1: localRoot 있는 링크에서 '수정본 보관 후 삭제'가 복사본을 만든다", async () => {
+		cluster = new Cluster();
+		const dev = cluster.device({ deviceId: "t", role: "teacher", remoteDb: "mirror_alice", localRoot: "students/alice" });
+		const r = new RestoreManager(dev.ctx, dev.uploader);
+
+		// 학생 폴더 아래 노트(dbPath="과제.md", localPath="students/alice/과제.md")
+		dev.vault.seed("students/alice/과제.md", "remote-edited");
+		await dev.uploader.uploadPath("students/alice/과제.md");
+
+		await r.resolveDeleteModify("과제.md", "keep-both");
+
+		// 복사본이 localRoot 아래에 생성되고, DB에도 그 dbPath로 존재해야 한다.
+		expect(dev.vault.textOf("students/alice/과제.원격수정.md")).toBe("remote-edited");
+		expect(await dev.note("과제.원격수정.md")).toBeTruthy();
+		// 원본은 tombstone.
+		expect((await dev.note("과제.md"))?.deleted).toBe(true);
+	});
 });

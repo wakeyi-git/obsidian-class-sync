@@ -48,6 +48,7 @@ export class Uploader {
 
 		const doc = await ctx.buildNoteDoc(dbPath, content, existing?.version ?? 0);
 		await ctx.pouch.put(doc);
+		await ctx.versions.snapshot(dbPath, content, "modify", doc.version); // 실시간 편집도 버전 기록(dedupe 있음)
 		this.markUploaded(dbPath);
 		return "uploaded";
 	}

@@ -155,7 +155,9 @@ keep both*. If the other side resolves first and your edit would be overwritten,
 
 ### Attachments
 Non-markdown files like images and PDFs are also synced (CouchDB attachments). Control them with the *Sync attachments*
-toggle and *Max attachment size (MB)* in settings (mobile protection). Attachment conflicts keep local + log (the compare UI is markdown-only).
+toggle and *Max attachment size (MB)* in settings (mobile protection). Attachment conflicts also appear in the conflict
+list and can be resolved (keep local / apply remote / keep both). There is no binary content diff — the file name, size,
+and MIME type are shown and the remote copy is preserved in `_충돌/`.
 
 ### Teacher deploy
 Keep originals outside student folders (e.g. in `Templates/`), then in the **deploy tab** pick a path (quick buttons:

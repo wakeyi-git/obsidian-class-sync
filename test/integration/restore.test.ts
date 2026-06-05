@@ -48,6 +48,8 @@ describe("삭제 파일 복구 (RestoreManager)", () => {
 		expect(await restorer.restore("a.md", { collision: "keep-both" })).toBe("restored");
 		expect(dev.vault.textOf("a.md")).toBe("new content"); // 기존 유지
 		expect(dev.vault.textOf("a.복구본.md")).toBe("v1"); // 복구본
+		// P2-a: 다른 이름으로 복구했으면 원래 tombstone이 삭제 목록에서 사라진다.
+		expect((await restorer.listDeleted()).some((i) => i.dbPath === "a.md")).toBe(false);
 	});
 
 	it("첨부: archive 사본이 없으면 복구 불가, 있으면 복구", async () => {

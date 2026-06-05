@@ -114,6 +114,13 @@ export class RestoreManager {
 			await ctx.deleteVaultFile(af);
 		}
 
+		// 다른 이름으로 복구했으면(원래 위치와 다른 경로) 원래 tombstone을 정리해 삭제 목록에 남지 않게 한다.
+		// 같은 위치 복구는 writeAndRevive/putAsset가 같은 id를 deleted=false로 되살려 자연히 목록에서 빠진다.
+		if (targetDb !== dbPath) {
+			const old = await ctx.pouch.get<NoteDoc | AssetDoc>(id);
+			if (old?._rev) await ctx.pouch.removeRev(id, old._rev).catch(() => undefined);
+		}
+
 		ctx.logger.ok(t("삭제 복구: {path}", { path: target }), true);
 		return "restored";
 	}
@@ -192,14 +199,16 @@ export class RestoreManager {
 		}
 
 		if (choice === "keep-both") {
-			const copyDb = ctx.toDbPath(insertLabelBeforeExt(dbPath, t("원격수정")));
-			const copyLocal = ctx.toLocalPath(insertLabelBeforeExt(dbPath, t("원격수정")));
+			// insertLabelBeforeExt(dbPath, …) 결과는 이미 dbPath다. toDbPath로 다시 변환하면
+			// localRoot 있는 링크(교사 모드 학생 폴더)에서 localRoot 밖으로 판정돼 null → 복사본 미생성.
+			const copyDb = insertLabelBeforeExt(dbPath, t("원격수정"));
+			const copyLocal = ctx.toLocalPath(copyDb);
 			if (ctx.isMarkdown(dbPath)) {
 				const doc = await ctx.pouch.get<NoteDoc>(noteId(dbPath));
-				if (doc?.content != null && copyDb) await this.writeAndRevive(copyLocal, copyDb, doc.content);
+				if (doc?.content != null) await this.writeAndRevive(copyLocal, copyDb, doc.content);
 			} else {
 				const bin = await ctx.pouch.getAssetBinary(assetId(dbPath));
-				if (bin && copyDb) {
+				if (bin) {
 					const prev = (await ctx.pouch.get<AssetDoc>(assetId(copyDb)))?.version ?? 0;
 					await ctx.writeVaultBinary(copyLocal, bin);
 					await ctx.pouch.putAsset(await ctx.buildAssetDoc(copyDb, bin, prev), bin);
