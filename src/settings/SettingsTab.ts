@@ -9,6 +9,16 @@ import { sharedSpaceStatus } from "./sharedSpaceStatus";
 import { getSecretValue, setSecretValue, YJS_SECRET_ID, YJS_TOKEN_ID } from "../core/secret";
 import { t } from "../i18n";
 
+// SettingGroup.listEl은 Obsidian 런타임에 1.11.0부터 존재하지만(공식 @since 1.11.0),
+// minAppVersion에 맞춰 고정한 obsidian@1.11.4 d.ts 패키지에서 누락되어 있다(타입 갭).
+// 누락된 멤버를 모듈 보강으로 메운다 — 런타임 동작은 1.11.4에서도 정상.
+declare module "obsidian" {
+	interface SettingGroup {
+		/** 그룹의 항목 리스트 컨테이너(@since 1.11.0). 카드 마크업을 직접 삽입할 때 사용. */
+		listEl: HTMLElement;
+	}
+}
+
 /** 검증 이슈 코드 → 사용자 메시지(i18n). validateSettings는 순수(코드만), 문구는 여기서. */
 function issueMessage(i: SettingsIssue): string {
 	switch (i.code) {

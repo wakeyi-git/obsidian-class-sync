@@ -4,7 +4,7 @@
 각 항목 통과 시 체크. 실패하면 로그 패널(🔄)과 "종합 진단 실행" 명령으로 원인 확인.
 
 ## 설치 / 로드
-- [ ] Obsidian 버전 ≥ **1.11.0** (minAppVersion).
+- [ ] Obsidian 버전 ≥ **1.11.4** (minAppVersion — Secret Storage API(`app.secretStorage`)에 필요).
 - [ ] 플러그인 활성화 → 콘솔 오류 없음.
 - [ ] 설정 탭이 그룹(.setting-group) 레이아웃으로 정상 렌더, 추가 버튼 풀폭.
 

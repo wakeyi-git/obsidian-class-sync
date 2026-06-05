@@ -8,7 +8,7 @@ Class Sync를 새 버전으로 릴리스하고 Obsidian 커뮤니티 플러그�
 
 - `manifest.json` → `version`
 - `package.json` → `version`
-- `versions.json` → `"<버전>": "<minAppVersion>"` 항목 추가 (현재 minAppVersion은 `1.11.0`)
+- `versions.json` → `"<버전>": "<minAppVersion>"` 항목 추가 (현재 minAppVersion은 `1.11.4` — Secret Storage API에 필요)
 
 > `manifest.json`의 `version`과 `versions.json`의 키, 그리고 릴리스 태그가 **모두 같아야** 한다.
 
