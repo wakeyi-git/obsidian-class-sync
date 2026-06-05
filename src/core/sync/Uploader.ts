@@ -1,6 +1,7 @@
 import { MirrorContext } from "./MirrorContext";
 import { NoteDoc, AssetDoc, noteId, assetId } from "../model/types";
 import { sha256 } from "../hash/hash";
+import { recordPurge, abToB64, PURGE_ASSET_CAP, PurgeSnapshot } from "./recentPurge";
 import { t } from "../../i18n";
 
 export type UploadResult =
@@ -148,8 +149,40 @@ export class Uploader {
 		const id = ctx.isMarkdown(dbPath) ? noteId(dbPath) : assetId(dbPath);
 		const existing = await ctx.pouch.get<NoteDoc | AssetDoc>(id);
 		if (!existing || !existing._rev) return "skipped";
+		await this.snapshotBeforePurge(dbPath, existing); // '최근 영구 삭제' 되돌리기용
 		await ctx.pouch.removeRev(id, existing._rev);
 		ctx.logger.ok(t("DB에서 영구 삭제(purge): {path}", { path: dbPath }));
 		return "purged";
+	}
+
+	/** purge 직전 스냅샷을 capped 목록에 기록. 노트는 content(tombstone에 보존됨)로, 첨부는 cap 이하 바이너리만. */
+	private async snapshotBeforePurge(dbPath: string, existing: NoteDoc | AssetDoc): Promise<void> {
+		const ctx = this.ctx;
+		const base = {
+			id: `${dbPath}@${existing._rev}`,
+			dbPath,
+			purgedAt: Date.now(),
+			purgedBy: ctx.settings.userId,
+		};
+		let snap: PurgeSnapshot;
+		if (ctx.isMarkdown(dbPath)) {
+			const content = (existing as NoteDoc).content;
+			snap = { ...base, kind: "note", content, recoverable: content != null };
+		} else {
+			const bin = await ctx.pouch.getAssetBinary(assetId(dbPath)).catch(() => null);
+			const ok = bin != null && bin.byteLength <= PURGE_ASSET_CAP;
+			snap = {
+				...base,
+				kind: "asset",
+				mime: (existing as AssetDoc).mime,
+				binaryB64: ok ? abToB64(bin as ArrayBuffer) : undefined,
+				recoverable: ok,
+			};
+		}
+		try {
+			await recordPurge(ctx.pouch, snap);
+		} catch {
+			/* 스냅샷 기록 실패는 purge를 막지 않는다 */
+		}
 	}
 }

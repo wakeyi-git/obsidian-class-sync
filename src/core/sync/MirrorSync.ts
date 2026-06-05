@@ -3,7 +3,9 @@ import { PouchService, ReplicationHandlers } from "../couch/PouchService";
 import { MirrorContext } from "./MirrorContext";
 import { MirrorApplier } from "./MirrorApplier";
 import { ConflictManager, ConflictInfo, ResolveChoice } from "./ConflictManager";
-import { RestoreManager, DeletedItem, RestoreResult, RestoreOptions } from "./RestoreManager";
+import { RestoreManager, DeletedItem, RestoreResult, RestoreOptions, DeleteModifyChoice } from "./RestoreManager";
+import { PurgeSnapshot } from "./recentPurge";
+import { DeleteModifyItem } from "./deleteModifyQueue";
 import { Uploader, UploadResult } from "./Uploader";
 import { LocalWatcher } from "./LocalWatcher";
 import { LocalApplier } from "./LocalApplier";
@@ -104,6 +106,23 @@ export class MirrorSync {
 	}
 	purgeDeleted(dbPath: string): Promise<"purged" | "skipped"> {
 		return this.restorer.purge(dbPath);
+	}
+
+	// --- 최근 영구 삭제 되돌리기 / 삭제·수정 충돌 큐 (보고서 §2 P2) ---
+	listRecentPurges(): Promise<PurgeSnapshot[]> {
+		return this.restorer.listRecentPurges();
+	}
+	undoPurge(id: string): Promise<RestoreResult> {
+		return this.restorer.undoPurge(id);
+	}
+	clearPurge(id: string): Promise<void> {
+		return this.restorer.clearPurgeEntry(id);
+	}
+	listDeleteModify(): Promise<DeleteModifyItem[]> {
+		return this.restorer.listDeleteModify();
+	}
+	resolveDeleteModify(dbPath: string, choice: DeleteModifyChoice): Promise<void> {
+		return this.restorer.resolveDeleteModify(dbPath, choice);
 	}
 
 	async start(): Promise<void> {

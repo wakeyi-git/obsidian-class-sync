@@ -71,6 +71,26 @@ export function selectManifestOrphans(
 }
 
 /**
+ * 삭제/수정 충돌 후보: manifest에 있고(과거 보유) · 현재 vault에 없고(로컬 삭제) · 현재 DB에 존재하지만
+ * **rev·hash가 기준선과 다른**(= 기준선 이후 다른 기기가 수정) dbPath. 즉 selectManifestOrphans가
+ * 안전을 위해 보존(제외)한 항목들. 사용자에게 "삭제할지/수정 유지할지" 선택을 제시하기 위해 식별한다.
+ */
+export function selectDeleteModifyConflicts(
+	manifestPaths: Record<string, ManifestEntry>,
+	existingDbPaths: Set<string>,
+	currentByPath: Map<string, DocState>,
+): string[] {
+	const out: string[] = [];
+	for (const [path, entry] of Object.entries(manifestPaths)) {
+		if (existingDbPaths.has(path)) continue; // 아직 vault에 있음
+		const cur = currentByPath.get(path);
+		if (cur == null) continue; // DB에 없음/이미 tombstone
+		if (cur.rev !== entry.rev || cur.hash !== entry.hash) out.push(path); // 기준선 이후 변경됨
+	}
+	return out;
+}
+
+/**
  * 후보 수가 임계치를 넘으면(대량 삭제 추정) true → tombstone을 중단해야 한다.
  * configuredMax>0이면 그 절대값을 임계로 쓰고, 아니면 자동(max(floor, 50%)).
  */

@@ -3,7 +3,9 @@ import { Logger } from "../../core/log/Logger";
 import { FeedbackStore } from "../../core/feedback/FeedbackStore";
 import { ClassSyncSettings, SharedSpace } from "../../settings/types";
 import { LinkStatus } from "../../core/sync/MirrorContext";
-import { DeletedItem, RestoreResult, RestoreOptions } from "../../core/sync/RestoreManager";
+import { DeletedItem, RestoreResult, RestoreOptions, DeleteModifyChoice } from "../../core/sync/RestoreManager";
+import { PurgeSnapshot } from "../../core/sync/recentPurge";
+import { DeleteModifyItem } from "../../core/sync/deleteModifyQueue";
 import { CopyOptions, CopyResult, CopyPlan } from "../../modes/teacher/BulkCopy";
 
 /** 통합 패널 탭 식별자. */
@@ -54,6 +56,24 @@ export interface PanelHost {
 	restoreDeleted(remoteDb: string, dbPath: string, opts?: RestoreOptions): Promise<RestoreResult>;
 	/** 삭제 파일 영구 삭제(purge). */
 	purgeDeleted(remoteDb: string, dbPath: string): Promise<"purged" | "skipped">;
+	// 삭제/수정 충돌 큐 + 최근 영구 삭제 되돌리기 (보고서 §2 P2)
+	listDeleteModify(): Promise<DeleteModifyRow[]>;
+	resolveDeleteModify(remoteDb: string, dbPath: string, choice: DeleteModifyChoice): Promise<void>;
+	listRecentPurges(): Promise<PurgeRow[]>;
+	undoPurge(remoteDb: string, id: string): Promise<RestoreResult>;
+	clearPurge(remoteDb: string, id: string): Promise<void>;
+}
+
+/** 링크 라벨이 붙은 삭제/수정 충돌 항목. */
+export interface DeleteModifyRow extends DeleteModifyItem {
+	remoteDb: string;
+	studentName: string;
+}
+
+/** 링크 라벨이 붙은 최근 영구 삭제 스냅샷. */
+export interface PurgeRow extends PurgeSnapshot {
+	remoteDb: string;
+	studentName: string;
 }
 
 /** 탭 콘텐츠 렌더러. 탭 전환 시 render→dispose 로 교체된다(구독·interval은 dispose에서 해제). */

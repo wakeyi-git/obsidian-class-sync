@@ -652,6 +652,14 @@
 	text-transform: uppercase;
 }
 
+.class-sync-recovery-group.is-conflict {
+	color: var(--text-error);
+}
+
+.class-sync-recovery-card.is-conflict {
+	border-color: var(--text-error);
+}
+
 .class-sync-recovery-card {
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 8px;

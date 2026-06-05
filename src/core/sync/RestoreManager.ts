@@ -2,7 +2,12 @@ import { MirrorContext } from "./MirrorContext";
 import { Uploader } from "./Uploader";
 import { NoteDoc, AssetDoc, noteId, assetId } from "../model/types";
 import { isRecoverable, restoreTargetPath, RestoreCollision } from "./restoreAction";
+import { insertLabelBeforeExt } from "../path/path";
+import { listPurges, removePurge, b64ToAb, PurgeSnapshot } from "./recentPurge";
+import { listDeleteModify, removeDeleteModify, DeleteModifyItem } from "./deleteModifyQueue";
 import { t } from "../../i18n";
+
+export type DeleteModifyChoice = "delete" | "keep-remote" | "keep-both";
 
 /**
  * 삭제 파일 복구. 보고서 §2 P1.
@@ -126,5 +131,89 @@ export class RestoreManager {
 	/** DB 문서 영구 삭제(purge). */
 	purge(dbPath: string): Promise<"purged" | "skipped"> {
 		return this.uploader.purgePath(dbPath);
+	}
+
+	// --- 최근 영구 삭제 되돌리기 (보고서 §2 P2) ---
+	listRecentPurges(): Promise<PurgeSnapshot[]> {
+		return listPurges(this.ctx.pouch);
+	}
+
+	/** 영구 삭제된 문서를 스냅샷에서 되살린다. */
+	async undoPurge(id: string): Promise<RestoreResult> {
+		const ctx = this.ctx;
+		const snap = (await listPurges(ctx.pouch)).find((s) => s.id === id);
+		if (!snap || !snap.recoverable) return "unrecoverable";
+		const localPath = ctx.toLocalPath(snap.dbPath);
+		const target = restoreTargetPath(localPath, ctx.fileExists(localPath), "keep-both");
+		if (target == null) return "skipped-exists";
+		const targetDb = ctx.toDbPath(target);
+		if (targetDb == null) return "unrecoverable";
+
+		if (snap.kind === "note") {
+			if (snap.content == null) return "unrecoverable";
+			await this.writeAndRevive(target, targetDb, snap.content);
+		} else {
+			if (!snap.binaryB64) return "unrecoverable";
+			const bin = b64ToAb(snap.binaryB64);
+			const prev = (await ctx.pouch.get<AssetDoc>(assetId(targetDb)))?.version ?? 0;
+			ctx.guard.mark(target, (await ctx.buildAssetDoc(targetDb, bin, prev)).contentHash);
+			await ctx.writeVaultBinary(target, bin);
+			ctx.guard.releaseAfterDelay(target);
+			await ctx.pouch.putAsset(await ctx.buildAssetDoc(targetDb, bin, prev), bin);
+		}
+		await removePurge(ctx.pouch, id);
+		ctx.logger.ok(t("영구 삭제 되돌림: {path}", { path: target }), true);
+		return "restored";
+	}
+
+	clearPurgeEntry(id: string): Promise<void> {
+		return removePurge(this.ctx.pouch, id);
+	}
+
+	// --- 삭제/수정 충돌 큐 (보고서 §2 P2) ---
+	listDeleteModify(): Promise<DeleteModifyItem[]> {
+		return listDeleteModify(this.ctx.pouch);
+	}
+
+	/**
+	 * 삭제/수정 충돌 해소.
+	 * - delete: 내 삭제 적용(로컬 파일 제거 + tombstone).
+	 * - keep-remote: 원격 수정 유지(큐에서만 제거 — 파일은 그대로 둔다).
+	 * - keep-both: 원격 수정본을 다른 이름으로 보관한 뒤 원본은 삭제.
+	 */
+	async resolveDeleteModify(dbPath: string, choice: DeleteModifyChoice): Promise<void> {
+		const ctx = this.ctx;
+		const localPath = ctx.toLocalPath(dbPath);
+
+		if (choice === "keep-remote") {
+			await removeDeleteModify(ctx.pouch, dbPath);
+			return;
+		}
+
+		if (choice === "keep-both") {
+			const copyDb = ctx.toDbPath(insertLabelBeforeExt(dbPath, t("원격수정")));
+			const copyLocal = ctx.toLocalPath(insertLabelBeforeExt(dbPath, t("원격수정")));
+			if (ctx.isMarkdown(dbPath)) {
+				const doc = await ctx.pouch.get<NoteDoc>(noteId(dbPath));
+				if (doc?.content != null && copyDb) await this.writeAndRevive(copyLocal, copyDb, doc.content);
+			} else {
+				const bin = await ctx.pouch.getAssetBinary(assetId(dbPath));
+				if (bin && copyDb) {
+					const prev = (await ctx.pouch.get<AssetDoc>(assetId(copyDb)))?.version ?? 0;
+					await ctx.writeVaultBinary(copyLocal, bin);
+					await ctx.pouch.putAsset(await ctx.buildAssetDoc(copyDb, bin, prev), bin);
+				}
+			}
+		}
+
+		// delete / keep-both 공통: 로컬 원본 제거 + tombstone.
+		const file = ctx.getFile(localPath);
+		if (file) {
+			ctx.suppressStructural(localPath);
+			await ctx.deleteVaultFile(file);
+		}
+		await this.uploader.tombstonePath(dbPath);
+		await removeDeleteModify(ctx.pouch, dbPath);
+		ctx.logger.ok(t("삭제/수정 충돌 해소({choice}): {path}", { choice, path: dbPath }), true);
 	}
 }

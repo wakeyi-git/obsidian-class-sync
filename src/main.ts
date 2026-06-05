@@ -20,9 +20,9 @@ import { realtimeEditorExtension } from "./core/realtime/editorBinding";
 import { FeedbackStore } from "./core/feedback/FeedbackStore";
 import { promptAddFeedback } from "./ui/FeedbackView";
 import { ClassSyncPanelView, PANEL_VIEW_TYPE } from "./ui/PanelView";
-import { PanelHost, PanelTab, DashboardRow } from "./ui/panel/PanelSection";
+import { PanelHost, PanelTab, DashboardRow, DeleteModifyRow, PurgeRow } from "./ui/panel/PanelSection";
 import { MirrorSync } from "./core/sync/MirrorSync";
-import { DeletedItem, RestoreResult, RestoreOptions } from "./core/sync/RestoreManager";
+import { DeletedItem, RestoreResult, RestoreOptions, DeleteModifyChoice } from "./core/sync/RestoreManager";
 import { testConnection } from "./core/sync/connectionTest";
 import { runDiagnostics } from "./core/sync/diagnostics";
 import { CouchAdmin } from "./core/couch/CouchAdmin";
@@ -811,6 +811,49 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		const sync = (this.mode?.getSyncs() ?? []).find((s) => s.remoteDb === remoteDb);
 		if (!sync) return Promise.resolve("skipped");
 		return sync.purgeDeleted(dbPath);
+	}
+
+	async listDeleteModify(): Promise<DeleteModifyRow[]> {
+		const out: DeleteModifyRow[] = [];
+		for (const sync of this.mode?.getSyncs() ?? []) {
+			try {
+				for (const it of await sync.listDeleteModify()) {
+					out.push({ ...it, remoteDb: sync.remoteDb, studentName: sync.studentName });
+				}
+			} catch {
+				/* 조회 실패 링크 건너뜀 */
+			}
+		}
+		return out;
+	}
+
+	resolveDeleteModify(remoteDb: string, dbPath: string, choice: DeleteModifyChoice): Promise<void> {
+		const sync = (this.mode?.getSyncs() ?? []).find((s) => s.remoteDb === remoteDb);
+		return sync ? sync.resolveDeleteModify(dbPath, choice) : Promise.resolve();
+	}
+
+	async listRecentPurges(): Promise<PurgeRow[]> {
+		const out: PurgeRow[] = [];
+		for (const sync of this.mode?.getSyncs() ?? []) {
+			try {
+				for (const p of await sync.listRecentPurges()) {
+					out.push({ ...p, remoteDb: sync.remoteDb, studentName: sync.studentName });
+				}
+			} catch {
+				/* 조회 실패 링크 건너뜀 */
+			}
+		}
+		return out;
+	}
+
+	undoPurge(remoteDb: string, id: string): Promise<RestoreResult> {
+		const sync = (this.mode?.getSyncs() ?? []).find((s) => s.remoteDb === remoteDb);
+		return sync ? sync.undoPurge(id) : Promise.resolve("unrecoverable" as RestoreResult);
+	}
+
+	clearPurge(remoteDb: string, id: string): Promise<void> {
+		const sync = (this.mode?.getSyncs() ?? []).find((s) => s.remoteDb === remoteDb);
+		return sync ? sync.clearPurge(id) : Promise.resolve();
 	}
 
 	/** 통합 패널 활성화(우측 사이드바). tab을 주면 해당 탭으로 전환. */

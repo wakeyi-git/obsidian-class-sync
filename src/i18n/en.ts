@@ -641,4 +641,24 @@ export const EN: Record<string, string> = {
 	"영구 삭제됨: {path}": "Permanently deleted: {path}",
 	"미리볼 사본이 없습니다. ‘원래 위치로 복구’ 후 확인하세요.":
 		"No copy to preview. Restore to original location first, then check.",
+
+	// === 삭제/수정 충돌 큐 · 최근 영구 삭제 (Phase 3) ===
+	"삭제/수정 충돌 {n}건 — ‘삭제 복구’ 탭에서 처리하세요(내 삭제 적용/원격 수정 유지).":
+		"{n} delete/modify conflict(s) — handle them in the ‘Recover deleted’ tab (apply my delete / keep remote edit).",
+	"영구 삭제 되돌림: {path}": "Undid permanent delete: {path}",
+	"원격수정": "remote-edit",
+	"삭제/수정 충돌 해소({choice}): {path}": "Delete/modify conflict resolved ({choice}): {path}",
+	"삭제/수정 충돌": "Delete/modify conflicts",
+	"삭제된 파일": "Deleted files",
+	"최근 영구 삭제": "Recently purged",
+	"내가 삭제했지만 다른 기기가 수정했습니다. 어떻게 처리할까요?":
+		"You deleted this, but another device modified it. How do you want to handle it?",
+	"원격 수정 유지": "Keep remote edit",
+	"수정본 보관 후 삭제": "Keep edit as copy, then delete",
+	"내 삭제 적용": "Apply my delete",
+	"영구 삭제 · {when}": "Permanently deleted · {when}",
+	"되돌릴 내용이 없습니다(첨부 원본 미보존).": "Nothing to undo (attachment binary not preserved).",
+	"목록에서 지우기": "Remove from list",
+	"되돌림: {path}": "Undone: {path}",
+	"되돌릴 수 없습니다: {path}": "Cannot undo: {path}",
 };

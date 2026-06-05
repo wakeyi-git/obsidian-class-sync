@@ -1,5 +1,5 @@
 import { Notice, TFile } from "obsidian";
-import { PanelHost, PanelSection, panelButton } from "./PanelSection";
+import { PanelHost, PanelSection, panelButton, DeleteModifyRow, PurgeRow } from "./PanelSection";
 import { DeletedItem } from "../../core/sync/RestoreManager";
 import { ConfirmModal } from "../ConfirmModal";
 import { t } from "../../i18n";
@@ -36,25 +36,79 @@ export class DeletedRecoverySection implements PanelSection {
 	private async renderList(): Promise<void> {
 		if (!this.listEl) return;
 		const seq = ++this.renderSeq;
-		const items = await this.host.listDeletedFiles();
+		const [items, conflicts, purges] = await Promise.all([
+			this.host.listDeletedFiles(),
+			this.host.listDeleteModify(),
+			this.host.listRecentPurges(),
+		]);
 		if (seq !== this.renderSeq || !this.listEl) return;
 		this.listEl.empty();
 
-		if (items.length === 0) {
-			this.listEl.createDiv({ cls: "class-sync-recovery-empty", text: t("삭제된 파일이 없습니다.") });
-			return;
+		// 1) 삭제/수정 충돌(있을 때만, 가장 위 — 사용자 판단 필요).
+		if (conflicts.length > 0) {
+			this.listEl.createDiv({ cls: "class-sync-recovery-group is-conflict", text: t("삭제/수정 충돌") });
+			for (const c of conflicts) this.renderConflictRow(c);
 		}
 
-		// 링크(remoteDb)별 그룹.
-		const groups = new Map<string, DeletedItem[]>();
-		for (const it of items) {
-			const key = it.studentName || it.studentId || it.remoteDb;
-			(groups.get(key) ?? groups.set(key, []).get(key)!).push(it);
+		// 2) 삭제된 파일.
+		this.listEl.createDiv({ cls: "class-sync-recovery-group", text: t("삭제된 파일") });
+		if (items.length === 0) {
+			this.listEl.createDiv({ cls: "class-sync-recovery-empty", text: t("삭제된 파일이 없습니다.") });
+		} else {
+			for (const it of items) this.renderRow(it);
 		}
-		for (const [label, rows] of groups) {
-			if (groups.size > 1) this.listEl.createDiv({ cls: "class-sync-recovery-group", text: label });
-			for (const it of rows) this.renderRow(it);
+
+		// 3) 최근 영구 삭제(되돌리기).
+		if (purges.length > 0) {
+			this.listEl.createDiv({ cls: "class-sync-recovery-group", text: t("최근 영구 삭제") });
+			for (const p of purges) this.renderPurgeRow(p);
 		}
+	}
+
+	private renderConflictRow(c: DeleteModifyRow): void {
+		if (!this.listEl) return;
+		const card = this.listEl.createDiv({ cls: "class-sync-recovery-card is-conflict" });
+		card.createDiv({ cls: "class-sync-recovery-path", text: c.dbPath });
+		card.createDiv({
+			cls: "class-sync-recovery-meta",
+			text: t("내가 삭제했지만 다른 기기가 수정했습니다. 어떻게 처리할까요?"),
+		});
+		const actions = card.createDiv({ cls: "class-sync-recovery-actions" });
+		panelButton(actions, t("원격 수정 유지"), () => this.resolveConflict(c, "keep-remote"), { cta: true });
+		panelButton(actions, t("수정본 보관 후 삭제"), () => this.resolveConflict(c, "keep-both"));
+		panelButton(actions, t("내 삭제 적용"), () => this.resolveConflict(c, "delete"), { warning: true });
+	}
+
+	private async resolveConflict(c: DeleteModifyRow, choice: "delete" | "keep-remote" | "keep-both"): Promise<void> {
+		await this.host.resolveDeleteModify(c.remoteDb, c.dbPath, choice);
+		void this.renderList();
+	}
+
+	private renderPurgeRow(p: PurgeRow): void {
+		if (!this.listEl) return;
+		const card = this.listEl.createDiv({ cls: "class-sync-recovery-card" });
+		card.createDiv({ cls: "class-sync-recovery-path", text: p.dbPath });
+		card.createDiv({
+			cls: "class-sync-recovery-meta",
+			text: t("영구 삭제 · {when}", { when: new Date(p.purgedAt).toLocaleString() }),
+		});
+		const actions = card.createDiv({ cls: "class-sync-recovery-actions" });
+		if (p.recoverable) {
+			panelButton(actions, t("되돌리기"), () => this.undoPurge(p), { cta: true });
+		} else {
+			card.createDiv({ cls: "class-sync-recovery-note", text: t("되돌릴 내용이 없습니다(첨부 원본 미보존).") });
+		}
+		panelButton(actions, t("목록에서 지우기"), async () => {
+			await this.host.clearPurge(p.remoteDb, p.id);
+			void this.renderList();
+		});
+	}
+
+	private async undoPurge(p: PurgeRow): Promise<void> {
+		const res = await this.host.undoPurge(p.remoteDb, p.id);
+		if (res === "restored") new Notice(t("되돌림: {path}", { path: p.dbPath }));
+		else new Notice(t("되돌릴 수 없습니다: {path}", { path: p.dbPath }));
+		void this.renderList();
 	}
 
 	private renderRow(it: DeletedItem): void {

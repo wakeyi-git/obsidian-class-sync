@@ -1,6 +1,6 @@
 {
 	"name": "class-sync-for-obsidian",
-	"version": "0.19.0",
+	"version": "0.20.0",
 	"description": "교사용 vault의 학생별 폴더와 학생 개인 vault를 CouchDB mirror DB로 양방향 동기화하는 Obsidian 플러그인",
 	"main": "main.js",
 	"scripts": {

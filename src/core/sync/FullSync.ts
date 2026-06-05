@@ -9,8 +9,10 @@ import {
 	loadManifest,
 	saveManifest,
 	selectManifestOrphans,
+	selectDeleteModifyConflicts,
 	exceedsBulkThreshold,
 } from "./LinkManifest";
+import { recordDeleteModify, DeleteModifyItem } from "./deleteModifyQueue";
 import { NoteDoc, AssetDoc, noteId, assetId } from "../model/types";
 import { exceedsAttachmentLimit } from "./attachment";
 import { sha256 } from "../hash/hash";
@@ -151,6 +153,20 @@ export class FullSync {
 			if (dbPath != null) existing.add(dbPath);
 		}
 		const current = await this.currentDbByPath();
+
+		// 기준선 이후 원격이 수정해 보존되는 항목 → "삭제/수정 충돌"로 큐에 남겨 사용자가 선택하게 한다.
+		const modified = selectDeleteModifyConflicts(baseline.paths, existing, current);
+		if (modified.length > 0) {
+			const items: DeleteModifyItem[] = modified.map((dbPath) => ({
+				dbPath,
+				kind: ctx.isMarkdown(dbPath) ? "note" : "asset",
+				recordedAt: Date.now(),
+			}));
+			await recordDeleteModify(ctx.pouch, items).catch(() => undefined);
+			ctx.logger.info(
+				t("삭제/수정 충돌 {n}건 — ‘삭제 복구’ 탭에서 처리하세요(내 삭제 적용/원격 수정 유지).", { n: modified.length }),
+			);
+		}
 
 		const orphans = selectManifestOrphans(baseline.paths, existing, current);
 		if (orphans.length === 0) return;
