@@ -483,19 +483,33 @@ export class RealtimeManager {
 				);
 			}
 		} else {
-			// 스냅샷 영속: Y.Text → vault (변경 시) → LocalWatcher가 CouchDB 업로드
+			// 스냅샷 영속: Y.Text → vault(변경 시) + CouchDB에 직접 업로드.
+			// 실시간 중에는 LocalWatcher가 업로드를 보류하므로(Obsidian 자동저장 포함), Excalidraw와 동일하게
+			// 종료 시 명시적으로 올린다. Obsidian 자동저장으로 vault가 이미 최신이면 vault 쓰기는 생략되지만,
+			// CouchDB는 세션 중 갱신되지 않았으므로 반드시 업로드해야 비실시간 멤버가 최신본을 받는다.
 			try {
 				const file = this.app.vault.getAbstractFileByPath(path);
 				if (file instanceof TFile) {
 					const content = session.ytext?.toString() ?? "";
 					const current = await this.app.vault.read(file);
-					if (content !== current) {
-						// 안전장치: 빈 내용으로 기존 내용을 덮어쓰지 않음(데이터 손실 방지)
-						if (content.length === 0 && current.length > 0) {
-							this.core.logger.warn(t("실시간 스냅샷 생략(빈 내용 덮어쓰기 방지): {path}", { path }));
-						} else {
+					// 안전장치: 빈 내용으로 기존 내용을 덮어쓰지 않음(데이터 손실 방지)
+					if (content.length === 0 && current.length > 0) {
+						this.core.logger.warn(t("실시간 스냅샷 생략(빈 내용 덮어쓰기 방지): {path}", { path }));
+					} else {
+						if (content !== current) {
 							await this.app.vault.process(file, () => content); // 백그라운드 쓰기: 가이드라인 권장
+						}
+						const res = await this.getSyncForPath(path)?.snapshotNote(path, content);
+						if (res === "uploaded" || res === "skipped-same") {
 							this.core.logger.ok(t("실시간 스냅샷 저장: {path}", { path }));
+						} else if (res) {
+							this.core.logger.warn(
+								t("실시간 스냅샷 미저장({reason}): {path} — 비실시간 멤버에 전파되지 않을 수 있습니다.", {
+									reason: String(res),
+									path,
+								}),
+								true,
+							);
 						}
 					}
 				}
