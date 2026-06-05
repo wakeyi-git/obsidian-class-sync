@@ -28,6 +28,7 @@ export class ExcalidrawBinding {
 	private containerEl: HTMLElement | null;
 	private onPointerMove: ((e: PointerEvent) => void) | null = null;
 	private lastSent = 0;
+	private touchTimer: ReturnType<typeof setTimeout> | null = null;
 	private chips: PresenceChips | null = null;
 
 	constructor(
@@ -51,19 +52,32 @@ export class ExcalidrawBinding {
 
 		// 로컬 포인터 → 커서(awareness) 브로드캐스트. y-excalidraw가 원격 collaborators로 렌더(이름·색).
 		if (this.awareness && this.containerEl) {
+			const broadcast = (clientX: number, clientY: number): void => {
+				const pt = this.toScene(clientX, clientY);
+				if (pt) this.inner.onPointerUpdate({ pointer: { x: pt.x, y: pt.y, tool: "pointer" }, button: "up" });
+			};
 			this.onPointerMove = (e: PointerEvent) => {
-				// 터치/펜(태블릿·모바일)에서는 브로드캐스트하지 않는다. onPointerUpdate가 awareness를 바꾸면
-				// y-excalidraw가 매번 updateScene({collaborators})로 캔버스를 재렌더하는데, 이 재렌더가
-				// 더블탭(텍스트 입력) 제스처를 리셋해 모바일에서 텍스트를 못 넣게 만든다. 참가자 표시는 칩이 담당.
-				if (e.pointerType && e.pointerType !== "mouse") return;
+				if (e.pointerType && e.pointerType !== "mouse") {
+					// 터치/펜(태블릿·모바일): onPointerUpdate→awareness 변경→y-excalidraw가 매번
+					// updateScene({collaborators})로 재렌더하는데, 더블탭 사이에 끼면 제스처가 리셋돼
+					// 텍스트 입력이 안 된다. 더블탭 윈도우(~300ms)를 지난 뒤에만 갱신하는 트레일링 디바운스로,
+					// 제스처는 방해하지 않으면서 터치한 위치에 포인터·이름은 표시한다.
+					const { clientX, clientY } = e;
+					if (this.touchTimer) clearTimeout(this.touchTimer);
+					this.touchTimer = setTimeout(() => {
+						this.touchTimer = null;
+						broadcast(clientX, clientY);
+					}, 350);
+					return;
+				}
 				const now = Date.now();
 				if (now - this.lastSent < 40) return;
 				this.lastSent = now;
-				const pt = this.toScene(e.clientX, e.clientY);
-				if (!pt) return;
-				this.inner.onPointerUpdate({ pointer: { x: pt.x, y: pt.y, tool: "pointer" }, button: "up" });
+				broadcast(e.clientX, e.clientY);
 			};
+			// pointerdown도 함께 받아 정지 탭(이동 없는 터치)도 위치를 잡는다.
 			this.containerEl.addEventListener("pointermove", this.onPointerMove, { passive: true });
+			this.containerEl.addEventListener("pointerdown", this.onPointerMove, { passive: true });
 		}
 
 		// 참가자 칩 오버레이: 포인터(커서)에 의존하지 않고 현재 편집자 이름을 항상 표시.
@@ -88,8 +102,13 @@ export class ExcalidrawBinding {
 	}
 
 	destroy(): void {
+		if (this.touchTimer) {
+			clearTimeout(this.touchTimer);
+			this.touchTimer = null;
+		}
 		if (this.onPointerMove && this.containerEl) {
 			this.containerEl.removeEventListener("pointermove", this.onPointerMove);
+			this.containerEl.removeEventListener("pointerdown", this.onPointerMove);
 		}
 		this.chips?.destroy();
 		try {
