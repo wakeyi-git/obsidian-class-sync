@@ -9,7 +9,7 @@ import { t } from "../../i18n";
 
 /** 파일명에 쓸 수 없는 문자를 _로 치환. */
 function sanitizeFileLabel(s: string): string {
-	return (s || "").replace(/[\\/:*?"<>|.]/g, "_").trim() || t("상대방");
+	return (s || "").replace(/[\\/:*?"<>|.]/g, "_").trim() || t("common.peer");
 }
 
 /** 링크(학생↔mirror) 동기화 상태. 기술문서 §12.6 대시보드용. */
@@ -149,13 +149,13 @@ export class MirrorContext {
 
 	/** 충돌 원격본의 상대방 라벨: 교사 입장=학생 이름, 학생 입장=교사. */
 	conflictPeerLabel(): string {
-		if (this.settings.role === "teacher") return this.studentName || this.studentId || t("학생");
-		return t("교사");
+		if (this.settings.role === "teacher") return this.studentName || this.studentId || t("common.student");
+		return t("common.teacher");
 	}
 
 	/** 내 편집 백업 경로: 상대가 충돌을 해소해 내 편집이 덮일 때 보존. _충돌/<base>.내편집.md */
 	localBackupPath(dbPath: string): string {
-		const tagged = insertLabelBeforeExt(dbPath, sanitizeFileLabel(t("내편집")));
+		const tagged = insertLabelBeforeExt(dbPath, sanitizeFileLabel(t("common.myedit")));
 		return obsidianNormalize(dbPathToLocal(this.localRoot, `${this.settings.conflictFolder}/${tagged}`));
 	}
 

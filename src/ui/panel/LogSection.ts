@@ -11,7 +11,7 @@ export class LogSection implements PanelSection {
 
 	render(container: HTMLElement): void {
 		const toolbar = container.createDiv({ cls: "class-sync-log-toolbar" });
-		const clearBtn = toolbar.createEl("button", { text: t("지우기") });
+		const clearBtn = toolbar.createEl("button", { text: t("panel.clear") });
 		clearBtn.onclick = () => this.logger.clear();
 
 		this.logEl = container.createDiv({ cls: "class-sync-log-view" });

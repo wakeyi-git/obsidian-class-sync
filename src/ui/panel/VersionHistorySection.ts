@@ -1,18 +1,18 @@
 import { EventRef } from "obsidian";
 import { PanelHost, PanelSection, panelButton } from "./PanelSection";
 import { VersionDoc, VersionKind } from "../../core/model/types";
-import { t } from "../../i18n";
+import { t, formatDate } from "../../i18n";
 
 function kindLabel(kind: VersionKind): string {
 	switch (kind) {
 		case "modify":
-			return t("수정");
+			return t("version.edit");
 		case "delete":
-			return t("삭제 직전");
+			return t("version.before_delete");
 		case "conflict":
-			return t("충돌 해소 직전");
+			return t("version.before_conflict_resolution");
 		case "restore":
-			return t("복구");
+			return t("version.restore");
 	}
 }
 
@@ -58,7 +58,7 @@ export class VersionHistorySection implements PanelSection {
 		};
 
 		if (!file || file.extension !== "md") {
-			writeEmpty(t("노트를 열면 버전 기록이 표시됩니다."));
+			writeEmpty(t("version.open_a_note_to_see_its"));
 			return;
 		}
 
@@ -66,7 +66,7 @@ export class VersionHistorySection implements PanelSection {
 		try {
 			versions = await this.host.versionHistoryFor(file.path);
 		} catch {
-			writeEmpty(t("버전 기록을 불러오지 못했습니다."));
+			writeEmpty(t("version.failed_to_load_version_history"));
 			return;
 		}
 		if (seq !== this.renderSeq || !this.listEl) return;
@@ -76,7 +76,7 @@ export class VersionHistorySection implements PanelSection {
 		if (versions.length === 0) {
 			this.listEl.createDiv({
 				cls: "class-sync-version-empty",
-				text: t("저장된 버전이 없습니다. (편집·삭제·충돌 해소 시 기록됩니다.)"),
+				text: t("version.no_saved_versions_recorded_on_edit"),
 			});
 			return;
 		}
@@ -88,22 +88,22 @@ export class VersionHistorySection implements PanelSection {
 		const card = this.listEl.createDiv({ cls: "class-sync-version-card" });
 
 		const head = card.createDiv({ cls: "class-sync-version-head" });
-		head.createSpan({ cls: "class-sync-version-time", text: new Date(v.createdAtMs).toLocaleString() });
+		head.createSpan({ cls: "class-sync-version-time", text: formatDate(v.createdAtMs) });
 		head.createSpan({ cls: "class-sync-version-badge", text: kindLabel(v.kind) });
 
-		const who = v.role === "teacher" ? t("교사") : t("학생");
+		const who = v.role === "teacher" ? t("common.teacher") : t("common.student");
 		card.createDiv({
 			cls: "class-sync-version-meta",
-			text: t("{who} {by} · {device}", { who, by: v.createdBy, device: v.deviceId.slice(0, 6) }),
+			text: t("version.msg_2", { who, by: v.createdBy, device: v.deviceId.slice(0, 6) }),
 		});
 
 		const actions = card.createDiv({ cls: "class-sync-version-actions" });
-		panelButton(actions, this.expanded === v._id ? t("미리보기 닫기") : t("미리보기"), () => {
+		panelButton(actions, this.expanded === v._id ? t("version.close_preview") : t("deploy.preview"), () => {
 			this.expanded = this.expanded === v._id ? null : v._id;
 			void this.renderList();
 		});
-		panelButton(actions, t("이 버전으로 복원"), () => this.restore(localPath, v, false), { cta: true });
-		panelButton(actions, t("현재 백업 후 복원"), () => this.restore(localPath, v, true));
+		panelButton(actions, t("version.restore_this_version"), () => this.restore(localPath, v, false), { cta: true });
+		panelButton(actions, t("version.back_up_current_then_restore"), () => this.restore(localPath, v, true));
 
 		if (this.expanded === v._id) {
 			card.createEl("pre", { cls: "class-sync-version-preview", text: v.content });
@@ -113,7 +113,7 @@ export class VersionHistorySection implements PanelSection {
 	private async restore(localPath: string, v: VersionDoc, backupCurrent: boolean): Promise<void> {
 		const res = await this.host.restoreVersion(localPath, v._id, { backupCurrent });
 		if (res === "restored") {
-			this.host.logger.ok(t("버전 복원됨: {when}", { when: new Date(v.createdAtMs).toLocaleString() }), true);
+			this.host.logger.ok(t("version.version_restored_2", { when: formatDate(v.createdAtMs) }), true);
 		}
 		void this.renderList();
 	}

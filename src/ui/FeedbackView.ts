@@ -27,25 +27,25 @@ export function resolveMarkdownView(app: App, preferredPath?: string | null): Ma
 export function promptAddFeedback(app: App, store: FeedbackStore, preferredPath?: string | null): void {
 	const view = resolveMarkdownView(app, preferredPath);
 	if (!view || !view.file) {
-		new Notice(t("Class Sync: 피드백을 달 노트를 먼저 여세요."));
+		new Notice(t("feedback.class_sync_open_a_note_to"));
 		return;
 	}
 	const path = view.file.path;
 	if (!store.canAnnotate(path)) {
-		new Notice(t("Class Sync: 이 노트는 동기화 대상이 아니라 피드백을 저장할 수 없습니다."));
+		new Notice(t("feedback.class_sync_this_note_is_not"));
 		return;
 	}
 	const editor = view.editor;
 	const sel = editor.getSelection();
 	if (!sel) {
-		new Notice(t("Class Sync: 본문에서 피드백 대상 텍스트를 선택하세요."));
+		new Notice(t("feedback.class_sync_select_the_text_to"));
 		return;
 	}
 	const start = editor.posToOffset(editor.getCursor("from"));
 	const end = start + sel.length;
 	new FeedbackInputModal(app, sel, async (content) => {
 		const ok = await store.add(path, { textQuote: sel, start, end }, content);
-		if (ok) new Notice(t("Class Sync: 피드백을 추가했습니다."));
+		if (ok) new Notice(t("feedback.class_sync_feedback_added"));
 	}).open();
 }
 
@@ -58,25 +58,25 @@ class FeedbackInputModal extends Modal {
 
 	onOpen(): void {
 		const { contentEl } = this;
-		contentEl.createEl("h3", { text: t("피드백 추가") });
+		contentEl.createEl("h3", { text: t("feedback.add_feedback") });
 		contentEl.createDiv({ cls: "class-sync-feedback-quote", text: `“${this.quote}”` });
 
 		const ta = contentEl.createEl("textarea", { cls: "class-sync-feedback-input" });
 		ta.rows = 4;
-		ta.placeholder = t("피드백 내용을 입력하세요.");
+		ta.placeholder = t("feedback.enter_your_feedback");
 		ta.oninput = () => (this.value = ta.value);
 		window.setTimeout(() => ta.focus(), 0);
 
 		new Setting(contentEl)
-			.addButton((b) => b.setButtonText(t("취소")).onClick(() => this.close()))
+			.addButton((b) => b.setButtonText(t("common.cancel")).onClick(() => this.close()))
 			.addButton((b) =>
 				b
-					.setButtonText(t("추가"))
+					.setButtonText(t("common.add"))
 					.setCta()
 					.onClick(async () => {
 						const v = this.value.trim();
 						if (!v) {
-							new Notice(t("Class Sync: 내용을 입력하세요."));
+							new Notice(t("feedback.class_sync_enter_some_content"));
 							return;
 						}
 						this.close();

@@ -2,7 +2,7 @@ import { Notice, TFile } from "obsidian";
 import { PanelHost, PanelSection, panelButton, DeleteModifyRow, PurgeRow } from "./PanelSection";
 import { DeletedItem } from "../../core/sync/RestoreManager";
 import { ConfirmModal } from "../ConfirmModal";
-import { t } from "../../i18n";
+import { t, formatDate } from "../../i18n";
 
 /**
  * 삭제 파일 복구 탭(보고서 §2 P1). 모든 링크의 tombstone을 모아 보여주고,
@@ -19,10 +19,10 @@ export class DeletedRecoverySection implements PanelSection {
 		container.addClass("class-sync-recovery");
 
 		const toolbar = container.createDiv({ cls: "class-sync-recovery-toolbar" });
-		panelButton(toolbar, t("새로고침"), () => void this.renderList());
+		panelButton(toolbar, t("common.refresh"), () => void this.renderList());
 		toolbar.createDiv({
 			cls: "class-sync-panel-hint",
-			text: t("삭제된 파일을 원래 위치로 되돌리거나 영구 삭제합니다. 같은 이름이 있으면 ‘(복구본)’으로 복구됩니다."),
+			text: t("recovery.restore_deleted_files_to_their_original"),
 		});
 
 		this.listEl = container.createDiv({ cls: "class-sync-recovery-list" });
@@ -46,21 +46,21 @@ export class DeletedRecoverySection implements PanelSection {
 
 		// 1) 삭제/수정 충돌(있을 때만, 가장 위 — 사용자 판단 필요).
 		if (conflicts.length > 0) {
-			this.listEl.createDiv({ cls: "class-sync-recovery-group is-conflict", text: t("삭제/수정 충돌") });
+			this.listEl.createDiv({ cls: "class-sync-recovery-group is-conflict", text: t("recovery.delete_modify_conflicts") });
 			for (const c of conflicts) this.renderConflictRow(c);
 		}
 
 		// 2) 삭제된 파일.
-		this.listEl.createDiv({ cls: "class-sync-recovery-group", text: t("삭제된 파일") });
+		this.listEl.createDiv({ cls: "class-sync-recovery-group", text: t("recovery.deleted_files") });
 		if (items.length === 0) {
-			this.listEl.createDiv({ cls: "class-sync-recovery-empty", text: t("삭제된 파일이 없습니다.") });
+			this.listEl.createDiv({ cls: "class-sync-recovery-empty", text: t("recovery.no_deleted_files") });
 		} else {
 			for (const it of items) this.renderRow(it);
 		}
 
 		// 3) 최근 영구 삭제(되돌리기).
 		if (purges.length > 0) {
-			this.listEl.createDiv({ cls: "class-sync-recovery-group", text: t("최근 영구 삭제") });
+			this.listEl.createDiv({ cls: "class-sync-recovery-group", text: t("recovery.recently_purged") });
 			for (const p of purges) this.renderPurgeRow(p);
 		}
 	}
@@ -71,12 +71,12 @@ export class DeletedRecoverySection implements PanelSection {
 		card.createDiv({ cls: "class-sync-recovery-path", text: c.dbPath });
 		card.createDiv({
 			cls: "class-sync-recovery-meta",
-			text: t("내가 삭제했지만 다른 기기가 수정했습니다. 어떻게 처리할까요?"),
+			text: t("recovery.you_deleted_this_but_another_device"),
 		});
 		const actions = card.createDiv({ cls: "class-sync-recovery-actions" });
-		panelButton(actions, t("원격 수정 유지"), () => this.resolveConflict(c, "keep-remote"), { cta: true });
-		panelButton(actions, t("수정본 보관 후 삭제"), () => this.resolveConflict(c, "keep-both"));
-		panelButton(actions, t("내 삭제 적용"), () => this.resolveConflict(c, "delete"), { warning: true });
+		panelButton(actions, t("recovery.keep_remote_edit"), () => this.resolveConflict(c, "keep-remote"), { cta: true });
+		panelButton(actions, t("recovery.keep_edit_as_copy_then_delete"), () => this.resolveConflict(c, "keep-both"));
+		panelButton(actions, t("recovery.apply_my_delete"), () => this.resolveConflict(c, "delete"), { warning: true });
 	}
 
 	private async resolveConflict(c: DeleteModifyRow, choice: "delete" | "keep-remote" | "keep-both"): Promise<void> {
@@ -90,15 +90,15 @@ export class DeletedRecoverySection implements PanelSection {
 		card.createDiv({ cls: "class-sync-recovery-path", text: p.dbPath });
 		card.createDiv({
 			cls: "class-sync-recovery-meta",
-			text: t("영구 삭제 · {when}", { when: new Date(p.purgedAt).toLocaleString() }),
+			text: t("recovery.permanently_deleted_2", { when: formatDate(p.purgedAt) }),
 		});
 		const actions = card.createDiv({ cls: "class-sync-recovery-actions" });
 		if (p.recoverable) {
-			panelButton(actions, t("되돌리기"), () => this.undoPurge(p), { cta: true });
+			panelButton(actions, t("panel.reopen"), () => this.undoPurge(p), { cta: true });
 		} else {
-			card.createDiv({ cls: "class-sync-recovery-note", text: t("되돌릴 내용이 없습니다(첨부 원본 미보존).") });
+			card.createDiv({ cls: "class-sync-recovery-note", text: t("recovery.nothing_to_undo_attachment_binary_not") });
 		}
-		panelButton(actions, t("목록에서 지우기"), async () => {
+		panelButton(actions, t("recovery.remove_from_list"), async () => {
 			await this.host.clearPurge(p.remoteDb, p.id);
 			void this.renderList();
 		});
@@ -106,8 +106,8 @@ export class DeletedRecoverySection implements PanelSection {
 
 	private async undoPurge(p: PurgeRow): Promise<void> {
 		const res = await this.host.undoPurge(p.remoteDb, p.id);
-		if (res === "restored") new Notice(t("되돌림: {path}", { path: p.dbPath }));
-		else new Notice(t("되돌릴 수 없습니다: {path}", { path: p.dbPath }));
+		if (res === "restored") new Notice(t("recovery.undone", { path: p.dbPath }));
+		else new Notice(t("recovery.cannot_undo", { path: p.dbPath }));
 		void this.renderList();
 	}
 
@@ -119,51 +119,51 @@ export class DeletedRecoverySection implements PanelSection {
 		head.createSpan({ cls: "class-sync-recovery-path", text: it.dbPath });
 		head.createSpan({
 			cls: `class-sync-recovery-badge${it.recoverable ? " is-ok" : " is-warn"}`,
-			text: it.kind === "asset" ? t("첨부") : t("노트"),
+			text: it.kind === "asset" ? t("recovery.attachment") : t("recovery.note"),
 		});
 
-		const who = it.deletedByRole === "teacher" ? t("교사") : t("학생");
-		const when = it.deletedAt ? new Date(it.deletedAt).toLocaleString() : t("(시각 미상)");
+		const who = it.deletedByRole === "teacher" ? t("common.teacher") : t("common.student");
+		const when = it.deletedAt ? formatDate(new Date(it.deletedAt)) : t("recovery.time_unknown");
 		card.createDiv({
 			cls: "class-sync-recovery-meta",
-			text: t("{who} {by} 삭제 · {when}", { who, by: it.deletedBy ?? "", when }),
+			text: t("recovery.deleted_by", { who, by: it.deletedBy ?? "", when }),
 		});
 
 		const actions = card.createDiv({ cls: "class-sync-recovery-actions" });
 		if (it.recoverable) {
-			panelButton(actions, t("원래 위치로 복구"), () => this.restore(it), { cta: true });
+			panelButton(actions, t("recovery.restore_to_original_location"), () => this.restore(it), { cta: true });
 		} else {
 			card.createDiv({
 				cls: "class-sync-recovery-note",
 				text:
 					it.kind === "asset"
-						? t("첨부 원본이 없어 복구 불가(‘_삭제됨/’ 사본이 있는 기기에서 복구하세요).")
-						: t("복구할 내용이 없습니다."),
+						? t("recovery.cannot_recover_attachment_binary_is_gone")
+						: t("recovery.no_content_to_recover"),
 			});
 		}
-		panelButton(actions, t("영구 삭제"), () => this.confirmPurge(it), { warning: true });
+		panelButton(actions, t("recovery.delete_permanently"), () => this.confirmPurge(it), { warning: true });
 		if (it.recoverable && it.kind === "note") {
-			panelButton(actions, t("내용 열기"), () => this.preview(it));
+			panelButton(actions, t("recovery.open_content"), () => this.preview(it));
 		}
 	}
 
 	private async restore(it: DeletedItem): Promise<void> {
 		const res = await this.host.restoreDeleted(it.remoteDb, it.dbPath, { collision: "keep-both" });
-		if (res === "restored") new Notice(t("복구됨: {path}", { path: it.dbPath }));
-		else if (res === "unrecoverable") new Notice(t("복구할 수 없습니다: {path}", { path: it.dbPath }));
-		else if (res === "skipped-exists") new Notice(t("이미 같은 파일이 있어 건너뜀: {path}", { path: it.dbPath }));
+		if (res === "restored") new Notice(t("recovery.recovered_2", { path: it.dbPath }));
+		else if (res === "unrecoverable") new Notice(t("recovery.cannot_recover", { path: it.dbPath }));
+		else if (res === "skipped-exists") new Notice(t("recovery.skipped_a_same_file_already_exists", { path: it.dbPath }));
 		void this.renderList();
 	}
 
 	private confirmPurge(it: DeletedItem): void {
 		new ConfirmModal(this.host.app, {
-			title: t("영구 삭제: {path}", { path: it.dbPath }),
-			message: t("서버 DB에서 이 문서를 완전히 제거합니다. 되돌릴 수 없습니다."),
-			confirmText: t("영구 삭제"),
+			title: t("recovery.delete_permanently_2", { path: it.dbPath }),
+			message: t("recovery.permanently_removes_this_document_from_the"),
+			confirmText: t("recovery.delete_permanently"),
 			warning: true,
 			onConfirm: async () => {
 				await this.host.purgeDeleted(it.remoteDb, it.dbPath);
-				new Notice(t("영구 삭제됨: {path}", { path: it.dbPath }));
+				new Notice(t("recovery.permanently_deleted", { path: it.dbPath }));
 				void this.renderList();
 			},
 		}).open();
@@ -175,7 +175,7 @@ export class DeletedRecoverySection implements PanelSection {
 		if (file instanceof TFile) {
 			await this.host.app.workspace.getLeaf(false).openFile(file);
 		} else {
-			new Notice(t("미리볼 사본이 없습니다. ‘원래 위치로 복구’ 후 확인하세요."));
+			new Notice(t("recovery.no_copy_to_preview_restore_to"));
 		}
 	}
 }

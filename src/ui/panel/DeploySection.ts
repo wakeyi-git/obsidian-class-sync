@@ -36,20 +36,20 @@ export class DeploySection implements PanelSection {
 	// --- 학생에게 복사 ---
 
 	private renderCopy(container: HTMLElement): void {
-		container.createDiv({ cls: "class-sync-panel-label", text: t("학생에게 복사") });
+		container.createDiv({ cls: "class-sync-panel-label", text: t("deploy.copy_to_students") });
 
 		const students = this.host.settings.students.filter((st) => st.studentId);
 		if (students.length === 0) {
-			container.createDiv({ cls: "class-sync-feedback-empty", text: t("설정에서 학생을 먼저 추가하세요.") });
+			container.createDiv({ cls: "class-sync-feedback-empty", text: t("deploy.add_students_in_settings_first") });
 			return;
 		}
 
 		new Setting(container)
-			.setName(t("원본 경로"))
-			.setDesc(t("복사할 파일 또는 폴더 경로"))
+			.setName(t("deploy.source_path"))
+			.setDesc(t("deploy.path_of_the_file_or_folder"))
 			.addText((txt) =>
 				txt
-					.setPlaceholder(t("예: 템플릿/오늘의_활동.md"))
+					.setPlaceholder(t("deploy.e_g_templates_today_md"))
 					.setValue(this.sourcePath)
 					.onChange((v) => {
 						this.sourcePath = v.trim();
@@ -58,40 +58,40 @@ export class DeploySection implements PanelSection {
 			);
 
 		const quick = container.createDiv({ cls: "class-sync-panel-actions" });
-		panelButton(quick, t("현재 파일"), () => this.fillCurrent("file"));
-		panelButton(quick, t("현재 폴더"), () => this.fillCurrent("folder"));
+		panelButton(quick, t("deploy.current_file"), () => this.fillCurrent("file"));
+		panelButton(quick, t("deploy.current_folder"), () => this.fillCurrent("folder"));
 
 		this.infoEl = container.createDiv({ cls: "class-sync-panel-hint" });
 		this.updateInfo();
 
 		const srcFile = this.host.app.vault.getAbstractFileByPath(this.sourcePath);
 		new Setting(container)
-			.setName(t("대상 경로 (비우면 원본 이름)"))
-			.setDesc(t("각 학생 폴더 안의 경로. 폴더 복사 시 무시됩니다."))
+			.setName(t("deploy.target_path_empty_source_name"))
+			.setDesc(t("deploy.path_inside_each_student_s_folder"))
 			.addText((txt) =>
 				txt
-					.setPlaceholder(srcFile instanceof TFile ? srcFile.name : t("오늘의_활동.md"))
+					.setPlaceholder(srcFile instanceof TFile ? srcFile.name : t("deploy.today_md"))
 					.setValue(this.destPath)
 					.onChange((v) => (this.destPath = v.trim())),
 			);
 
-		new Setting(container).setName(t("기존 파일 처리")).addDropdown((dd) =>
+		new Setting(container).setName(t("deploy.existing_file_handling")).addDropdown((dd) =>
 			dd
-				.addOption("skip", t("건너뛰기"))
-				.addOption("overwrite", t("덮어쓰기"))
-				.addOption("rename", t("새 이름으로"))
+				.addOption("skip", t("deploy.skip_2"))
+				.addOption("overwrite", t("deploy.overwrite_2"))
+				.addOption("rename", t("deploy.rename_2"))
 				.setValue(this.policy)
 				.onChange((v) => (this.policy = v as ExistingPolicy)),
 		);
 
 		new Setting(container)
-			.setName(t("템플릿 변수 치환"))
-			.setDesc(t("{{studentName}} {{studentId}} {{classId}} {{date}} 를 학생별로 치환"))
+			.setName(t("deploy.template_variable_substitution"))
+			.setDesc(t("deploy.substitute_per_student"))
 			.addToggle((tg) => tg.setValue(this.substitute).onChange((v) => (this.substitute = v)));
 
-		const head = new Setting(container).setName(t("대상 학생 ({count}명)", { count: students.length }));
-		head.addButton((b) => b.setButtonText(t("전체")).onClick(() => this.setAll(true)));
-		head.addButton((b) => b.setButtonText(t("해제")).onClick(() => this.setAll(false)));
+		const head = new Setting(container).setName(t("deploy.target_students", { count: students.length }));
+		head.addButton((b) => b.setButtonText(t("deploy.select_all")).onClick(() => this.setAll(true)));
+		head.addButton((b) => b.setButtonText(t("deploy.none")).onClick(() => this.setAll(false)));
 		for (const st of students) {
 			new Setting(container)
 				.setName(st.studentName || st.studentId)
@@ -105,8 +105,8 @@ export class DeploySection implements PanelSection {
 		}
 
 		const runRow = container.createDiv({ cls: "class-sync-panel-actions" });
-		panelButton(runRow, t("미리보기"), () => this.runPreview());
-		panelButton(runRow, t("학생에게 복사"), () => this.runCopy(), { cta: true });
+		panelButton(runRow, t("deploy.preview"), () => this.runPreview());
+		panelButton(runRow, t("deploy.copy_to_students"), () => this.runCopy(), { cta: true });
 
 		this.renderResult(container);
 	}
@@ -115,10 +115,10 @@ export class DeploySection implements PanelSection {
 	private renderResult(container: HTMLElement): void {
 		if (this.lastPlan) {
 			const plan = this.lastPlan;
-			container.createDiv({ cls: "class-sync-panel-label", text: t("미리보기") });
+			container.createDiv({ cls: "class-sync-panel-label", text: t("deploy.preview") });
 			const table = container.createEl("table", { cls: "class-sync-dash-table" });
 			const tr = table.createEl("thead").createEl("tr");
-			for (const h of [t("학생"), t("생성"), t("덮어씀"), t("건너뜀"), t("새 이름")]) tr.createEl("th", { text: h });
+			for (const h of [t("common.student"), t("deploy.create"), t("deploy.overwrite"), t("deploy.skip"), t("deploy.rename")]) tr.createEl("th", { text: h });
 			const tb = table.createEl("tbody");
 			for (const sp of plan.students) {
 				const c = { create: 0, overwrite: 0, skip: 0, rename: 0 };
@@ -131,24 +131,24 @@ export class DeploySection implements PanelSection {
 				row.createEl("td", { text: String(c.rename) });
 			}
 			if (plan.sampleAfter !== undefined) {
-				container.createDiv({ cls: "class-sync-panel-hint", text: t("치환 결과 미리보기(첫 학생):") });
+				container.createDiv({ cls: "class-sync-panel-hint", text: t("deploy.substitution_preview_first_student") });
 				container.createEl("pre", { cls: "class-sync-deploy-sample", text: plan.sampleAfter });
 			}
 		}
 
 		if (this.lastResult && !this.lastResult.error) {
 			const res = this.lastResult;
-			container.createDiv({ cls: "class-sync-panel-label", text: t("복사 결과") });
+			container.createDiv({ cls: "class-sync-panel-label", text: t("deploy.copy_result") });
 			const table = container.createEl("table", { cls: "class-sync-dash-table" });
 			const tr = table.createEl("thead").createEl("tr");
-			for (const h of [t("학생"), t("작성"), t("건너뜀"), t("결과")]) tr.createEl("th", { text: h });
+			for (const h of [t("common.student"), t("deploy.written"), t("deploy.skip"), t("deploy.result")]) tr.createEl("th", { text: h });
 			const tb = table.createEl("tbody");
 			for (const d of res.details) {
 				const row = tb.createEl("tr");
 				row.createEl("td", { text: d.studentName || d.studentId });
 				row.createEl("td", { text: String(d.written) });
 				row.createEl("td", { text: String(d.skipped) });
-				const note = row.createEl("td", { text: d.error ? t("실패") : "✓" });
+				const note = row.createEl("td", { text: d.error ? t("deploy.failed") : "✓" });
 				if (d.error) {
 					note.addClass("class-sync-dash-conflict");
 					note.setAttribute("title", d.error);
@@ -157,7 +157,7 @@ export class DeploySection implements PanelSection {
 			const failed = res.details.filter((d) => d.error).map((d) => d.studentId);
 			if (failed.length > 0) {
 				const row = container.createDiv({ cls: "class-sync-panel-actions" });
-				panelButton(row, t("실패한 {n}명만 재시도", { n: failed.length }), () => this.runCopy(failed), { warning: true });
+				panelButton(row, t("deploy.retry_failed", { n: failed.length }), () => this.runCopy(failed), { warning: true });
 			}
 		}
 	}
@@ -165,7 +165,7 @@ export class DeploySection implements PanelSection {
 	private fillCurrent(kind: "file" | "folder"): void {
 		const f = this.host.app.workspace.getActiveFile();
 		if (!f) {
-			new Notice(t("Class Sync: 열린 파일이 없습니다."));
+			new Notice(t("deploy.class_sync_no_file_is_open"));
 			return;
 		}
 		// 원본만 채운다. 대상 경로는 비워두면 복사 시 원본 이름으로 자동 적용되므로,
@@ -178,13 +178,13 @@ export class DeploySection implements PanelSection {
 		const el = this.infoEl;
 		if (!el) return;
 		if (!this.sourcePath) {
-			el.setText(t("경로를 입력하거나 위 버튼으로 채우세요."));
+			el.setText(t("deploy.type_a_path_or_fill_it"));
 			return;
 		}
 		const src = this.host.app.vault.getAbstractFileByPath(this.sourcePath);
-		if (src instanceof TFolder) el.setText(t("폴더 — 하위 markdown 전체 복사"));
-		else if (src instanceof TFile) el.setText(t("파일 — 대상 경로 비우면 ‘{name}’로 복사", { name: src.name }));
-		else el.setText(t("경로를 찾을 수 없습니다: {path}", { path: this.sourcePath }));
+		if (src instanceof TFolder) el.setText(t("deploy.folder_copies_all_markdown_inside"));
+		else if (src instanceof TFile) el.setText(t("deploy.file_copied_as_if_target_path", { name: src.name }));
+		else el.setText(t("deploy.path_not_found", { path: this.sourcePath }));
 	}
 
 	private setAll(v: boolean): void {
@@ -200,12 +200,12 @@ export class DeploySection implements PanelSection {
 	/** 선택/원본 검증 후 대상 학생 ID 반환(없으면 null + Notice). */
 	private targetIds(override?: string[]): string[] | null {
 		if (!this.sourcePath) {
-			new Notice(t("Class Sync: 원본 경로를 입력하세요."));
+			new Notice(t("deploy.class_sync_enter_a_source_path"));
 			return null;
 		}
 		const ids = override ?? [...this.selected];
 		if (ids.length === 0) {
-			new Notice(t("Class Sync: 대상 학생을 선택하세요."));
+			new Notice(t("deploy.class_sync_select_target_students"));
 			return null;
 		}
 		return ids;
@@ -216,7 +216,7 @@ export class DeploySection implements PanelSection {
 		if (!ids) return;
 		const plan = await this.host.bulkCopyPreview(this.sourcePath, this.opts(), ids);
 		if (plan.error) {
-			new Notice(t("미리보기 실패: {error}", { error: plan.error }));
+			new Notice(t("deploy.preview_failed", { error: plan.error }));
 			return;
 		}
 		this.lastPlan = plan;
@@ -230,30 +230,30 @@ export class DeploySection implements PanelSection {
 		const res = await this.host.bulkCopy(this.sourcePath, this.opts(), ids);
 		this.lastResult = res;
 		this.lastPlan = null;
-		if (res.error) new Notice(t("복사 실패: {error}", { error: res.error }));
-		else new Notice(t("복사 완료: {written}개 작성, {skipped}개 건너뜀", { written: res.written, skipped: res.skipped }));
+		if (res.error) new Notice(t("deploy.copy_failed", { error: res.error }));
+		else new Notice(t("deploy.copy_complete_written_skipped", { written: res.written, skipped: res.skipped }));
 		if (this.container) this.render(this.container);
 	}
 
 	// --- 공유 공간 배포 ---
 
 	private renderShared(container: HTMLElement): void {
-		container.createDiv({ cls: "class-sync-panel-label", text: t("공유 공간") });
+		container.createDiv({ cls: "class-sync-panel-label", text: t("panel.shared_spaces") });
 		const spaces = this.host.settings.sharedSpaces;
 		if (spaces.length === 0) {
-			container.createDiv({ cls: "class-sync-feedback-empty", text: t("설정에서 공유 공간을 추가하세요.") });
+			container.createDiv({ cls: "class-sync-feedback-empty", text: t("panel.add_a_shared_space_in_settings") });
 			return;
 		}
 		for (const sp of spaces) {
 			const row = container.createDiv({ cls: "class-sync-panel-row" });
 			row.createSpan({
-				text: t("{name} · {db}{status}", {
+				text: t("panel.msg_3", {
 					name: sp.name || sp.id,
 					db: sp.remoteDb,
-					status: sp.provisioned ? " ✓" : t(" (미배포)"),
+					status: sp.provisioned ? " ✓" : t("panel.not_deployed_2"),
 				}),
 			});
-			panelButton(row, sp.provisioned ? t("재배포") : t("배포"), async () => {
+			panelButton(row, sp.provisioned ? t("common.redeploy") : t("common.deploy"), async () => {
 				await this.host.deployShared(sp);
 				if (this.container) this.render(this.container);
 			});

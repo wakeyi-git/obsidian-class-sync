@@ -56,7 +56,7 @@ export class VersionStore {
 			await this.prune(dbPath);
 		} catch (e) {
 			ctx.logger.warn(
-				t("버전 스냅샷 기록 실패: {path} — {err}", { path: dbPath, err: e instanceof Error ? e.message : String(e) }),
+				t("version.failed_to_record_version_snapshot", { path: dbPath, err: e instanceof Error ? e.message : String(e) }),
 			);
 		}
 	}
@@ -106,7 +106,7 @@ export class VersionStore {
 		await ctx.writeVaultFile(localPath, v.content);
 		ctx.guard.releaseAfterDelay(localPath);
 		await ctx.pouch.put(fresh);
-		ctx.logger.ok(t("버전 복원: {path}", { path: dbPath }), true);
+		ctx.logger.ok(t("version.version_restored", { path: dbPath }), true);
 		return "restored";
 	}
 }

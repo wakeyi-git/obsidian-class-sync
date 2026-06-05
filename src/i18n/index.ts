@@ -1,7 +1,16 @@
-import { EN } from "./en";
+import en from "./locales/en.json";
+import ko from "./locales/ko.json";
 
 /** 언어 설정값: 자동(Obsidian 따름) / 한국어 / English. */
 export type LangSetting = "auto" | "ko" | "en";
+
+/** en.json(기준)에서 추론한 계층형 키 타입. 오타·미정의 키는 컴파일 에러. */
+type PathsToFields<T, P extends string = ""> = T extends object
+	? { [K in keyof T]: PathsToFields<T[K], P extends "" ? `${K & string}` : `${P}.${K & string}`> }[keyof T]
+	: P;
+export type I18nKey = PathsToFields<typeof en>;
+
+const locales: Record<string, unknown> = { en, ko };
 
 let locale: "ko" | "en" = "ko";
 
@@ -12,6 +21,11 @@ export function initI18n(setting: LangSetting): void {
 
 export function currentLocale(): "ko" | "en" {
 	return locale;
+}
+
+/** Intl용 BCP 47 태그. 날짜·숫자 포맷에 사용. */
+export function currentLocaleTag(): string {
+	return locale === "ko" ? "ko-KR" : "en-US";
 }
 
 function resolveLocale(setting: LangSetting): "ko" | "en" {
@@ -44,12 +58,29 @@ function resolveLocale(setting: LangSetting): "ko" | "en" {
 	return fallbacks.some((l) => l?.toLowerCase().startsWith("ko")) ? "ko" : "en";
 }
 
+/** 중첩 키(`ns.leaf`) 조회. */
+function lookup(obj: unknown, key: string): unknown {
+	return key.split(".").reduce<unknown>((o, k) => (o == null ? undefined : (o as Record<string, unknown>)[k]), obj);
+}
+
 /**
- * 번역. 한국어 원문을 키로 사용 — ko면 원문 그대로, en이면 EN 맵의 번역(없으면 한국어 폴백).
+ * 번역(타입안전 계층형 키). 활성 로케일 → 없으면 다른 로케일 → 키 문자열 순으로 폴백.
  * `{name}` 자리표시자는 vars로 보간한다.
  */
-export function t(ko: string, vars?: Record<string, string | number | boolean>): string {
-	const s = locale === "en" ? EN[ko] ?? ko : ko;
-	if (!vars) return s;
-	return s.replace(/\{(\w+)\}/g, (_, k: string) => (k in vars ? String(vars[k]) : `{${k}}`));
+export function t(key: I18nKey, vars?: Record<string, string | number | boolean>): string {
+	const k = key as string;
+	const raw = lookup(locales[locale], k) ?? lookup(locales.en, k) ?? lookup(locales.ko, k);
+	if (typeof raw !== "string") return k; // 어느 로케일에도 없음 → 키 노출(개발 중 발견용)
+	if (!vars) return raw;
+	return raw.replace(/\{(\w+)\}/g, (_, n: string) => (n in vars ? String(vars[n]) : `{${n}}`));
+}
+
+/** 활성 로케일(BCP 47) 기준 날짜 포맷(Intl). 기본: 중간 길이 날짜 + 짧은 시간. */
+export function formatDate(value: number | Date, opts?: Intl.DateTimeFormatOptions): string {
+	return new Intl.DateTimeFormat(currentLocaleTag(), opts ?? { dateStyle: "medium", timeStyle: "short" }).format(value);
+}
+
+/** 활성 로케일(BCP 47) 기준 숫자 포맷(Intl). */
+export function formatNumber(value: number, opts?: Intl.NumberFormatOptions): string {
+	return new Intl.NumberFormat(currentLocaleTag(), opts).format(value);
 }

@@ -26,7 +26,7 @@ export class StudentMode implements ClassSyncMode {
 	async stop(): Promise<void> {
 		for (const sync of this.syncs) await sync.stop();
 		this.syncs = [];
-		this.core.logger.info(t("Student Mode 정지."));
+		this.core.logger.info(t("mode.student_mode_stopped"));
 	}
 
 	async fullSync(direction: SyncDirection): Promise<void> {
@@ -88,10 +88,10 @@ export class StudentMode implements ClassSyncMode {
 			}
 
 			for (const sync of this.syncs) await sync.start();
-			this.core.logger.ok(t("Student Mode 시작 — 개인 + 공유 {count}개", { count: spaces.length }), true);
+			this.core.logger.ok(t("mode.student_mode_started_personal_shared", { count: spaces.length }), true);
 		} catch (e) {
 			this.core.logger.error(
-				t("공유 공간 reconcile 실패: {error}", { error: e instanceof Error ? e.message : String(e) }),
+				t("mode.failed_to_reconcile_shared_spaces", { error: e instanceof Error ? e.message : String(e) }),
 				true,
 			);
 		} finally {

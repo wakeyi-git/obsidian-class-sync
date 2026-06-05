@@ -40,39 +40,39 @@ export class SetupSection implements PanelSection {
 		const synced = Object.keys(s.lastSeqByDb ?? {}).length > 0;
 		return [
 			{
-				title: t("1. 서버 연결"),
-				desc: t("CouchDB 서버 주소와 관리자 계정을 입력하고 연결을 확인합니다."),
+				title: t("panel.1_server_connection"),
+				desc: t("panel.enter_the_couchdb_server_address_and"),
 				done: !!(s.couchdbUrl && s.username && s.password),
 				actions: [
-					{ label: t("설정 열기"), run: () => this.host.openSettings(), cta: true },
-					{ label: t("연결 테스트"), run: () => this.host.testConnection() },
+					{ label: t("panel.open_settings"), run: () => this.host.openSettings(), cta: true },
+					{ label: t("settings.connection_test"), run: () => this.host.testConnection() },
 				],
 			},
 			{
-				title: t("2. 학급 정보"),
-				desc: t("학급 ID와 교사 표시 이름을 정합니다."),
+				title: t("panel.2_class_info"),
+				desc: t("panel.set_the_class_id_and_teacher"),
 				done: !!s.classId,
-				actions: [{ label: t("설정 열기"), run: () => this.host.openSettings() }],
+				actions: [{ label: t("panel.open_settings"), run: () => this.host.openSettings() }],
 			},
 			{
-				title: t("3. 학생 등록"),
-				desc: t("학생을 추가합니다(설정의 학생 목록에서 ‘+ 학생 추가’)."),
+				title: t("panel.3_add_students"),
+				desc: t("panel.add_students_add_student_in_the"),
 				done: studentsWithId.length > 0,
-				actions: [{ label: t("설정 열기"), run: () => this.host.openSettings(), cta: studentsWithId.length === 0 }],
+				actions: [{ label: t("panel.open_settings"), run: () => this.host.openSettings(), cta: studentsWithId.length === 0 }],
 			},
 			{
-				title: t("4. 학생 초대"),
-				desc: t("학생 카드의 ‘초대’로 계정/DB/권한을 만들고 QR·코드를 전달합니다. ({n}명 완료)", {
+				title: t("panel.4_invite_students"),
+				desc: t("panel.use_invite_on_a_student_card", {
 					n: provisioned,
 				}),
 				done: provisioned > 0,
-				actions: [{ label: t("설정 열기"), run: () => this.host.openSettings() }],
+				actions: [{ label: t("panel.open_settings"), run: () => this.host.openSettings() }],
 			},
 			{
-				title: t("5. 첫 동기화 테스트"),
-				desc: t("전체 동기화를 한 번 실행해 서버까지 왕복을 확인합니다."),
+				title: t("panel.5_first_sync_test"),
+				desc: t("panel.run_a_full_sync_once_to"),
 				done: synced,
-				actions: [{ label: t("전체 동기화"), run: () => this.host.fullSync("both"), cta: !synced }],
+				actions: [{ label: t("panel.full_sync"), run: () => this.host.fullSync("both"), cta: !synced }],
 			},
 		];
 	}
@@ -85,10 +85,10 @@ export class SetupSection implements PanelSection {
 		const steps = this.steps();
 		const doneCount = steps.filter((x) => x.done).length;
 
-		c.createDiv({ cls: "class-sync-panel-label", text: t("교사 시작하기") });
+		c.createDiv({ cls: "class-sync-panel-label", text: t("panel.teacher_setup") });
 		c.createDiv({
 			cls: "class-sync-panel-hint",
-			text: t("{done}/{total} 단계 완료 — 순서대로 따라 하면 첫 설정이 끝납니다.", {
+			text: t("panel.steps_done_follow_them_in_order", {
 				done: doneCount,
 				total: steps.length,
 			}),
@@ -110,10 +110,10 @@ export class SetupSection implements PanelSection {
 		const footer = c.createDiv({ cls: "class-sync-panel-actions" });
 		panelButton(
 			footer,
-			doneCount === steps.length ? t("마치고 대시보드로") : t("나중에 하기 (대시보드로)"),
+			doneCount === steps.length ? t("panel.finish_dashboard") : t("panel.do_it_later_dashboard"),
 			async () => {
 				await this.host.completeOnboarding();
-				new Notice(t("Class Sync: 시작하기를 닫았습니다. ‘시작하기’ 탭에서 다시 볼 수 있어요."));
+				new Notice(t("panel.class_sync_closed_the_setup_guide"));
 				await this.host.activatePanel("sync");
 			},
 			{ cta: doneCount === steps.length },

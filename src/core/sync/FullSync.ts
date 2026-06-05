@@ -38,7 +38,7 @@ export class FullSync {
 
 	async run(direction: SyncDirection = "both"): Promise<void> {
 		const ctx = this.ctx;
-		ctx.logger.info(t("전체 동기화 시작 ({direction}) — {db}", { direction, db: ctx.remoteDb }));
+		ctx.logger.info(t("sync.full_sync_started", { direction, db: ctx.remoteDb }));
 
 		// 직전 동기화 종료 시점의 manifest(기준선). 삭제 정합의 "과거 존재" 근거로 쓴다.
 		const baseline = await loadManifest(ctx.pouch);
@@ -53,21 +53,21 @@ export class FullSync {
 		try {
 			if (direction === "down") {
 				const pulled = await ctx.pouch.replicatePullOnce();
-				ctx.logger.info(t("원격 다운로드: ↓{pulled} 문서", { pulled }));
+				ctx.logger.info(t("sync.remote_download_docs", { pulled }));
 			} else if (direction === "up") {
-				ctx.logger.info(t("‘업로드만’: 원격 최신 수정과 비교하지 않고 삭제를 정합합니다."));
+				ctx.logger.info(t("sync.upload_only_reconciling_deletions_without_compar"));
 				await this.reconcileDeletions(baseline);
 				const pushed = await ctx.pouch.replicatePushOnce();
-				ctx.logger.info(t("원격 업로드: ↑{pushed} 문서", { pushed }));
+				ctx.logger.info(t("sync.remote_upload_docs", { pushed }));
 			} else {
 				const pulled = await ctx.pouch.replicatePullOnce();
 				await this.reconcileDeletions(baseline);
 				const pushed = await ctx.pouch.replicatePushOnce();
-				ctx.logger.info(t("원격 동기화: ↑{pushed} ↓{pulled} 문서", { pushed, pulled }));
+				ctx.logger.info(t("sync.remote_sync_docs", { pushed, pulled }));
 			}
 		} catch (e) {
 			ctx.logger.error(
-				t("원격 동기화 실패: {err}", { err: e instanceof Error ? e.message : String(e) }),
+				t("sync.remote_sync_failed", { err: e instanceof Error ? e.message : String(e) }),
 				true,
 			);
 		}
@@ -79,7 +79,7 @@ export class FullSync {
 		await this.writeManifestSnapshot();
 
 		await ctx.core.flushPersist();
-		ctx.logger.ok(t("전체 동기화 완료 ({direction}).", { direction }), true);
+		ctx.logger.ok(t("sync.full_sync_complete", { direction }), true);
 	}
 
 	/**
@@ -91,7 +91,7 @@ export class FullSync {
 	 */
 	async runStartup(): Promise<void> {
 		const ctx = this.ctx;
-		ctx.logger.info(t("시작 정합 — {db}", { db: ctx.remoteDb }));
+		ctx.logger.info(t("version.startup_reconcile", { db: ctx.remoteDb }));
 		const baseline = await loadManifest(ctx.pouch);
 
 		await this.upload(); // 미반영 로컬 편집을 먼저 로컬 DB로(원격 변경과 _conflicts가 제대로 생기도록)
@@ -99,9 +99,9 @@ export class FullSync {
 			const pulled = await ctx.pouch.replicatePullOnce(); // 최신 원격을 먼저 받아 stale 판단 방지
 			await this.reconcileDeletions(baseline);
 			const pushed = await ctx.pouch.replicatePushOnce();
-			ctx.logger.info(t("시작 정합 완료: ↑{pushed} ↓{pulled} 문서", { pushed, pulled }));
+			ctx.logger.info(t("version.startup_reconcile_done_docs", { pushed, pulled }));
 		} catch (e) {
-			ctx.logger.error(t("시작 정합 실패: {err}", { err: e instanceof Error ? e.message : String(e) }), true);
+			ctx.logger.error(t("version.startup_reconcile_failed", { err: e instanceof Error ? e.message : String(e) }), true);
 		}
 
 		await this.writeManifestSnapshot();
@@ -128,7 +128,7 @@ export class FullSync {
 			}
 		}
 		ctx.logger.info(
-			t("다운로드 정합: 문서 {notes} + 첨부 {assets} 중 {applied}개 적용.", {
+			t("sync.download_reconcile_applied_of_docs_attachments", {
 				notes: notes.length,
 				assets: assetCount,
 				applied,
@@ -145,7 +145,7 @@ export class FullSync {
 			if (res === "uploaded") uploaded++;
 		}
 		ctx.logger.info(
-			t("업로드 정합: {files}개 파일 중 {uploaded}개 업로드.", { files: files.length, uploaded }),
+			t("sync.upload_reconcile_uploaded_of_files", { files: files.length, uploaded }),
 		);
 	}
 
@@ -159,12 +159,12 @@ export class FullSync {
 	private async reconcileDeletions(baseline: LinkManifestDoc | null): Promise<void> {
 		const ctx = this.ctx;
 		if (!baseline || Object.keys(baseline.paths).length === 0) {
-			ctx.logger.info(t("삭제 정합 생략: 기준선 manifest 없음(첫 동기화/캐시 초기화 후)."));
+			ctx.logger.info(t("sync.delete_reconcile_skipped_no_baseline_manifest"));
 			return;
 		}
 		if (baseline.localRoot !== ctx.localRoot) {
 			ctx.logger.warn(
-				t("삭제 정합 생략: 폴더가 ‘{old}’→‘{now}’로 바뀌어 기준선이 무효입니다.", {
+				t("sync.delete_reconcile_skipped_folder_changed_baseline", {
 					old: baseline.localRoot || "(root)",
 					now: ctx.localRoot || "(root)",
 				}),
@@ -190,7 +190,7 @@ export class FullSync {
 			}));
 			await recordDeleteModify(ctx.pouch, items).catch(() => undefined);
 			ctx.logger.info(
-				t("삭제/수정 충돌 {n}건 — ‘삭제 복구’ 탭에서 처리하세요(내 삭제 적용/원격 수정 유지).", { n: modified.length }),
+				t("recovery.delete_modify_conflict_s_handle_them", { n: modified.length }),
 			);
 		}
 
@@ -199,7 +199,7 @@ export class FullSync {
 
 		if (exceedsBulkThreshold(orphans.length, Object.keys(baseline.paths).length, ctx.settings.deleteReconcileMax)) {
 			ctx.logger.warn(
-				t("삭제 정합 중단: 사라진 파일 {found}개가 한도를 넘었습니다(폴더 오설정 방지). 의도한 삭제면 설정 ‘삭제 정합 최대 건수’를 올리세요.", {
+				t("sync.delete_reconcile_aborted_missing_files_exceed", {
 					found: orphans.length,
 				}),
 				true,
@@ -212,7 +212,7 @@ export class FullSync {
 			if ((await this.uploader.tombstonePath(dbPath)) === "tombstoned") tombstoned++;
 		}
 		ctx.logger.info(
-			t("삭제 정합: 로컬에서 사라진 {found}개 중 {tombstoned}개 tombstone 처리.", {
+			t("sync.delete_reconcile_tombstoned_of_files_missing", {
 				found: orphans.length,
 				tombstoned,
 			}),
@@ -253,7 +253,7 @@ export class FullSync {
 			await saveManifest(ctx.pouch, { localRoot: ctx.localRoot, paths, updatedAt: Date.now() });
 		} catch (e) {
 			ctx.logger.error(
-				t("manifest 기록 실패: {err}", { err: e instanceof Error ? e.message : String(e) }),
+				t("sync.failed_to_write_manifest", { err: e instanceof Error ? e.message : String(e) }),
 			);
 		}
 	}

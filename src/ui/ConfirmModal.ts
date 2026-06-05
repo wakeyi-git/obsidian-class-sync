@@ -23,9 +23,9 @@ export class ConfirmModal extends Modal {
 			if (line.trim()) contentEl.createEl("p", { cls: "setting-item-description", text: line });
 		}
 		new Setting(contentEl)
-			.addButton((b) => b.setButtonText(t("취소")).onClick(() => this.close()))
+			.addButton((b) => b.setButtonText(t("common.cancel")).onClick(() => this.close()))
 			.addButton((b) => {
-				b.setButtonText(this.opts.confirmText ?? t("삭제"));
+				b.setButtonText(this.opts.confirmText ?? t("common.delete"));
 				if (this.opts.warning) b.setWarning();
 				b.onClick(async () => {
 					this.close();

@@ -3,7 +3,7 @@ import { FeedbackStore } from "../../core/feedback/FeedbackStore";
 import { FeedbackDoc } from "../../core/model/types";
 import { PanelSection } from "./PanelSection";
 import { promptAddFeedback } from "../FeedbackView";
-import { t } from "../../i18n";
+import { t, formatDate } from "../../i18n";
 
 /** 피드백 탭 — 활성 노트의 앵커 댓글(§19.5) + 전체 미해결 피드백함 토글. */
 export class FeedbackSection implements PanelSection {
@@ -21,14 +21,14 @@ export class FeedbackSection implements PanelSection {
 		container.addClass("class-sync-feedback");
 
 		const toolbar = container.createDiv({ cls: "class-sync-feedback-toolbar" });
-		const addBtn = toolbar.createEl("button", { text: t("＋ 피드백 추가") });
+		const addBtn = toolbar.createEl("button", { text: t("panel.add_feedback") });
 		addBtn.onclick = () => promptAddFeedback(this.app, this.store, this.currentPath);
 		const toggle = toolbar.createEl("button", {
-			text: this.viewMode === "current" ? t("전체 미해결 보기") : t("현재 노트 보기"),
+			text: this.viewMode === "current" ? t("panel.show_all_unresolved") : t("panel.show_current_note"),
 		});
 		toggle.onclick = () => {
 			this.viewMode = this.viewMode === "current" ? "all" : "current";
-			toggle.setText(this.viewMode === "current" ? t("전체 미해결 보기") : t("현재 노트 보기"));
+			toggle.setText(this.viewMode === "current" ? t("panel.show_all_unresolved") : t("panel.show_current_note"));
 			this.renderedPath = null;
 			void this.renderList();
 		};
@@ -75,11 +75,11 @@ export class FeedbackSection implements PanelSection {
 		};
 
 		if (!this.currentPath || !file || file.extension !== "md") {
-			writeEmpty(t("노트를 열면 피드백이 표시됩니다."));
+			writeEmpty(t("panel.open_a_note_to_see_its"));
 			return;
 		}
 		if (!this.store.canAnnotate(this.currentPath)) {
-			writeEmpty(t("이 노트는 동기화 대상이 아닙니다."));
+			writeEmpty(t("panel.this_note_is_not_a_sync"));
 			return;
 		}
 
@@ -90,7 +90,7 @@ export class FeedbackSection implements PanelSection {
 		if (items.length === 0) {
 			this.listEl.createDiv({
 				cls: "class-sync-feedback-empty",
-				text: t("피드백이 없습니다. 본문에서 텍스트를 선택하고 ‘＋ 피드백 추가’를 누르세요."),
+				text: t("panel.no_feedback_yet_select_text_in"),
 			});
 			return;
 		}
@@ -104,12 +104,12 @@ export class FeedbackSection implements PanelSection {
 		this.listEl.empty();
 		this.renderedPath = "*all*";
 		if (items.length === 0) {
-			this.listEl.createDiv({ cls: "class-sync-feedback-empty", text: t("미해결 피드백이 없습니다.") });
+			this.listEl.createDiv({ cls: "class-sync-feedback-empty", text: t("panel.no_unresolved_feedback") });
 			return;
 		}
 		for (const it of items) {
 			const note = it.localPath.split("/").pop() || it.localPath;
-			this.renderCard(it.doc, it.localPath, t("{student} · {note}", { student: it.studentName, note }));
+			this.renderCard(it.doc, it.localPath, t("panel.msg", { student: it.studentName, note }));
 		}
 	}
 
@@ -118,10 +118,10 @@ export class FeedbackSection implements PanelSection {
 		const card = this.listEl.createDiv({ cls: `class-sync-feedback-card${doc.resolved ? " is-resolved" : ""}` });
 
 		const head = card.createDiv({ cls: "class-sync-feedback-head" });
-		const who = doc.createdByRole === "teacher" ? t("교사") : t("학생");
-		head.createSpan({ cls: "class-sync-feedback-author", text: t("{who} · {by}", { who, by: doc.createdBy }) });
-		head.createSpan({ cls: "class-sync-feedback-time", text: new Date(doc.createdAt).toLocaleString() });
-		if (doc.resolved) head.createSpan({ cls: "class-sync-feedback-badge", text: t("해결됨") });
+		const who = doc.createdByRole === "teacher" ? t("common.teacher") : t("common.student");
+		head.createSpan({ cls: "class-sync-feedback-author", text: t("panel.msg_2", { who, by: doc.createdBy }) });
+		head.createSpan({ cls: "class-sync-feedback-time", text: formatDate(new Date(doc.createdAt)) });
+		if (doc.resolved) head.createSpan({ cls: "class-sync-feedback-badge", text: t("panel.resolved") });
 
 		if (label) card.createDiv({ cls: "class-sync-feedback-target", text: label });
 
@@ -132,11 +132,11 @@ export class FeedbackSection implements PanelSection {
 		card.createDiv({ cls: "class-sync-feedback-content", text: doc.content });
 
 		const actions = card.createDiv({ cls: "class-sync-feedback-actions" });
-		actions.createEl("button", { text: t("위치로") }).onclick = () => void this.jumpTo(doc, localPath);
-		actions.createEl("button", { text: doc.resolved ? t("되돌리기") : t("해결") }).onclick = async () => {
+		actions.createEl("button", { text: t("panel.go_to_location") }).onclick = () => void this.jumpTo(doc, localPath);
+		actions.createEl("button", { text: doc.resolved ? t("panel.reopen") : t("panel.resolve") }).onclick = async () => {
 			await this.store.setResolved(localPath, doc, !doc.resolved);
 		};
-		const del = actions.createEl("button", { cls: "mod-warning", text: t("삭제") });
+		const del = actions.createEl("button", { cls: "mod-warning", text: t("common.delete") });
 		del.onclick = async () => {
 			await this.store.remove(localPath, doc);
 		};
@@ -146,7 +146,7 @@ export class FeedbackSection implements PanelSection {
 	private async jumpTo(doc: FeedbackDoc, localPath: string): Promise<void> {
 		const file = this.app.vault.getAbstractFileByPath(localPath);
 		if (!(file instanceof TFile)) {
-			new Notice(t("Class Sync: 노트를 찾을 수 없습니다: {path}", { path: localPath }));
+			new Notice(t("panel.class_sync_note_not_found", { path: localPath }));
 			return;
 		}
 		const leaf = this.app.workspace.getLeaf(false);

@@ -140,12 +140,12 @@ export class MirrorSync {
 
 		if (!this.ctx.settings.autoSync) {
 			this.ctx.status.state = "disabled";
-			this.ctx.logger.info(t("autoSync 꺼짐 — 자동 동기화 비활성. 수동 동기화만 가능."));
+			this.ctx.logger.info(t("sync.autosync_off_automatic_sync_disabled_manual"));
 			return;
 		}
 		if (!this.ctx.settings.couchdbUrl) {
 			this.ctx.status.state = "offline";
-			this.ctx.logger.warn(t("CouchDB URL이 없습니다. 설정에서 입력하면 자동 적용됩니다."), true);
+			this.ctx.logger.warn(t("sync.no_couchdb_url_enter_it_in"), true);
 			return;
 		}
 		this.ctx.status.state = "syncing";
@@ -157,7 +157,7 @@ export class MirrorSync {
 			await this.fullSyncRunner.runStartup();
 		} catch (e) {
 			this.ctx.logger.error(
-				t("시작 시 업로드 정합 실패: {err}", { err: e instanceof Error ? e.message : String(e) }),
+				t("sync.upload_reconciliation_on_startup_failed", { err: e instanceof Error ? e.message : String(e) }),
 				true,
 			);
 		}
@@ -184,8 +184,8 @@ export class MirrorSync {
 				this.ctx.status.state = next;
 				this.ctx.logger.info(
 					err
-						? t("동기화 대기(오프라인/오류): {db}", { db: this.ctx.remoteDb })
-						: t("동기화 따라잡음(idle): {db}", { db: this.ctx.remoteDb }),
+						? t("sync.sync_waiting_offline_error", { db: this.ctx.remoteDb })
+						: t("sync.sync_caught_up_idle", { db: this.ctx.remoteDb }),
 				);
 			},
 			onError: (e) => {
@@ -195,14 +195,14 @@ export class MirrorSync {
 				if (isAuthError(e.message)) {
 					this.ctx.pouch.stopReplication();
 					this.ctx.logger.error(
-						t("인증 실패로 동기화 중지: {db} — {err}. 자격증명/초대를 고치면 자동으로 다시 시도합니다.", {
+						t("sync.sync_stopped_due_to_auth_failure", {
 							db: this.ctx.remoteDb,
 							err: e.message,
 						}),
 						true,
 					);
 				} else {
-					this.ctx.logger.error(t("replication 오류: {err}", { err: e.message }));
+					this.ctx.logger.error(t("sync.replication_error", { err: e.message }));
 				}
 			},
 		};
@@ -215,7 +215,7 @@ export class MirrorSync {
 		this.pausedByHidden = true;
 		this.ctx.pouch.stopReplication();
 		this.ctx.status.state = "offline";
-		this.ctx.logger.info(t("백그라운드 — 동기화 일시정지: {db}", { db: this.ctx.remoteDb }));
+		this.ctx.logger.info(t("sync.background_sync_paused", { db: this.ctx.remoteDb }));
 	}
 
 	/** 포그라운드 복귀 시 replication 재개(내가 일시정지했던 경우만). */
@@ -225,7 +225,7 @@ export class MirrorSync {
 		if (!this.started || !this.ctx.settings.autoSync || !this.ctx.settings.couchdbUrl) return;
 		this.ctx.status.state = "syncing";
 		this.ctx.pouch.startReplication(this.replicationHandlers());
-		this.ctx.logger.info(t("포그라운드 — 동기화 재개: {db}", { db: this.ctx.remoteDb }));
+		this.ctx.logger.info(t("sync.foreground_sync_resumed", { db: this.ctx.remoteDb }));
 	}
 
 	async stop(): Promise<void> {

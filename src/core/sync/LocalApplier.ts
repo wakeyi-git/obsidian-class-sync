@@ -24,9 +24,9 @@ export class LocalApplier {
 		if (this.handle) return;
 		const since = this.parseSince(this.ctx.getLastSeq());
 		this.ctx.logger.info(
-			t("LocalApplier 시작: {db} (since={since})", {
+			t("sync.localapplier_started_since", {
 				db: this.ctx.remoteDb,
-				since: since === 0 ? t("처음") : since,
+				since: since === 0 ? t("sync.start") : since,
 			}),
 		);
 
@@ -48,7 +48,7 @@ export class LocalApplier {
 					}
 				} catch (e) {
 					this.ctx.logger.error(
-						t("로컬 변경 적용 실패: {id} — {err}", {
+						t("sync.failed_to_apply_local_change", {
 							id: change.id,
 							err: e instanceof Error ? e.message : String(e),
 						}),
@@ -59,7 +59,7 @@ export class LocalApplier {
 			},
 			{
 				since,
-				onError: (e) => this.ctx.logger.error(t("로컬 changes 오류: {err}", { err: e.message })),
+				onError: (e) => this.ctx.logger.error(t("sync.local_changes_error", { err: e.message })),
 			},
 		);
 	}

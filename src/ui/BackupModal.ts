@@ -9,11 +9,10 @@ export class ExportModal extends Modal {
 
 	onOpen(): void {
 		const { contentEl } = this;
-		contentEl.createEl("h3", { text: t("설정 내보내기") });
+		contentEl.createEl("h3", { text: t("backup.export_settings") });
 		contentEl.createEl("p", {
 			cls: "setting-item-description",
-			text: t(
-				"아래 내용을 복사해 보관하거나 다른 기기에 붙여넣으세요. 보안을 위해 비밀번호·Yjs 토큰·학생 비밀번호는 제외됩니다.",
+			text: t("backup.copy_the_content_below_to_keep",
 			),
 		});
 
@@ -25,16 +24,16 @@ export class ExportModal extends Modal {
 		new Setting(contentEl)
 			.addButton((b) =>
 				b
-					.setButtonText(t("클립보드에 복사"))
+					.setButtonText(t("backup.copy_to_clipboard"))
 					.setCta()
 					.onClick(async () => {
 						await navigator.clipboard.writeText(this.json).catch(() => {
 							ta.select();
 						});
-						new Notice(t("Class Sync: 설정을 복사했습니다."));
+						new Notice(t("backup.class_sync_settings_copied"));
 					}),
 			)
-			.addButton((b) => b.setButtonText(t("닫기")).onClick(() => this.close()));
+			.addButton((b) => b.setButtonText(t("common.close")).onClick(() => this.close()));
 	}
 
 	onClose(): void {
@@ -51,30 +50,29 @@ export class ImportModal extends Modal {
 
 	onOpen(): void {
 		const { contentEl } = this;
-		contentEl.createEl("h3", { text: t("설정 가져오기") });
+		contentEl.createEl("h3", { text: t("backup.import_settings") });
 		contentEl.createEl("p", {
 			cls: "setting-item-description",
-			text: t(
-				"내보낸 JSON을 붙여넣으세요. 학생·공유 공간·옵션이 복원됩니다. 비밀번호/토큰은 이 기기에서 다시 입력해야 하며, 가져온 학생은 재초대가 필요합니다.",
+			text: t("backup.paste_the_exported_json_students_shared",
 			),
 		});
 
 		const ta = contentEl.createEl("textarea", { cls: "class-sync-backup-input" });
 		ta.rows = 12;
-		ta.placeholder = t("여기에 설정 JSON을 붙여넣기");
+		ta.placeholder = t("backup.paste_settings_json_here");
 		ta.oninput = () => (this.value = ta.value);
 		window.setTimeout(() => ta.focus(), 0);
 
 		new Setting(contentEl)
-			.addButton((b) => b.setButtonText(t("취소")).onClick(() => this.close()))
+			.addButton((b) => b.setButtonText(t("common.cancel")).onClick(() => this.close()))
 			.addButton((b) =>
 				b
-					.setButtonText(t("가져오기"))
+					.setButtonText(t("common.import"))
 					.setCta()
 					.onClick(async () => {
 						const v = this.value.trim();
 						if (!v) {
-							new Notice(t("Class Sync: 내용을 붙여넣으세요."));
+							new Notice(t("backup.class_sync_paste_the_content"));
 							return;
 						}
 						this.close();

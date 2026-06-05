@@ -23,11 +23,10 @@ export class InviteModal extends Modal {
 		const code = encodeInvite(this.payload);
 
 		contentEl.createEl("h2", {
-			text: t("학생 초대 — {name}", { name: this.payload.studentName || this.payload.studentId }),
+			text: t("invite.invite_student", { name: this.payload.studentName || this.payload.studentId }),
 		});
 		contentEl.createEl("p", {
-			text: t(
-				"학생이 휴대폰 기본 카메라로 아래 QR을 스캔하면 Obsidian이 열리며 자동 설정됩니다. 또는 코드를 복사해 전달하면 학생이 '초대 코드로 설정'에 붙여넣을 수 있습니다.",
+			text: t("invite.when_the_student_scans_the_qr",
 			),
 		});
 
@@ -46,22 +45,22 @@ export class InviteModal extends Modal {
 			qrWrap.appendChild(svg);
 		} catch (e) {
 			qrWrap.createEl("p", {
-				text: t("QR 생성 실패: {error}", { error: e instanceof Error ? e.message : String(e) }),
+				text: t("invite.failed_to_generate_qr", { error: e instanceof Error ? e.message : String(e) }),
 			});
 		}
 
 		// 복사 코드
 		new Setting(contentEl)
-			.setName(t("초대 코드"))
-			.setDesc(t("학생에게 전달 → Student Mode '초대 코드로 설정'에 붙여넣기"))
+			.setName(t("settings.invite_code"))
+			.setDesc(t("invite.send_to_student_paste_into_student"))
 			.addButton((b) =>
 				b
-					.setButtonText(t("코드 복사"))
+					.setButtonText(t("invite.copy_code"))
 					.setCta()
-					.onClick(() => this.copy(code, t("초대 코드를 복사했습니다."))),
+					.onClick(() => this.copy(code, t("invite.invite_code_copied"))),
 			)
 			.addButton((b) =>
-				b.setButtonText(t("딥링크 복사")).onClick(() => this.copy(uri, t("초대 딥링크를 복사했습니다."))),
+				b.setButtonText(t("invite.copy_deep_link")).onClick(() => this.copy(uri, t("invite.invite_deep_link_copied"))),
 			);
 
 		const codeEl = contentEl.createEl("textarea", { cls: "class-sync-invite-code" });
@@ -71,11 +70,11 @@ export class InviteModal extends Modal {
 
 		contentEl.createEl("p", {
 			cls: "class-sync-invite-warn",
-			text: t("⚠ 이 초대에는 학생 전용 비밀번호가 포함됩니다(만료 없음). 본인에게만 안전하게 전달하고, 유출이 의심되면 설정에서 ‘비밀번호 재발급’으로 이 초대를 무효화하세요."),
+			text: t("invite.this_invite_contains_the_student_s"),
 		});
 		contentEl.createEl("p", {
 			cls: "setting-item-description",
-			text: t("이미 설정한 학생은 이 새 코드로 ‘초대 코드로 설정’을 다시 적용해야 연결됩니다(재발급 시 이전 코드는 무효)."),
+			text: t("panel.already_set_up_students_must_re"),
 		});
 	}
 
@@ -84,7 +83,7 @@ export class InviteModal extends Modal {
 			await navigator.clipboard.writeText(text);
 			new Notice(ok);
 		} catch {
-			new Notice(t("복사 실패 — 코드 상자에서 직접 선택해 복사하세요."));
+			new Notice(t("invite.copy_failed_select_and_copy_the"));
 		}
 	}
 

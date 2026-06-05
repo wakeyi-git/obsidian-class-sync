@@ -8,6 +8,7 @@
 		"noImplicitAny": true,
 		"moduleResolution": "bundler",
 		"importHelpers": true,
+		"resolveJsonModule": true,
 		"esModuleInterop": true,
 		"allowSyntheticDefaultImports": true,
 		"isolatedModules": true,

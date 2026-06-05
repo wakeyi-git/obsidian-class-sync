@@ -1,6 +1,25 @@
-// i18n 점검: en.ts 중복키(실패) + t() 사용 키 중 en.ts 누락(경고). 누락은 한국어로 폴백되므로 경고만.
+// i18n 점검(계층형 JSON): en/ko 키 패리티(불일치 실패) + 사용 t() 키 ⊆ en(실패).
+// 타입안전 t()가 컴파일에서 "사용 키 ⊆ en"을 이미 보장하므로, 여기선 로케일 간 누락을 주로 본다.
 import fs from "node:fs";
 import path from "node:path";
+
+const en = JSON.parse(fs.readFileSync("src/i18n/locales/en.json", "utf8"));
+const ko = JSON.parse(fs.readFileSync("src/i18n/locales/ko.json", "utf8"));
+
+function flatten(obj, prefix = "") {
+	const out = new Set();
+	for (const [k, v] of Object.entries(obj)) {
+		const key = prefix ? `${prefix}.${k}` : k;
+		if (v && typeof v === "object") for (const x of flatten(v, key)) out.add(x);
+		else out.add(key);
+	}
+	return out;
+}
+
+const enKeys = flatten(en);
+const koKeys = flatten(ko);
+const missingInKo = [...enKeys].filter((k) => !koKeys.has(k));
+const missingInEn = [...koKeys].filter((k) => !enKeys.has(k));
 
 function walk(dir) {
 	let out = [];
@@ -8,35 +27,23 @@ function walk(dir) {
 		const p = path.join(dir, f);
 		const s = fs.statSync(p);
 		if (s.isDirectory()) out = out.concat(walk(p));
-		else if (f.endsWith(".ts") && !f.endsWith(".test.ts") && !p.includes("i18n/en.ts") && !p.includes("i18n/index.ts"))
-			out.push(p);
+		else if (f.endsWith(".ts") && !f.endsWith(".test.ts") && !p.includes("i18n/index.ts")) out.push(p);
 	}
 	return out;
 }
 
-const en = fs.readFileSync("src/i18n/en.ts", "utf8");
-
-// 1) 중복 키 (실패)
-const keyMatches = [...en.matchAll(/^\t"((?:[^"\\]|\\.)*)":/gm)].map((m) => m[1]);
-const seen = new Set();
-const dups = [];
-for (const k of keyMatches) (seen.has(k) ? dups.push(k) : seen.add(k));
-
-// 2) 사용 키 중 en 누락 (경고)
-const enKeys = new Set(keyMatches.map((k) => k.replace(/\\"/g, '"')));
 const used = new Set();
 for (const file of walk("src")) {
 	const src = fs.readFileSync(file, "utf8");
-	for (const m of src.matchAll(/\bt\(\s*"((?:[^"\\]|\\.)*)"/g)) used.add(m[1].replace(/\\"/g, '"'));
+	for (const m of src.matchAll(/\bt\(\s*"([a-z0-9_]+(?:\.[a-z0-9_]+)+)"/g)) used.add(m[1]);
 }
-const missing = [...used].filter((k) => !enKeys.has(k));
+const usedMissing = [...used].filter((k) => !enKeys.has(k));
 
-console.log(`i18n: en 키 ${keyMatches.length}개, 사용 t() ${used.size}개, 중복 ${dups.length}, 누락 ${missing.length}`);
-if (missing.length) {
-	console.warn("⚠ en.ts 누락(한국어 폴백):");
-	for (const k of missing) console.warn("   " + JSON.stringify(k));
-}
-if (dups.length) {
-	console.error("✗ en.ts 중복 키:", dups);
-	process.exit(1); // 중복만 실패
-}
+console.log(
+	`i18n: en ${enKeys.size}키, ko ${koKeys.size}키, 사용 ${used.size}키, ko누락 ${missingInKo.length}, en누락 ${missingInEn.length}, 사용미정의 ${usedMissing.length}`,
+);
+const fail = missingInKo.length || missingInEn.length || usedMissing.length;
+if (missingInKo.length) console.error("✗ ko.json 누락:", missingInKo);
+if (missingInEn.length) console.error("✗ en.json 누락:", missingInEn);
+if (usedMissing.length) console.error("✗ 정의되지 않은 키 사용:", usedMissing);
+if (fail) process.exit(1);

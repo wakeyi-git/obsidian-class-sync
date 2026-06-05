@@ -34,26 +34,26 @@ export class ConflictModal extends Modal {
 	private async render(): Promise<void> {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: t("충돌 목록") });
+		contentEl.createEl("h2", { text: t("panel.conflicts") });
 
 		let rows: ConflictRow[] = [];
 		try {
 			rows = await this.host.listConflicts();
 		} catch (e) {
 			contentEl.createEl("p", {
-				text: t("목록을 불러오지 못했습니다: {error}", { error: e instanceof Error ? e.message : String(e) }),
+				text: t("conflict.failed_to_load_list", { error: e instanceof Error ? e.message : String(e) }),
 			});
 			return;
 		}
 
 		if (rows.length === 0) {
-			contentEl.createEl("p", { text: t("현재 충돌이 없습니다. 🎉") });
+			contentEl.createEl("p", { text: t("conflict.no_conflicts_right_now") });
 			return;
 		}
 
 		contentEl.createEl("p", {
 			cls: "setting-item-description",
-			text: t("양쪽이 같은 파일을 다르게 편집했습니다. 로컬은 현재 vault 내용, 원격은 _충돌/ 폴더의 사본입니다."),
+			text: t("conflict.both_sides_edited_the_same_file"),
 		});
 
 		for (const row of rows) {
@@ -62,7 +62,7 @@ export class ConflictModal extends Modal {
 			new Setting(card)
 				.setName(`${isAsset ? "📎 " : ""}${row.info.dbPath}`)
 				.setDesc(
-					t("학생 {studentId} · 원격 수정: {by}({role}) {at}", {
+					t("conflict.student_remote_edit", {
 						studentId: row.info.studentId,
 						by: row.info.remoteMeta.by,
 						role: row.info.remoteMeta.role,
@@ -77,27 +77,27 @@ export class ConflictModal extends Modal {
 			const actions = new Setting(card)
 				.setClass("class-sync-conflict-actions")
 				.addButton((b) =>
-					b.setButtonText(isAsset ? t("원격본 열기") : t("비교(열기)")).onClick(() => this.host.openConflictFiles(row)),
+					b.setButtonText(isAsset ? t("mode.open_remote_copy") : t("conflict.compare_open")).onClick(() => this.host.openConflictFiles(row)),
 				)
-				.addButton((b) => b.setButtonText(t("로컬 유지")).setCta().onClick(() => this.act(row, "local")))
-				.addButton((b) => b.setButtonText(t("원격 적용")).onClick(() => this.act(row, "remote")));
+				.addButton((b) => b.setButtonText(t("conflict.keep_local")).setCta().onClick(() => this.act(row, "local")))
+				.addButton((b) => b.setButtonText(t("conflict.apply_remote")).onClick(() => this.act(row, "remote")));
 			if (isAsset) {
-				actions.addButton((b) => b.setButtonText(t("두 버전 보관")).onClick(() => this.act(row, "both")));
+				actions.addButton((b) => b.setButtonText(t("conflict.keep_both_versions")).onClick(() => this.act(row, "both")));
 			} else {
 				actions
-					.addButton((b) => b.setButtonText(t("두 버전 보관(로컬 최종)")).onClick(() => this.act(row, "both")))
-					.addButton((b) => b.setButtonText(t("두 버전 보관(원격 최종)")).onClick(() => this.act(row, "both-remote")));
+					.addButton((b) => b.setButtonText(t("mode.keep_both_local_as_final")).onClick(() => this.act(row, "both")))
+					.addButton((b) => b.setButtonText(t("mode.keep_both_remote_as_final")).onClick(() => this.act(row, "both-remote")));
 			}
 		}
 	}
 
 	/** 첨부 충돌: 미리보기가 어려우므로 종류·크기만 요약. */
 	private renderAssetInfo(card: HTMLElement, info: ConflictInfo): void {
-		const kb = info.size != null ? `${(info.size / 1024).toFixed(1)} KB` : t("크기 미상");
+		const kb = info.size != null ? `${(info.size / 1024).toFixed(1)} KB` : t("mode.size_unknown");
 		card.createDiv({
 			cls: "class-sync-conflict-assetmeta",
-			text: t("첨부파일 · {mime} · {size} (로컬 유지/원격 적용 또는 두 버전 보관)", {
-				mime: info.mime || t("형식 미상"),
+			text: t("mode.attachment_keep_local_apply_remote_keep", {
+				mime: info.mime || t("mode.format_unknown"),
 				size: kb,
 			}),
 		});
@@ -111,11 +111,11 @@ export class ConflictModal extends Modal {
 		const stats = diffStats(lines);
 
 		const bar = card.createDiv({ cls: "class-sync-diff-bar" });
-		bar.createSpan({ cls: "class-sync-diff-stat", text: t("− 로컬에만 {removed} · ＋ 원격에만 {added}", stats) });
+		bar.createSpan({ cls: "class-sync-diff-stat", text: t("mode.local_only_remote_only", stats) });
 		const ws = bar.createEl("label", { cls: "class-sync-diff-ws" });
 		const cb = ws.createEl("input", { type: "checkbox" });
 		cb.checked = this.ignoreWhitespace;
-		ws.createSpan({ text: t("공백 차이 무시") });
+		ws.createSpan({ text: t("mode.ignore_whitespace") });
 		cb.onchange = () => {
 			this.ignoreWhitespace = cb.checked;
 			void this.render();
@@ -133,7 +133,7 @@ export class ConflictModal extends Modal {
 			await this.host.resolveConflict(row, choice);
 		} catch (e) {
 			this.contentEl.createEl("p", {
-				text: t("해소 실패: {error}", { error: e instanceof Error ? e.message : String(e) }),
+				text: t("conflict.resolution_failed", { error: e instanceof Error ? e.message : String(e) }),
 			});
 		}
 		await this.render();

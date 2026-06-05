@@ -42,7 +42,7 @@ export class ConflictManager {
 			await ctx.writeVaultFile(path, remote.content);
 		} catch (e) {
 			ctx.logger.error(
-				t("충돌본 기록 실패: {path} — {err}", { path, err: e instanceof Error ? e.message : String(e) }),
+				t("sync.failed_to_write_conflict_copy", { path, err: e instanceof Error ? e.message : String(e) }),
 			);
 		}
 	}
@@ -111,7 +111,7 @@ export class ConflictManager {
 		const id = noteId(dbPath);
 		const winner = await ctx.pouch.getWithConflicts<NoteDoc>(id);
 		if (!winner || !winner._conflicts || winner._conflicts.length === 0) {
-			ctx.logger.info(t("이미 해소된 충돌: {path}", { path: dbPath }));
+			ctx.logger.info(t("sync.conflict_already_resolved", { path: dbPath }));
 			await this.removeConflictCopy(dbPath);
 			return;
 		}
@@ -128,9 +128,9 @@ export class ConflictManager {
 		// both=로컬 최종(원격을 사본으로), both-remote=원격 최종(로컬을 사본으로).
 		if ((choice === "both" || choice === "both-remote") && remote) {
 			const keepContent = choice === "both-remote" ? (live ?? winner.content) : remote.content;
-			const keepPath = ctx.toLocalPath(dbPath.replace(/\.md$/i, ` ${t("(충돌본)")}.md`));
+			const keepPath = ctx.toLocalPath(dbPath.replace(/\.md$/i, ` ${t("sync.conflict_copy")}.md`));
 			await ctx.writeVaultFile(keepPath, keepContent);
-			ctx.logger.ok(t("충돌 두 버전 보관: {path}", { path: keepPath }));
+			ctx.logger.ok(t("sync.kept_both_conflict_versions", { path: keepPath }));
 		}
 
 		// 확정할 내용(최종본)
@@ -153,7 +153,7 @@ export class ConflictManager {
 		}
 
 		await this.removeConflictCopy(dbPath);
-		ctx.logger.ok(t("충돌 해소({choice}): {path}", { choice, path: dbPath }), true);
+		ctx.logger.ok(t("sync.conflict_resolved", { choice, path: dbPath }), true);
 	}
 
 	/**
@@ -165,7 +165,7 @@ export class ConflictManager {
 		const id = assetId(dbPath);
 		const winner = await ctx.pouch.getWithConflicts<AssetDoc>(id);
 		if (!winner || !winner._conflicts || winner._conflicts.length === 0) {
-			ctx.logger.info(t("이미 해소된 충돌: {path}", { path: dbPath }));
+			ctx.logger.info(t("sync.conflict_already_resolved", { path: dbPath }));
 			await this.removeConflictCopy(dbPath);
 			return;
 		}
@@ -178,13 +178,13 @@ export class ConflictManager {
 
 		// "두 버전 보관": 최종이 아닌 쪽을 동기화되는 사본으로 보관.
 		if ((choice === "both" || choice === "both-remote") && remoteBin && localBin) {
-			const keepPath = ctx.toLocalPath(insertLabelBeforeExt(dbPath, t("충돌본")));
+			const keepPath = ctx.toLocalPath(insertLabelBeforeExt(dbPath, t("mode.conflicted")));
 			await ctx.writeVaultBinary(keepPath, remoteFinal ? localBin : remoteBin);
 		}
 
 		const chosen = remoteFinal ? (remoteBin ?? localBin) : (localBin ?? remoteBin);
 		if (chosen == null) {
-			ctx.logger.warn(t("첨부 충돌 해소 실패: 양쪽 바이너리가 없습니다 — {path}", { path: dbPath }));
+			ctx.logger.warn(t("mode.failed_to_resolve_attachment_conflict_neither", { path: dbPath }));
 			return;
 		}
 
@@ -205,7 +205,7 @@ export class ConflictManager {
 			}
 		}
 		await this.removeConflictCopy(dbPath);
-		ctx.logger.ok(t("첨부 충돌 해소({choice}): {path}", { choice, path: dbPath }), true);
+		ctx.logger.ok(t("mode.attachment_conflict_resolved", { choice, path: dbPath }), true);
 	}
 
 	// --- 내부 ---
@@ -245,7 +245,7 @@ export class ConflictManager {
 			await this.ctx.writeVaultFile(path, content);
 		} catch (e) {
 			this.ctx.logger.error(
-				t("내 편집 보존 실패: {path} — {err}", { path, err: e instanceof Error ? e.message : String(e) }),
+				t("sync.failed_to_preserve_my_edit", { path, err: e instanceof Error ? e.message : String(e) }),
 			);
 		}
 	}

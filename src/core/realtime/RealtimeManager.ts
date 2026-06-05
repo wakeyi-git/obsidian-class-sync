@@ -109,7 +109,7 @@ export class RealtimeManager {
 					if (!this.warnedUnsupportedExcalidraw.has(file.path)) {
 						this.warnedUnsupportedExcalidraw.add(file.path);
 						this.core.logger.warn(
-							t("실시간 미지원: {path} — Excalidraw 실시간은 .excalidraw.md 형식만 지원합니다(저장이 전파되지 않음).", {
+							t("realtime.realtime_unsupported_excalidraw_realtime_support", {
 								path: file.path,
 							}),
 							true,
@@ -157,7 +157,7 @@ export class RealtimeManager {
 
 		// 커서·이름 색을 Excalidraw와 동일한 clientColor(clientId) 공식으로 통일(칩과도 일치).
 		const color = clientColor(String(provider.awareness.clientID));
-		provider.awareness.setLocalStateField("user", { name: this.settings.displayName || t("사용자"), color });
+		provider.awareness.setLocalStateField("user", { name: this.settings.displayName || t("common.user"), color });
 
 		const session: Session =
 			kind === "md"
@@ -175,14 +175,14 @@ export class RealtimeManager {
 		this.sessions.set(path, session);
 
 		provider.on("status", (e: { status: string }) => {
-			if (e.status === "connected") this.core.logger.info(t("실시간 연결: {path}", { path: dbPath }));
+			if (e.status === "connected") this.core.logger.info(t("realtime.realtime_connected", { path: dbPath }));
 		});
 		provider.once("sync", (synced: boolean) => {
 			if (!synced) return;
 			// 잠깐 기다려 다른 접속자/서버 상태가 반영된 뒤 시드 판단(시드 충돌 방지)
 			window.setTimeout(() => void this.onSynced(session, file), 400);
 		});
-		this.core.logger.info(t("실시간 세션 시작: {path} (room={room})", { path: dbPath, room }));
+		this.core.logger.info(t("realtime.realtime_session_started_room", { path: dbPath, room }));
 		return session;
 	}
 
@@ -206,11 +206,11 @@ export class RealtimeManager {
 					const content = await this.app.vault.read(file);
 					if (content.length > 0) {
 						session.ytext.insert(0, content);
-						this.core.logger.info(t("실시간 시드(첫 진입): {file}", { file: session.file }));
+						this.core.logger.info(t("realtime.realtime_seed_first_join", { file: session.file }));
 					}
 				} else {
 					this.core.logger.info(
-						t("실시간: 다른 참여자 있음 → 시드 생략, 공유 내용 사용 ({file})", { file: session.file }),
+						t("realtime.realtime_other_participants_present_skipping_see", { file: session.file }),
 					);
 				}
 			}
@@ -228,7 +228,7 @@ export class RealtimeManager {
 		const sec = this.settings.realtimeSnapshotSec;
 		if (!sec || sec <= 0 || session.snapTimer != null) return;
 		session.snapTimer = window.setInterval(() => void this.snapshotTick(session), Math.max(5, sec) * 1000);
-		this.core.logger.info(t("실시간 주기 스냅샷 활성: {file} ({sec}s)", { file: session.file, sec }));
+		this.core.logger.info(t("realtime.realtime_periodic_snapshot_enabled_s", { file: session.file, sec }));
 	}
 
 	private async snapshotTick(session: Session): Promise<void> {
@@ -240,10 +240,10 @@ export class RealtimeManager {
 			if (!target) return;
 			const res = await target.snapshotNote(session.file, content);
 			session.lastSnapshot = content;
-			this.core.logger.info(t("주기 스냅샷 → CouchDB: {file} ({res})", { file: session.file, res: String(res) }));
+			this.core.logger.info(t("realtime.periodic_snapshot_to_couchdb", { file: session.file, res: String(res) }));
 		} catch (e) {
 			this.core.logger.warn(
-				t("주기 스냅샷 실패: {file} — {error}", {
+				t("realtime.periodic_snapshot_failed", {
 					file: session.file,
 					error: e instanceof Error ? e.message : String(e),
 				}),
@@ -271,41 +271,41 @@ export class RealtimeManager {
 		const spaces = this.getSpaces();
 		const withToken = spaces.filter((x) => x.token).length;
 		log.info(
-			t("실시간 점검 — enabled={enabled}, url={url}, 전역토큰={legacy}, 공간토큰={spaceTokens}", {
+			t("realtime.realtime_check_enabled_url_globaltoken_spacetoke", {
 				enabled: String(s.realtimeEnabled),
-				url: s.yjsServerUrl ? t("설정됨") : t("없음"),
-				legacy: getSecretValue(this.app, YJS_TOKEN_ID, s.yjsToken) ? t("설정됨") : t("없음"),
+				url: s.yjsServerUrl ? t("common.set") : t("common.none"),
+				legacy: getSecretValue(this.app, YJS_TOKEN_ID, s.yjsToken) ? t("common.set") : t("common.none"),
 				spaceTokens: `${withToken}/${spaces.length}`,
 			}),
 			true,
 		);
 		log.info(
-			t("공유 폴더: {folders}", {
-				folders: this.getSpaces().map((x) => x.folder).join(", ") || t("(없음)"),
+			t("realtime.shared_folders", {
+				folders: this.getSpaces().map((x) => x.folder).join(", ") || t("common.none_2"),
 			}),
 		);
 		const f = this.app.workspace.getActiveFile();
 		const space = f ? this.spaceFor(f.path) : null;
 		log.info(
-			t("활성 파일: {file} → 공유공간: {space} (공간토큰={spaceToken})", {
-				file: f?.path ?? t("(없음)"),
-				space: f ? (space?.id ?? t("아님(공유폴더 밖)")) : "-",
+			t("realtime.active_file_shared_space_spacetoken", {
+				file: f?.path ?? t("common.none_2"),
+				space: f ? (space?.id ?? t("realtime.no_outside_shared_folder")) : "-",
 				spaceToken: space
 					? space.token
-						? t("설정됨")
+						? t("common.set")
 						: getSecretValue(this.app, YJS_TOKEN_ID, s.yjsToken)
-							? t("전역 사용")
-							: t("없음")
+							? t("realtime.using_global")
+							: t("common.none")
 					: "-",
 			}),
 		);
 		// room 이름(교사·학생이 정확히 같아야 실시간 공유됨)
 		const room = f && space ? this.roomFor(f.path, space) : null;
-		log.info(t("room: {room}  [교사·학생이 이 값이 완전히 같아야 함]", { room: room ?? t("(없음)") }));
+		log.info(t("realtime.room_teacher_and_students_must_have", { room: room ?? t("common.none_2") }));
 		const session = f ? this.sessions.get(f.path) : undefined;
 		log.info(
-			t("세션: {state}, 연결={connected}, 접속자={presence}", {
-				state: session ? (session.ready ? t("ready") : t("연결중")) : t("없음"),
+			t("realtime.session_connected_participants", {
+				state: session ? (session.ready ? t("realtime.ready") : t("realtime.connecting")) : t("common.none"),
 				connected: session ? String((session.provider as any).wsconnected) : "-",
 				presence: f ? this.presenceFor(f.path) : 0,
 			}),
@@ -319,18 +319,18 @@ export class RealtimeManager {
 				.find((v) => v?.file?.path === f.path);
 			const api = exView ? this.getExcalidrawApi(exView) : null;
 			log.info(
-				t("Excalidraw: 플러그인={plugin}, API={api}, 바인딩={bound}", {
-					plugin: plugin ? t("설치됨") : t("미설치"),
-					api: api ? t("가능") : t("불가"),
-					bound: session?.exBinding ? t("됨") : t("안됨"),
+				t("realtime.excalidraw_plugin_api_bound", {
+					plugin: plugin ? t("realtime.installed") : t("realtime.not_installed"),
+					api: api ? t("realtime.yes") : t("realtime.no"),
+					bound: session?.exBinding ? t("realtime.yes_2") : t("realtime.no_2"),
 				}),
 			);
 		} else {
 			const md = this.app.workspace.getActiveViewOfType(MarkdownView);
 			const cm = md ? (md.editor as unknown as { cm?: EditorView }).cm : undefined;
 			log.info(
-				t("활성 에디터 CM6 접근: {access}", {
-					access: cm ? t("가능(편집모드)") : t("불가(읽기 모드면 편집모드로 여세요)"),
+				t("realtime.active_editor_cm6_access", {
+					access: cm ? t("realtime.available_edit_mode") : t("realtime.unavailable_open_in_edit_mode_if"),
 				}),
 			);
 		}
@@ -343,7 +343,7 @@ export class RealtimeManager {
 			const cm = (view.editor as unknown as { cm?: EditorView }).cm;
 			if (!cm) {
 				this.core.logger.warn(
-					t("실시간: 에디터(CM6) 접근 불가 — {file} (읽기 모드면 편집 모드로 여세요)", { file: session.file }),
+					t("realtime.realtime_editor_cm6_not_accessible_open", { file: session.file }),
 				);
 				continue;
 			}
@@ -358,7 +358,7 @@ export class RealtimeManager {
 				}
 			} catch (e) {
 				this.core.logger.error(
-					t("실시간 바인딩 실패: {file} — {error}", {
+					t("realtime.realtime_binding_failed", {
 						file: session.file,
 						error: e instanceof Error ? e.message : String(e),
 					}),
@@ -373,7 +373,7 @@ export class RealtimeManager {
 		const api = this.getExcalidrawApi(view);
 		if (!api) {
 			this.core.logger.warn(
-				t("실시간: Excalidraw API 접근 불가 — {file} (Excalidraw 플러그인 최신인지 확인)", { file: session.file }),
+				t("realtime.realtime_cannot_access_excalidraw_api_check", { file: session.file }),
 			);
 			return;
 		}
@@ -382,7 +382,7 @@ export class RealtimeManager {
 		// Excalidraw collaborator color는 {background, stroke} 객체를 기대(마크다운 yCollab는 문자열) → 여기서 객체로 재설정.
 		const hex = COLORS[Math.abs(hash(this.settings.deviceId)) % COLORS.length];
 		session.provider.awareness.setLocalStateField("user", {
-			name: this.settings.displayName || t("사용자"),
+			name: this.settings.displayName || t("common.user"),
 			color: { background: hex, stroke: hex },
 		});
 		try {
@@ -390,10 +390,10 @@ export class RealtimeManager {
 				awareness: session.provider.awareness,
 				containerEl,
 			});
-			this.core.logger.ok(t("실시간 Excalidraw 바인딩: {file}", { file: session.file }));
+			this.core.logger.ok(t("realtime.realtime_excalidraw_bound", { file: session.file }));
 		} catch (e) {
 			this.core.logger.error(
-				t("실시간 바인딩 실패: {file} — {error}", {
+				t("realtime.realtime_binding_failed", {
 					file: session.file,
 					error: e instanceof Error ? e.message : String(e),
 				}),
@@ -465,10 +465,10 @@ export class RealtimeManager {
 					if (content.length > 0) {
 						const res = await this.getSyncForPath(path)?.snapshotNote(path, content);
 						if (res === "uploaded" || res === "skipped-same") {
-							this.core.logger.ok(t("실시간 스냅샷 저장: {path}", { path }));
+							this.core.logger.ok(t("realtime.realtime_snapshot_saved", { path }));
 						} else if (res) {
 							this.core.logger.warn(
-								t("실시간 스냅샷 미저장({reason}): {path} — 비실시간 멤버에 전파되지 않을 수 있습니다.", {
+								t("realtime.realtime_snapshot_not_saved_may_not", {
 									reason: String(res),
 									path,
 								}),
@@ -479,7 +479,7 @@ export class RealtimeManager {
 				}
 			} catch (e) {
 				this.core.logger.error(
-					t("스냅샷 저장 실패: {path} — {error}", { path, error: e instanceof Error ? e.message : String(e) }),
+					t("realtime.snapshot_save_failed", { path, error: e instanceof Error ? e.message : String(e) }),
 				);
 			}
 		} else {
@@ -494,17 +494,17 @@ export class RealtimeManager {
 					const current = await this.app.vault.read(file);
 					// 안전장치: 빈 내용으로 기존 내용을 덮어쓰지 않음(데이터 손실 방지)
 					if (content.length === 0 && current.length > 0) {
-						this.core.logger.warn(t("실시간 스냅샷 생략(빈 내용 덮어쓰기 방지): {path}", { path }));
+						this.core.logger.warn(t("realtime.skipping_realtime_snapshot_preventing_overwrite", { path }));
 					} else {
 						if (content !== current) {
 							await this.app.vault.process(file, () => content); // 백그라운드 쓰기: 가이드라인 권장
 						}
 						const res = await this.getSyncForPath(path)?.snapshotNote(path, content);
 						if (res === "uploaded" || res === "skipped-same") {
-							this.core.logger.ok(t("실시간 스냅샷 저장: {path}", { path }));
+							this.core.logger.ok(t("realtime.realtime_snapshot_saved", { path }));
 						} else if (res) {
 							this.core.logger.warn(
-								t("실시간 스냅샷 미저장({reason}): {path} — 비실시간 멤버에 전파되지 않을 수 있습니다.", {
+								t("realtime.realtime_snapshot_not_saved_may_not", {
 									reason: String(res),
 									path,
 								}),
@@ -515,7 +515,7 @@ export class RealtimeManager {
 				}
 			} catch (e) {
 				this.core.logger.error(
-					t("스냅샷 저장 실패: {path} — {error}", { path, error: e instanceof Error ? e.message : String(e) }),
+					t("realtime.snapshot_save_failed", { path, error: e instanceof Error ? e.message : String(e) }),
 				);
 			}
 		}

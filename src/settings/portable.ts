@@ -69,10 +69,10 @@ export function importSettings(
 	try {
 		payload = JSON.parse(json);
 	} catch {
-		return { ok: false, error: t("JSON 형식이 아닙니다.") };
+		return { ok: false, error: t("backup.not_valid_json") };
 	}
 	if (!payload || payload._meta?.app !== "class-sync" || typeof payload.settings !== "object") {
-		return { ok: false, error: t("Class Sync 설정 백업이 아닙니다.") };
+		return { ok: false, error: t("backup.not_a_class_sync_settings_backup") };
 	}
 
 	const merged: ClassSyncSettings = { ...current };

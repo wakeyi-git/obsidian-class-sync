@@ -81,7 +81,7 @@ export class Uploader {
 			const size = ctx.getFile(localPath)?.stat.size;
 			if (size != null && size > maxBytes) {
 				ctx.logger.warn(
-					t("첨부 크기 초과로 생략: {path} ({size}MB)", { path: dbPath, size: (size / 1024 / 1024).toFixed(1) }),
+					t("sync.skipped_attachment_exceeds_size_limit_mb", { path: dbPath, size: (size / 1024 / 1024).toFixed(1) }),
 				);
 				return "skipped-toolarge";
 			}
@@ -92,7 +92,7 @@ export class Uploader {
 
 		if (maxBytes > 0 && data.byteLength > maxBytes) {
 			ctx.logger.warn(
-				t("첨부 크기 초과로 생략: {path} ({size}MB)", {
+				t("sync.skipped_attachment_exceeds_size_limit_mb", {
 					path: dbPath,
 					size: (data.byteLength / 1024 / 1024).toFixed(1),
 				}),
@@ -113,7 +113,7 @@ export class Uploader {
 	private markUploaded(dbPath: string): void {
 		this.ctx.status.lastUploadAt = Date.now();
 		this.ctx.status.lastError = undefined;
-		this.ctx.logger.ok(t("로컬→원격 업로드: {path}", { path: dbPath }));
+		this.ctx.logger.ok(t("sync.uploaded_local_remote", { path: dbPath }));
 	}
 
 	/** 삭제/이름변경 시 옛 경로를 tombstone 처리(note/asset 공통). 기술문서 §8.3 / §10.3. */
@@ -146,7 +146,7 @@ export class Uploader {
 		};
 		delete doc._attachments; // tombstone은 바이너리 불필요
 		await ctx.pouch.put(doc);
-		ctx.logger.ok(t("tombstone(삭제 표시): {path}", { path: dbPath }));
+		ctx.logger.ok(t("sync.tombstone_marked_deleted", { path: dbPath }));
 		return "tombstoned";
 	}
 
@@ -158,7 +158,7 @@ export class Uploader {
 		if (!existing || !existing._rev) return "skipped";
 		await this.snapshotBeforePurge(dbPath, existing); // '최근 영구 삭제' 되돌리기용
 		await ctx.pouch.removeRev(id, existing._rev);
-		ctx.logger.ok(t("DB에서 영구 삭제(purge): {path}", { path: dbPath }));
+		ctx.logger.ok(t("sync.permanently_deleted_from_db_purge", { path: dbPath }));
 		return "purged";
 	}
 

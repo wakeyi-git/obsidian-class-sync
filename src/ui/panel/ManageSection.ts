@@ -19,15 +19,15 @@ export class ManageSection implements PanelSection {
 			row.createDiv({ cls: "class-sync-panel-hint", text: desc });
 		};
 
-		item(t("연결/권한 테스트"), t("CouchDB 서버 연결과 DB 읽기/쓰기 권한을 확인합니다."), () => this.host.testConnection());
-		item(t("종합 진단 실행"), t("서버 도달·링크별 권한·실시간 상태를 한 번에 점검합니다."), () => this.host.runDiagnostics());
-		item(t("실시간 상태 점검"), t("현재 파일의 실시간 세션·접속자·토큰 상태를 로그에 출력합니다."), () => this.host.realtimeStatus());
-		item(t("로컬 캐시 초기화"), t("로컬 PouchDB를 비우고 서버에서 다시 받습니다(서버 데이터는 그대로)."), () => this.host.resetLocalCache());
+		item(t("panel.test_connection_permissions"), t("panel.checks_the_couchdb_connection_and_read"), () => this.host.testConnection());
+		item(t("panel.run_full_diagnostics"), t("panel.checks_server_reachability_per_link_permissions"), () => this.host.runDiagnostics());
+		item(t("panel.check_realtime_status"), t("panel.logs_the_current_file_s_realtime"), () => this.host.realtimeStatus());
+		item(t("panel.reset_local_cache"), t("panel.clears_the_local_pouchdb_and_re"), () => this.host.resetLocalCache());
 
 		if (this.host.settings.role === "teacher") {
-			item(t("서버 데이터 초기화…"), t("서버의 학생·공유 DB를 삭제합니다(파괴적 — 확인 단어 입력 필요)."), () => this.host.openResetModal(), { warning: true });
+			item(t("panel.reset_server_data"), t("panel.deletes_the_student_shared_dbs_on"), () => this.host.openResetModal(), { warning: true });
 		} else {
-			item(t("공유 공간 새로고침"), t("교사가 배포한 공유 공간 목록을 서버에서 다시 받습니다."), () => this.host.refreshShares());
+			item(t("panel.refresh_shared_spaces"), t("panel.re_fetches_the_shared_spaces_deployed"), () => this.host.refreshShares());
 		}
 	}
 

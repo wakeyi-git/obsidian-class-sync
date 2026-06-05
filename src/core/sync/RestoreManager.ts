@@ -121,7 +121,7 @@ export class RestoreManager {
 			if (old?._rev) await ctx.pouch.removeRev(id, old._rev).catch(() => undefined);
 		}
 
-		ctx.logger.ok(t("삭제 복구: {path}", { path: target }), true);
+		ctx.logger.ok(t("recovery.recovered", { path: target }), true);
 		return "restored";
 	}
 
@@ -170,7 +170,7 @@ export class RestoreManager {
 			await ctx.pouch.putAsset(await ctx.buildAssetDoc(targetDb, bin, prev), bin);
 		}
 		await removePurge(ctx.pouch, id);
-		ctx.logger.ok(t("영구 삭제 되돌림: {path}", { path: target }), true);
+		ctx.logger.ok(t("recovery.undid_permanent_delete", { path: target }), true);
 		return "restored";
 	}
 
@@ -201,7 +201,7 @@ export class RestoreManager {
 		if (choice === "keep-both") {
 			// insertLabelBeforeExt(dbPath, …) 결과는 이미 dbPath다. toDbPath로 다시 변환하면
 			// localRoot 있는 링크(교사 모드 학생 폴더)에서 localRoot 밖으로 판정돼 null → 복사본 미생성.
-			const copyDb = insertLabelBeforeExt(dbPath, t("원격수정"));
+			const copyDb = insertLabelBeforeExt(dbPath, t("recovery.remote_edit"));
 			const copyLocal = ctx.toLocalPath(copyDb);
 			if (ctx.isMarkdown(dbPath)) {
 				const doc = await ctx.pouch.get<NoteDoc>(noteId(dbPath));
@@ -224,6 +224,6 @@ export class RestoreManager {
 		}
 		await this.uploader.tombstonePath(dbPath);
 		await removeDeleteModify(ctx.pouch, dbPath);
-		ctx.logger.ok(t("삭제/수정 충돌 해소({choice}): {path}", { choice, path: dbPath }), true);
+		ctx.logger.ok(t("recovery.delete_modify_conflict_resolved", { choice, path: dbPath }), true);
 	}
 }

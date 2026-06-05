@@ -15,21 +15,21 @@ export const PANEL_VIEW_TYPE = "class-sync-panel";
 function tabLabel(tab: PanelTab): string {
 	switch (tab) {
 		case "setup":
-			return t("시작하기");
+			return t("panel.get_started");
 		case "feedback":
-			return t("피드백");
+			return t("panel.feedback");
 		case "deploy":
-			return t("배포");
+			return t("common.deploy");
 		case "sync":
-			return t("동기화 상태");
+			return t("panel.sync_status");
 		case "manage":
-			return t("관리");
+			return t("panel.manage");
 		case "recovery":
-			return t("삭제 복구");
+			return t("recovery.recover_deleted");
 		case "history":
-			return t("버전 기록");
+			return t("version.version_history_2");
 		case "log":
-			return t("로그");
+			return t("panel.log");
 	}
 }
 
@@ -51,7 +51,7 @@ export class ClassSyncPanelView extends ItemView {
 		return PANEL_VIEW_TYPE;
 	}
 	getDisplayText(): string {
-		return t("Class Sync");
+		return t("panel.class_sync");
 	}
 	getIcon(): string {
 		return "graduation-cap";

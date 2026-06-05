@@ -7,30 +7,30 @@ import { t } from "../../i18n";
 function overallLabel(o: SyncSummary["overall"]): string {
 	switch (o) {
 		case "ok":
-			return t("🟢 정상");
+			return t("panel.ok");
 		case "attention":
-			return t("🟠 조치 필요");
+			return t("panel.needs_attention");
 		case "offline":
-			return t("⚪ 오프라인");
+			return t("panel.offline");
 		case "autosync-off":
-			return t("⏸ 자동 동기화 꺼짐");
+			return t("panel.auto_sync_off");
 		case "empty":
-			return t("⚪ 대기");
+			return t("panel.idle_2");
 	}
 }
 
 function stateLabel(state: LinkStatus["state"]): string {
 	switch (state) {
 		case "syncing":
-			return t("🟢 동기화 중");
+			return t("panel.syncing");
 		case "idle":
-			return t("🟢 대기");
+			return t("panel.idle");
 		case "offline":
-			return t("⚪ 오프라인");
+			return t("panel.offline");
 		case "error":
-			return t("🔴 오류");
+			return t("panel.error");
 		case "disabled":
-			return t("⚪ 꺼짐");
+			return t("panel.off");
 	}
 }
 
@@ -47,14 +47,14 @@ export class SyncStatusSection implements PanelSection {
 		container.addClass("class-sync-dashboard");
 
 		const actions = container.createDiv({ cls: "class-sync-panel-actions" });
-		panelButton(actions, t("전체 동기화"), () => this.host.fullSync("both"), { cta: true });
-		panelButton(actions, t("업로드만"), () => this.host.fullSync("up"));
-		panelButton(actions, t("다운로드만"), () => this.host.fullSync("down"));
+		panelButton(actions, t("panel.full_sync"), () => this.host.fullSync("both"), { cta: true });
+		panelButton(actions, t("panel.upload_only"), () => this.host.fullSync("up"));
+		panelButton(actions, t("panel.download_only"), () => this.host.fullSync("down"));
 		this.autoBtn = panelButton(actions, this.autoLabel(), async () => {
 			await this.host.toggleAutoSync();
 			this.autoBtn?.setText(this.autoLabel());
 		});
-		panelButton(actions, t("충돌 목록"), () => this.host.openConflictModal());
+		panelButton(actions, t("panel.conflicts"), () => this.host.openConflictModal());
 
 		this.tableWrap = container.createDiv();
 		void this.renderTable();
@@ -69,7 +69,7 @@ export class SyncStatusSection implements PanelSection {
 	}
 
 	private autoLabel(): string {
-		return t("자동 동기화: {state}", { state: this.host.settings.autoSync ? t("켜짐") : t("꺼짐") });
+		return t("panel.auto_sync", { state: this.host.settings.autoSync ? t("common.on") : t("common.off") });
 	}
 
 	private async renderTable(): Promise<void> {
@@ -82,7 +82,7 @@ export class SyncStatusSection implements PanelSection {
 			if (seq !== this.renderSeq || !this.tableWrap) return;
 			this.tableWrap.empty();
 			this.tableWrap.createEl("p", {
-				text: t("상태를 불러오지 못했습니다: {error}", { error: e instanceof Error ? e.message : String(e) }),
+				text: t("panel.failed_to_load_status", { error: e instanceof Error ? e.message : String(e) }),
 			});
 			return;
 		}
@@ -96,8 +96,8 @@ export class SyncStatusSection implements PanelSection {
 				cls: "class-sync-feedback-empty",
 				text:
 					this.host.settings.role === "teacher"
-						? t("아직 동기화할 학생이 없습니다. 설정에서 학생을 추가하고 ‘초대’하세요.")
-						: t("아직 연결되지 않았습니다. 교사가 준 QR/초대 코드를 적용하세요."),
+						? t("panel.no_students_to_sync_yet_add")
+						: t("panel.not_connected_yet_apply_the_qr"),
 			});
 			return;
 		}
@@ -109,13 +109,13 @@ export class SyncStatusSection implements PanelSection {
 		const table = wrap.createEl("table", { cls: "class-sync-dash-table" });
 		const thead = table.createEl("thead").createEl("tr");
 		for (const h of [
-			t("대상"),
-			t("Mirror DB"),
-			t("폴더"),
-			t("마지막 업로드"),
-			t("마지막 수신"),
-			t("충돌"),
-			t("상태"),
+			t("panel.target"),
+			t("panel.mirror_db"),
+			t("settings.folder"),
+			t("panel.last_upload"),
+			t("panel.last_received"),
+			t("panel.conflicts_4"),
+			t("panel.status"),
 		]) {
 			thead.createEl("th", { text: h });
 		}
@@ -127,14 +127,14 @@ export class SyncStatusSection implements PanelSection {
 			const tr = tbody.createEl("tr");
 			tr.createEl("td", { text: r.studentName || r.studentId || "—" });
 			tr.createEl("td", { text: r.remoteDb });
-			const fTd = tr.createEl("td", { text: r.localRoot || t("(root)") });
+			const fTd = tr.createEl("td", { text: r.localRoot || t("panel.root") });
 			const children = computeChildRoots(r.localRoot, allRoots);
 			if (children.length > 0) {
 				fTd.setAttribute(
 					"title",
-					t("이 폴더 안의 {roots}은(는) 다른 링크가 담당합니다(이중 동기화 제외).", { roots: children.join(", ") }),
+					t("panel.inside_this_folder_are_handled_by", { roots: children.join(", ") }),
 				);
-				fTd.createSpan({ cls: "class-sync-nested-tag", text: t(" ↳ 중첩 {n}", { n: children.length }) });
+				fTd.createSpan({ cls: "class-sync-nested-tag", text: t("panel.nested", { n: children.length }) });
 			}
 			tr.createEl("td", { text: fmtTime(r.lastUploadAt) });
 			tr.createEl("td", { text: fmtTime(r.lastDownloadAt) });
@@ -158,12 +158,12 @@ export class SyncStatusSection implements PanelSection {
 		const parts =
 			this.host.settings.role === "teacher"
 				? [
-						t("학생 {invited}/{total}", { invited: s.invited, total: s.students }),
-						t("공유 {n}", { n: s.shared }),
-						t("충돌 {n}", { n: s.conflicts }),
+						t("panel.students", { invited: s.invited, total: s.students }),
+						t("panel.shared", { n: s.shared }),
+						t("panel.conflicts_2", { n: s.conflicts }),
 					]
-				: [t("공유 {n}", { n: s.shared }), t("충돌 {n}", { n: s.conflicts })];
-		if (s.lastSyncAt) parts.push(t("마지막 {time}", { time: fmtTime(s.lastSyncAt) }));
+				: [t("panel.shared", { n: s.shared }), t("panel.conflicts_2", { n: s.conflicts })];
+		if (s.lastSyncAt) parts.push(t("panel.last", { time: fmtTime(s.lastSyncAt) }));
 		banner.createSpan({ cls: "class-sync-dash-banner-meta", text: parts.join(" · ") });
 	}
 
@@ -171,19 +171,19 @@ export class SyncStatusSection implements PanelSection {
 		const cards: Array<{ text: string; cta: string; run: () => void | Promise<void>; warn?: boolean }> = [];
 		if (s.notInvited > 0)
 			cards.push({
-				text: t("초대 필요 {n}명", { n: s.notInvited }),
-				cta: t("학생 설정 열기"),
+				text: t("panel.need_inviting", { n: s.notInvited }),
+				cta: t("panel.open_student_settings"),
 				run: () => this.host.openSettings(),
 				warn: true,
 			});
 		if (s.conflicts > 0)
-			cards.push({ text: t("충돌 {n}건", { n: s.conflicts }), cta: t("충돌 목록"), run: () => this.host.openConflictModal(), warn: true });
+			cards.push({ text: t("panel.conflicts_3", { n: s.conflicts }), cta: t("panel.conflicts"), run: () => this.host.openConflictModal(), warn: true });
 		if (s.problems > 0)
-			cards.push({ text: t("연결 문제 {n}건", { n: s.problems }), cta: t("연결 테스트"), run: () => this.host.testConnection(), warn: true });
+			cards.push({ text: t("panel.connection_issues", { n: s.problems }), cta: t("settings.connection_test"), run: () => this.host.testConnection(), warn: true });
 		if (s.realtimeTokenMissing)
-			cards.push({ text: t("실시간 토큰 없음"), cta: t("설정 열기"), run: () => this.host.openSettings(), warn: true });
+			cards.push({ text: t("panel.no_realtime_token"), cta: t("panel.open_settings"), run: () => this.host.openSettings(), warn: true });
 		if (s.autoSyncOff)
-			cards.push({ text: t("자동 동기화 꺼짐"), cta: t("켜기"), run: () => void this.host.toggleAutoSync() });
+			cards.push({ text: t("panel.auto_sync_is_off"), cta: t("panel.turn_on"), run: () => void this.host.toggleAutoSync() });
 		if (cards.length === 0) return;
 		const box = wrap.createDiv({ cls: "class-sync-dash-cards-actions" });
 		for (const c of cards) {
@@ -201,11 +201,11 @@ export class SyncStatusSection implements PanelSection {
 			head.createSpan({ cls: "class-sync-dash-card-name", text: r.studentName || r.studentId || "—" });
 			head.createSpan({ text: stateLabel(r.state) });
 			const meta = card.createDiv({ cls: "class-sync-dash-card-meta" });
-			meta.createSpan({ text: t("수신 {time}", { time: fmtTime(r.lastDownloadAt) }) });
-			const conf = meta.createSpan({ text: t("충돌 {n}", { n: r.conflicts }) });
+			meta.createSpan({ text: t("panel.received", { time: fmtTime(r.lastDownloadAt) }) });
+			const conf = meta.createSpan({ text: t("panel.conflicts_2", { n: r.conflicts }) });
 			if (r.conflicts > 0) conf.addClass("class-sync-dash-conflict");
 			const children = computeChildRoots(r.localRoot, allRoots);
-			if (children.length > 0) meta.createSpan({ cls: "class-sync-nested-tag", text: t(" ↳ 중첩 {n}", { n: children.length }) });
+			if (children.length > 0) meta.createSpan({ cls: "class-sync-nested-tag", text: t("panel.nested", { n: children.length }) });
 			if (r.state === "error" && r.lastError) card.createDiv({ cls: "class-sync-dash-err", text: shortErr(r.lastError) });
 		}
 	}
@@ -219,7 +219,7 @@ function fmtTime(ts?: number): string {
 	if (!ts) return "—";
 	const d = new Date(ts);
 	const diff = Date.now() - ts;
-	if (diff < 60_000) return t("방금");
-	if (diff < 3_600_000) return t("{min}분 전", { min: Math.floor(diff / 60_000) });
+	if (diff < 60_000) return t("panel.just_now");
+	if (diff < 3_600_000) return t("panel.min_ago", { min: Math.floor(diff / 60_000) });
 	return d.toLocaleTimeString();
 }

@@ -10,11 +10,11 @@ export async function testConnection(core: CoreServices, dbName?: string): Promi
 	const log = core.logger;
 	const s = core.settings;
 	if (!s.couchdbUrl) {
-		log.warn(t("CouchDB URL이 비어 있습니다. 설정을 먼저 입력하세요."), true);
+		log.warn(t("diagnostics.couchdb_url_is_empty_please_enter"), true);
 		return;
 	}
 	const db = dbName ?? s.remoteDb;
-	log.info(t("연결 테스트: {url} / {db}", { url: s.couchdbUrl, db }));
+	log.info(t("diagnostics.connection_test", { url: s.couchdbUrl, db }));
 
 	const pouch = core.createPouch(db);
 	try {
@@ -23,18 +23,18 @@ export async function testConnection(core: CoreServices, dbName?: string): Promi
 			raw = await pouch.rawInfo();
 		} catch (e) {
 			log.error(
-				t("연결 실패: 서버 도달 불가 — {err}", { err: e instanceof Error ? e.message : String(e) }),
+				t("diagnostics.connection_failed_server_unreachable", { err: e instanceof Error ? e.message : String(e) }),
 				true,
 			);
 			return;
 		}
 		if (raw.status === 401) {
-			log.error(t("연결 실패: 인증 오류 (HTTP 401). 아이디/비밀번호를 확인하세요."), true);
+			log.error(t("diagnostics.connection_failed_auth_error_http_401"), true);
 			return;
 		}
 		if (raw.status === 403) {
 			log.warn(
-				t("권한 없음 (HTTP 403): '{db}'에 이 계정은 접근할 수 없습니다. (다른 학생 DB라면 권한 격리가 정상 동작하는 것)", {
+				t("diagnostics.no_permission_http_403_this_account", {
 					db,
 				}),
 				true,
@@ -42,12 +42,12 @@ export async function testConnection(core: CoreServices, dbName?: string): Promi
 			return;
 		}
 		if (raw.status >= 400) {
-			log.error(t("연결 실패: HTTP {status} — {snippet}", { status: raw.status, snippet: raw.snippet }), true);
+			log.error(t("diagnostics.connection_failed_http", { status: raw.status, snippet: raw.snippet }), true);
 			return;
 		}
 		const res = await pouch.ping();
-		if (res.ok) log.ok(t("연결 성공: {db} (docs={count})", { db, count: res.info?.doc_count ?? "?" }), true);
-		else log.error(t("연결 실패: {err}", { err: res.error ?? "" }), true);
+		if (res.ok) log.ok(t("diagnostics.connected_docs", { db, count: res.info?.doc_count ?? "?" }), true);
+		else log.error(t("diagnostics.connection_failed", { err: res.error ?? "" }), true);
 	} finally {
 		await pouch.close();
 	}

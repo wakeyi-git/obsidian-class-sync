@@ -34,7 +34,7 @@ export class LocalWatcher {
 			this.refs.push(vault.on("rename", (f, oldPath) => this.onRename(f, oldPath)));
 			this.refs.push(vault.on("delete", (f) => this.onDelete(f)));
 			this.ctx.logger.info(
-				t("LocalWatcher 시작 (localRoot={root})", { root: this.ctx.localRoot || t("(vault root)") }),
+				t("sync.localwatcher_started_localroot", { root: this.ctx.localRoot || t("sync.vault_root") }),
 			);
 		});
 	}
@@ -119,7 +119,7 @@ export class LocalWatcher {
 			}
 		} catch (e) {
 			this.ctx.logger.error(
-				t("이름변경 처리 실패: {from} → {to} — {err}", {
+				t("sync.rename_handling_failed", {
 					from: oldPath,
 					to: newPath,
 					err: e instanceof Error ? e.message : String(e),
@@ -145,7 +145,7 @@ export class LocalWatcher {
 				.purgePath(archivedDb)
 				.catch((e) =>
 					this.ctx.logger.error(
-						t("purge 실패: {path} — {err}", { path: localPath, err: e instanceof Error ? e.message : String(e) }),
+						t("sync.purge_failed", { path: localPath, err: e instanceof Error ? e.message : String(e) }),
 					),
 				);
 			return;
@@ -159,7 +159,7 @@ export class LocalWatcher {
 			.tombstonePath(dbPath)
 			.catch((e) =>
 				this.ctx.logger.error(
-					t("삭제 처리 실패: {path} — {err}", { path: localPath, err: e instanceof Error ? e.message : String(e) }),
+					t("sync.delete_handling_failed", { path: localPath, err: e instanceof Error ? e.message : String(e) }),
 				),
 			);
 	}
@@ -181,7 +181,7 @@ export class LocalWatcher {
 			await this.uploader.uploadPath(localPath);
 		} catch (e) {
 			this.ctx.logger.error(
-				t("업로드 실패: {path} — {err}", { path: localPath, err: e instanceof Error ? e.message : String(e) }),
+				t("sync.upload_failed", { path: localPath, err: e instanceof Error ? e.message : String(e) }),
 			);
 		} finally {
 			this.ctx.clearPending(dbPath);

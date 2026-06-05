@@ -63,8 +63,8 @@ export class CouchAdmin {
 	async checkAdmin(): Promise<{ ok: boolean; error?: string }> {
 		const root = await this.req("GET", "/");
 		if (root.status === 401 || root.status === 403)
-			return { ok: false, error: t("인증 오류 (HTTP {status})", { status: root.status }) };
-		if (root.status >= 400) return { ok: false, error: t("서버 오류 (HTTP {status})", { status: root.status }) };
+			return { ok: false, error: t("couch.authentication_error_http", { status: root.status }) };
+		if (root.status >= 400) return { ok: false, error: t("couch.server_error_http", { status: root.status }) };
 		return { ok: true };
 	}
 
@@ -102,21 +102,21 @@ export class CouchAdmin {
 			} else {
 				return {
 					ok: false,
-					error: t("계정 생성 실패 (HTTP {status}): {reason}", {
+					error: t("couch.failed_to_create_account_http", {
 						status: putUser.status,
 						reason: putUser.json?.reason ?? putUser.text,
 					}),
 				};
 			}
 		}
-		if (!userOk) return { ok: false, error: t("계정 비밀번호 갱신 실패 (rev 충돌 반복)") };
+		if (!userOk) return { ok: false, error: t("couch.failed_to_update_account_password_repeated") };
 
 		// 2) mirror DB 생성 (이미 있으면 412/409 무시)
 		const putDb = await this.req("PUT", encodeURIComponent(remoteDb));
 		if (putDb.status >= 400 && putDb.status !== 412 && putDb.status !== 409) {
 			return {
 				ok: false,
-				error: t("DB 생성 실패 (HTTP {status}): {reason}", {
+				error: t("couch.failed_to_create_db_http", {
 					status: putDb.status,
 					reason: putDb.json?.reason ?? putDb.text,
 				}),
@@ -138,7 +138,7 @@ export class CouchAdmin {
 		if (putDb.status >= 400 && putDb.status !== 412 && putDb.status !== 409) {
 			return {
 				ok: false,
-				error: t("공유 DB 생성 실패 (HTTP {status}): {reason}", {
+				error: t("couch.failed_to_create_shared_db_http", {
 					status: putDb.status,
 					reason: putDb.json?.reason ?? putDb.text,
 				}),
@@ -153,7 +153,7 @@ export class CouchAdmin {
 		if (putSec.status >= 400) {
 			return {
 				ok: false,
-				error: t("권한 설정 실패 (HTTP {status}): {reason}", {
+				error: t("couch.failed_to_set_permissions_http", {
 					status: putSec.status,
 					reason: putSec.json?.reason ?? putSec.text,
 				}),
@@ -168,7 +168,7 @@ export class CouchAdmin {
 		if (res.status < 300 || res.status === 404) return { ok: true };
 		return {
 			ok: false,
-			error: t("DB 삭제 실패 (HTTP {status}): {reason}", {
+			error: t("couch.failed_to_delete_db_http", {
 				status: res.status,
 				reason: res.json?.reason ?? res.text,
 			}),
@@ -185,14 +185,14 @@ export class CouchAdmin {
 		const existing = await this.req("GET", path);
 		if (existing.status === 404) return { ok: true };
 		if (existing.status >= 400)
-			return { ok: false, error: t("계정 조회 실패 (HTTP {status})", { status: existing.status }) };
+			return { ok: false, error: t("couch.failed_to_look_up_account_http", { status: existing.status }) };
 		const rev = existing.json?._rev;
 		if (!rev) return { ok: true };
 		const del = await this.req("DELETE", `${path}?rev=${encodeURIComponent(rev)}`);
 		if (del.status >= 300 && del.status !== 404) {
 			return {
 				ok: false,
-				error: t("계정 삭제 실패 (HTTP {status}): {reason}", {
+				error: t("couch.failed_to_delete_account_http", {
 					status: del.status,
 					reason: del.json?.reason ?? del.text,
 				}),
@@ -216,12 +216,12 @@ export class CouchAdmin {
 			if (put.status === 409) continue;
 			return {
 				ok: false,
-				error: t("문서 기록 실패 (HTTP {status}): {reason}", {
+				error: t("couch.failed_to_write_document_http", {
 					status: put.status,
 					reason: put.json?.reason ?? put.text,
 				}),
 			};
 		}
-		return { ok: false, error: t("문서 기록 실패 (rev 충돌 반복)") };
+		return { ok: false, error: t("couch.failed_to_write_document_repeated_rev") };
 	}
 }

@@ -52,14 +52,14 @@ export class TeacherMode implements ClassSyncMode {
 	async start(): Promise<void> {
 		const s = this.core.settings;
 		this.core.logger.ok(
-			t("Teacher Mode 시작 — 학생 {students}명, 공유 {shared}개", {
+			t("mode.teacher_mode_started_students_shared", {
 				students: s.students.length,
 				shared: s.sharedSpaces.length,
 			}),
 			true,
 		);
 		if (this.syncs.length === 0) {
-			this.core.logger.warn(t("학생/공유 공간이 없습니다. 설정에서 추가하세요."));
+			this.core.logger.warn(t("mode.no_students_or_shared_spaces_add"));
 			return;
 		}
 		for (const sync of this.syncs) await sync.start();
@@ -67,7 +67,7 @@ export class TeacherMode implements ClassSyncMode {
 
 	async stop(): Promise<void> {
 		for (const sync of this.syncs) await sync.stop();
-		this.core.logger.info(t("Teacher Mode 정지."));
+		this.core.logger.info(t("mode.teacher_mode_stopped"));
 	}
 
 	async fullSync(direction: SyncDirection): Promise<void> {

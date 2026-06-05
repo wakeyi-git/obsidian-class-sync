@@ -23,21 +23,21 @@ declare module "obsidian" {
 function issueMessage(i: SettingsIssue): string {
 	switch (i.code) {
 		case "dup-studentId":
-			return t("학생 ID 중복: {value}", { value: String(i.params?.value) });
+			return t("panel.duplicate_student_id", { value: String(i.params?.value) });
 		case "dup-username":
-			return t("계정(username) 중복: {value}", { value: String(i.params?.value) });
+			return t("panel.duplicate_account_username", { value: String(i.params?.value) });
 		case "dup-remoteDb":
-			return t("Mirror DB 이름 중복: {value}", { value: String(i.params?.value) });
+			return t("panel.duplicate_mirror_db_name", { value: String(i.params?.value) });
 		case "folder-overlap":
-			return t("폴더 겹침: ‘{a}’와 ‘{b}’ (이중 동기화 혼란)", { a: String(i.params?.a), b: String(i.params?.b) });
+			return t("panel.folder_overlap_and_double_sync_confusion", { a: String(i.params?.a), b: String(i.params?.b) });
 		case "couch-url":
-			return t("CouchDB URL은 http(s)://로 시작해야 합니다.");
+			return t("panel.couchdb_url_must_start_with_http");
 		case "yjs-wss":
-			return t("Yjs 서버 URL은 wss://(보안) 사용을 권장합니다.");
+			return t("panel.yjs_server_url_should_use_wss");
 		case "rt-no-url":
-			return t("실시간이 켜져 있지만 Yjs 서버 URL이 비어 있습니다.");
+			return t("panel.realtime_is_on_but_the_yjs");
 		case "rt-no-token":
-			return t("실시간이 켜져 있지만 토큰/공간 시크릿이 비어 있습니다.");
+			return t("panel.realtime_is_on_but_the_token");
 	}
 }
 
@@ -91,7 +91,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		const issues = validateSettings(s);
 		if (issues.length === 0) return;
 		const box = this.containerEl.createDiv({ cls: "class-sync-issues" });
-		box.createDiv({ cls: "class-sync-issues-title", text: t("확인이 필요한 설정 {n}건", { n: issues.length }) });
+		box.createDiv({ cls: "class-sync-issues-title", text: t("panel.settings_need_attention", { n: issues.length }) });
 		for (const i of issues) {
 			const row = box.createDiv({ cls: `class-sync-issue is-${i.level}` });
 			row.setText((i.level === "error" ? "⛔ " : "⚠ ") + issueMessage(i));
@@ -101,10 +101,10 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 	// --- 언어 ---
 	private renderLanguage(s: ClassSyncSettings): void {
 		new Setting(this.containerEl)
-			.setName(t("언어"))
-			.setDesc(t("UI 언어. ‘자동’은 Obsidian 언어를 따릅니다."))
+			.setName(t("settings.language"))
+			.setDesc(t("settings.ui_language_auto_follows_the_obsidian"))
 			.addDropdown((d) => {
-				d.addOption("auto", t("자동 (Obsidian 따름)"));
+				d.addOption("auto", t("settings.auto_follow_obsidian"));
 				d.addOption("ko", "한국어");
 				d.addOption("en", "English");
 				d.setValue(s.language).onChange(async (v) => {
@@ -118,40 +118,40 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 	// --- 역할 (상단 일반 설정, 헤딩 없음) ---
 	private renderRole(s: ClassSyncSettings): void {
-		const roleLabel = s.role === "teacher" ? t("Teacher Mode (교사)") : t("Student Mode (학생)");
+		const roleLabel = s.role === "teacher" ? t("settings.teacher_mode_teacher") : t("settings.student_mode_student");
 		new Setting(this.containerEl)
-			.setName(t("역할"))
+			.setName(t("settings.role"))
 			.setDesc(
 				s.setupComplete
-					? t("최초 1회 설정 후 잠기며, 변경하려면 아래 ‘역할 재설정’을 사용하세요.")
-					: t("아직 역할이 설정되지 않았습니다."),
+					? t("settings.locked_after_the_one_time_setup")
+					: t("settings.no_role_has_been_set_yet"),
 			)
-			.addText((txt) => txt.setValue(s.setupComplete ? roleLabel : t("(미설정)")).setDisabled(true));
+			.addText((txt) => txt.setValue(s.setupComplete ? roleLabel : t("settings.not_set")).setDisabled(true));
 	}
 
 	// --- Teacher Mode ---
 	private renderTeacher(s: ClassSyncSettings): void {
-		const klass = this.group(t("학급"));
-		this.textSetting(klass, t("학급 ID"), "classId", "class_2026_1");
-		this.textSetting(klass, t("표시 이름"), "displayName", t("교사"));
+		const klass = this.group(t("settings.class"));
+		this.textSetting(klass, t("settings.class_id"), "classId", "class_2026_1");
+		this.textSetting(klass, t("settings.display_name"), "displayName", t("common.teacher"));
 
-		const admin = this.group(t("관리자 계정"), t("학생 계정·DB·권한 생성용 자격증명(이 기기에만 저장) — 칸을 벗어나면 변경이 자동 적용됩니다."));
+		const admin = this.group(t("settings.admin_account"), t("settings.credentials_for_creating_student_accounts_dbs"));
 		this.textSetting(admin, "CouchDB URL", "couchdbUrl", "https://nas.example.com", { applyOnBlur: true });
-		this.textSetting(admin, t("관리자 사용자"), "username", "admin", { applyOnBlur: true });
+		this.textSetting(admin, t("settings.admin_username"), "username", "admin", { applyOnBlur: true });
 		this.passwordSetting(admin);
 		admin.addSetting((set) =>
 			set
-				.setName(t("연결 테스트"))
-				.setDesc(t("모든 학생 mirror DB 접근/권한을 확인합니다."))
+				.setName(t("settings.connection_test"))
+				.setDesc(t("settings.checks_access_and_permissions_for_every"))
 				.addButton((b) =>
-					b.setButtonText(t("테스트 실행")).setCta().onClick(() => this.runAsync(b, () => this.host.testConnection())),
+					b.setButtonText(t("common.run_test")).setCta().onClick(() => this.runAsync(b, () => this.host.testConnection())),
 				),
 		);
 
 		// 학생 목록 (카드)
 		const students = this.group(
-			t("학생 목록"),
-			s.students.length === 0 ? t("아래 ‘학생 추가’로 첫 학생을 등록하세요.") : undefined,
+			t("settings.students"),
+			s.students.length === 0 ? t("settings.add_your_first_student_with_add") : undefined,
 		);
 		s.students.forEach((st, i) => this.renderStudentCard(students, st, i));
 		students.addSetting((set) =>
@@ -159,7 +159,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 				.setClass("class-sync-add-row")
 				.addButton((b) =>
 					b
-						.setButtonText(t("+ 학생 추가"))
+						.setButtonText(t("settings.add_student"))
 						.setCta()
 						.onClick(async () => {
 							s.students.push({ studentId: "", studentName: "", remoteDb: "", localRoot: "", username: "" });
@@ -168,7 +168,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 						}),
 				)
 				.addButton((b) =>
-					b.setButtonText(t("명단 붙여넣기")).onClick(() =>
+					b.setButtonText(t("settings.paste_roster")).onClick(() =>
 						new StudentBulkImportModal(
 							this.host.app,
 							s.students.map((st) => st.studentId).filter((id) => id),
@@ -184,12 +184,12 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		);
 
 		// 공유 공간 (모둠/학급)
-		const shared = this.group(t("공유 공간 (모둠/학급)"), t("멤버를 고르고 ‘배포’하면 공유 DB·권한이 생성되어 멤버 학생에게 전파됩니다."));
+		const shared = this.group(t("settings.shared_spaces_group_class"), t("settings.pick_members_and_deploy_to_create"));
 		s.sharedSpaces.forEach((sp, i) => this.renderSharedCard(shared, sp, i));
 		shared.addSetting((set) =>
 			set.setClass("class-sync-add-row").addButton((b) =>
 				b
-					.setButtonText(t("+ 공유 공간 추가"))
+					.setButtonText(t("settings.add_shared_space"))
 					.setCta()
 					.onClick(async () => {
 						const id = `g${Date.now().toString(36)}`;
@@ -202,24 +202,24 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		// 실시간 공동 편집 (Yjs)
 		const rt = this.group(
-			t("실시간 공동 편집 (Yjs)"),
-			t("별도 Yjs WebSocket 서버로 공유 폴더 문서를 글자 단위 동시 편집하며, ‘배포’ 시 학생에게 전파됩니다."),
+			t("settings.realtime_co_editing_yjs"),
+			t("settings.edit_shared_folder_documents_character_by"),
 		);
 		rt.addSetting((set) =>
-			set.setName(t("실시간 편집 사용")).addToggle((tg) =>
+			set.setName(t("settings.enable_realtime_editing")).addToggle((tg) =>
 				tg.setValue(s.realtimeEnabled).onChange(async (v) => {
 					s.realtimeEnabled = v;
 					await this.host.saveSettings();
 				}),
 			),
 		);
-		this.textSetting(rt, t("Yjs 서버 URL"), "yjsServerUrl", "wss://yjs.example.com");
+		this.textSetting(rt, t("settings.yjs_server_url"), "yjsServerUrl", "wss://yjs.example.com");
 		rt.addSetting((set) =>
 			set
-				.setName(t("Yjs 토큰"))
-				.setDesc(t("비밀값은 Obsidian Secret Storage에 저장되어 data.json에 평문으로 남지 않습니다."))
+				.setName(t("settings.yjs_token"))
+				.setDesc(t("settings.the_value_is_stored_in_obsidian"))
 				.addText((txt) => {
-					txt.setPlaceholder(t("공유 비밀 토큰")).setValue(getSecretValue(this.host.app, YJS_TOKEN_ID, s.yjsToken)).onChange(async (v) => {
+					txt.setPlaceholder(t("settings.shared_secret_token")).setValue(getSecretValue(this.host.app, YJS_TOKEN_ID, s.yjsToken)).onChange(async (v) => {
 						const val = v.trim();
 						setSecretValue(this.host.app, YJS_TOKEN_ID, val);
 						s.yjsTokenSet = !!val;
@@ -232,10 +232,10 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		);
 		rt.addSetting((set) =>
 			set
-				.setName(t("Yjs 공간 시크릿 (HMAC, 권장)"))
-				.setDesc(t("설정하면 공유 공간별 서명 토큰을 발급합니다(유출돼도 해당 공간만 접근). 서버 YJS_SECRET와 동일하게 두고 공유하지 마세요. 비밀값은 Secret Storage에 저장됩니다."))
+				.setName(t("settings.yjs_space_secret_hmac_recommended"))
+				.setDesc(t("settings.when_set_issues_a_signed_token"))
 				.addText((txt) => {
-					txt.setPlaceholder(t("서버 YJS_SECRET와 동일")).setValue(getSecretValue(this.host.app, YJS_SECRET_ID, s.yjsSecret)).onChange(async (v) => {
+					txt.setPlaceholder(t("settings.same_as_server_yjs_secret")).setValue(getSecretValue(this.host.app, YJS_SECRET_ID, s.yjsSecret)).onChange(async (v) => {
 						const val = v.trim();
 						setSecretValue(this.host.app, YJS_SECRET_ID, val);
 						s.yjsSecretSet = !!val;
@@ -248,8 +248,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		);
 		rt.addSetting((set) =>
 			set
-				.setName(t("공간 토큰 만료(일)"))
-				.setDesc(t("0=무만료. 값을 두면 주기적 재배포로 토큰을 무효화할 수 있습니다."))
+				.setName(t("settings.space_token_expiry_days"))
+				.setDesc(t("settings.0_no_expiry_set_a_value"))
 				.addText((txt) => {
 					txt.setPlaceholder("0").setValue(String(s.yjsTokenTtlDays ?? 0));
 					txt.inputEl.type = "number";
@@ -262,8 +262,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		);
 		rt.addSetting((set) =>
 			set
-				.setName(t("세션 중 스냅샷 주기(초)"))
-				.setDesc(t("실시간 세션 중 일정 주기로 CouchDB에 본문을 저장해 오프라인 멤버에 반영합니다(0=끔)."))
+				.setName(t("settings.in_session_snapshot_interval_sec"))
+				.setDesc(t("settings.periodically_saves_content_to_couchdb_during"))
 				.addText((txt) => {
 					txt.setPlaceholder("0").setValue(String(s.realtimeSnapshotSec));
 					txt.inputEl.type = "number";
@@ -281,23 +281,22 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		const card = group.listEl.createDiv({ cls: "class-sync-student-card" });
 
 		new Setting(card)
-			.setName(sp.name || t("공유 공간 {n}", { n: index + 1 }))
+			.setName(sp.name || t("settings.shared_space", { n: index + 1 }))
 			.setHeading()
 			.addButton((b) =>
 				b
-					.setButtonText(sp.provisioned ? t("재배포") : t("배포"))
+					.setButtonText(sp.provisioned ? t("common.redeploy") : t("common.deploy"))
 					.setCta()
 					.onClick(() => this.runAsync(b, async () => { await this.host.deployShared(sp); this.display(); })),
 			)
 			.addButton((b) =>
 				b
-					.setButtonText(t("삭제"))
+					.setButtonText(t("common.delete"))
 					.setWarning()
 					.onClick(() =>
 						new ConfirmModal(this.host.app, {
-							title: t("공유 공간 삭제: {name}", { name: sp.name || sp.id }),
-							message: t(
-								"이 공유 공간을 목록에서 제거합니다.\n서버 데이터(공유 DB)는 유지되며 동기화 링크만 사라집니다.\n서버까지 지우려면 관리 탭의 ‘서버 데이터 초기화’를 사용하세요.",
+							title: t("panel.delete_shared_space", { name: sp.name || sp.id }),
+							message: t("panel.removes_this_shared_space_from_the",
 							),
 							warning: true,
 							onConfirm: async () => {
@@ -310,8 +309,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 					),
 			);
 
-		new Setting(card).setName(t("이름")).addText((txt) => {
-			txt.setPlaceholder(t("모둠1")).setValue(sp.name).onChange(async (v) => {
+		new Setting(card).setName(t("settings.name")).addText((txt) => {
+			txt.setPlaceholder(t("settings.group_1")).setValue(sp.name).onChange(async (v) => {
 				sp.name = v.trim();
 				if (!sp.folder) sp.folder = v.trim();
 				await this.host.saveSettings();
@@ -319,8 +318,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 			noAutoCorrect(txt.inputEl);
 			this.applyOnBlur(txt.inputEl);
 		});
-		new Setting(card).setName(t("폴더")).addText((txt) => {
-			txt.setPlaceholder(t("모둠1")).setValue(sp.folder).onChange(async (v) => {
+		new Setting(card).setName(t("settings.folder")).addText((txt) => {
+			txt.setPlaceholder(t("settings.group_1")).setValue(sp.folder).onChange(async (v) => {
 				const v2 = v.trim();
 				if (!this.okFolder(v2)) return;
 				sp.folder = v2;
@@ -330,17 +329,17 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 			this.applyOnBlur(txt.inputEl);
 		});
 
-		const memberHead = new Setting(card).setName(t("멤버"));
+		const memberHead = new Setting(card).setName(t("panel.members"));
 		const studentsWithId = s.students.filter((st) => st.studentId);
 		memberHead.addButton((b) =>
-			b.setButtonText(t("전체")).onClick(async () => {
+			b.setButtonText(t("deploy.select_all")).onClick(async () => {
 				sp.members = studentsWithId.map((st) => st.studentId);
 				await this.host.saveSettings();
 				this.display();
 			}),
 		);
 		memberHead.addButton((b) =>
-			b.setButtonText(t("해제")).onClick(async () => {
+			b.setButtonText(t("deploy.none")).onClick(async () => {
 				sp.members = [];
 				await this.host.saveSettings();
 				this.display();
@@ -360,13 +359,13 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		const status = sharedSpaceStatus(sp);
 		const badge =
 			status === "unprovisioned"
-				? t("미배포")
+				? t("panel.not_deployed")
 				: status === "needs-redeploy"
-					? t("멤버 변경됨 — 재배포 필요")
-					: t("배포됨 ✓");
+					? t("panel.members_changed_redeploy_needed")
+					: t("panel.deployed");
 		const statusEl = card.createEl("div", {
 			cls: "class-sync-student-status",
-			text: t("DB: {db} · {badge}", { db: sp.remoteDb, badge }),
+			text: t("panel.db", { db: sp.remoteDb, badge }),
 		});
 		if (status === "needs-redeploy") statusEl.addClass("class-sync-dash-conflict");
 	}
@@ -375,32 +374,31 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		const card = group.listEl.createDiv({ cls: "class-sync-student-card" });
 
 		const head = new Setting(card)
-			.setName(st.studentName || st.studentId || t("학생 {n}", { n: index + 1 }))
+			.setName(st.studentName || st.studentId || t("settings.student", { n: index + 1 }))
 			.setHeading()
 			.addButton((b) =>
 				b
-					.setButtonText(st.provisioned ? t("초대 재발급") : t("초대"))
+					.setButtonText(st.provisioned ? t("settings.reissue_invite") : t("settings.invite"))
 					.setCta()
 					.onClick(() => this.runAsync(b, async () => { await this.host.inviteStudent(st); this.display(); })),
 			);
 		if (st.provisioned) {
 			head.addButton((b) =>
 				b
-					.setButtonText(t("비밀번호 재발급"))
-					.setTooltip(t("새 비밀번호로 바꿔 이전 초대 코드를 무효화합니다."))
+					.setButtonText(t("invite.reissue_password"))
+					.setTooltip(t("invite.replaces_the_password_with_a_new"))
 					.onClick(() => this.runAsync(b, async () => { await this.host.rotateStudentPassword(st); this.display(); })),
 			);
 		}
 		head
 			.addButton((b) =>
 				b
-					.setButtonText(t("삭제"))
+					.setButtonText(t("common.delete"))
 					.setWarning()
 					.onClick(() =>
 						new ConfirmModal(this.host.app, {
-							title: t("학생 삭제: {name}", { name: st.studentName || st.studentId || t("학생") }),
-							message: t(
-								"이 학생을 목록에서 제거합니다.\n서버 데이터(계정·Mirror DB)는 유지되며 동기화 링크만 사라집니다.\n서버까지 지우려면 관리 탭의 ‘서버 데이터 초기화’를 사용하세요.",
+							title: t("panel.delete_student", { name: st.studentName || st.studentId || t("common.student") }),
+							message: t("panel.removes_this_student_from_the_list",
 							),
 							warning: true,
 							onConfirm: async () => {
@@ -413,65 +411,65 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 					),
 			);
 
-		this.studentField(card, t("이름"), st, "studentName", t("학생A"));
-		this.studentField(card, t("학생 ID"), st, "studentId", "student_a");
+		this.studentField(card, t("settings.name"), st, "studentName", t("common.student_a"));
+		this.studentField(card, t("settings.student_id"), st, "studentId", "student_a");
 		// 비우면 초대 시점에 학생 ID로 자동 채움 (계정=ID, DB=mirror_<ID>, 폴더=이름/ID)
-		this.studentField(card, t("Mirror DB (비우면 자동)"), st, "remoteDb", t("mirror_<학생ID>"));
-		this.studentField(card, t("폴더 (비우면 자동)"), st, "localRoot", t("<이름 또는 학생ID>"));
+		this.studentField(card, t("settings.mirror_db_auto_if_empty"), st, "remoteDb", t("settings.mirror_studentid"));
+		this.studentField(card, t("settings.folder_auto_if_empty"), st, "localRoot", t("settings.name_or_studentid"));
 
 		card.createEl("div", {
 			cls: "class-sync-student-status",
-			text: st.provisioned ? t("상태: 프로비저닝됨 ✓") : t("상태: 미프로비저닝 — ‘초대’를 누르면 계정/DB가 생성됩니다."),
+			text: st.provisioned ? t("settings.status_provisioned") : t("settings.status_not_provisioned_pressing_invite_creates"),
 		});
 	}
 
 	// --- Student Mode ---
 	private renderStudent(s: ClassSyncSettings): void {
-		const invite = this.group(t("초대로 연결"), t("교사가 준 QR을 카메라로 스캔하거나 초대 코드를 아래에 붙여넣으면 자동 설정됩니다."));
+		const invite = this.group(t("settings.connect_via_invite"), t("settings.scan_the_qr_from_your_teacher"));
 		let codeValue = "";
 		invite.addSetting((set) =>
 			set
-				.setName(t("초대 코드"))
+				.setName(t("settings.invite_code"))
 				.addText((txt) => {
-					txt.setPlaceholder(t("교사에게 받은 초대 코드 붙여넣기")).onChange((v) => (codeValue = v));
+					txt.setPlaceholder(t("settings.paste_the_invite_code_from_your")).onChange((v) => (codeValue = v));
 					noAutoCorrect(txt.inputEl);
 				})
 				.addButton((b) =>
 					b
-						.setButtonText(t("적용"))
+						.setButtonText(t("common.apply"))
 						.setCta()
 						.onClick(() => this.runAsync(b, async () => { await this.host.ingestInvite(codeValue); this.display(); })),
 				),
 		);
 
 		// 친화적 요약(내부 용어 최소화). 자세한 실시간 상태는 패널 ‘동기화 상태’ 탭에서.
-		const info = this.group(t("내 연결"), t("자세한 동기화 상태는 Class Sync 패널의 ‘동기화 상태’ 탭에서 볼 수 있어요."));
-		this.readonlySetting(info, t("이름"), s.displayName || t("(미설정)"));
-		this.readonlySetting(info, t("학급 ID"), s.classId || t("(미설정)"));
+		const info = this.group(t("panel.my_connection"), t("panel.see_detailed_sync_status_in_the"));
+		this.readonlySetting(info, t("settings.name"), s.displayName || t("settings.not_set"));
+		this.readonlySetting(info, t("settings.class_id"), s.classId || t("settings.not_set"));
 		info.addSetting((set) =>
 			set
-				.setName(t("연결 확인"))
-				.setDesc(t("선생님과 제대로 연결됐는지 확인합니다."))
+				.setName(t("panel.check_connection"))
+				.setDesc(t("panel.checks_that_you_re_properly_connected"))
 				.addButton((b) =>
-					b.setButtonText(t("테스트 실행")).setCta().onClick(() => this.runAsync(b, () => this.host.testConnection())),
+					b.setButtonText(t("common.run_test")).setCta().onClick(() => this.runAsync(b, () => this.host.testConnection())),
 				),
 		);
 
 		// 고급(문제 해결용) — 내부 식별자는 여기로 접어 둔다.
-		const adv = this.group(t("고급 정보"), t("문제 해결용 — 보통 건드릴 필요가 없습니다."));
-		this.readonlySetting(adv, "CouchDB URL", s.couchdbUrl || t("(미설정)"));
-		this.readonlySetting(adv, "Mirror DB", s.remoteDb || t("(미설정)"));
-		this.readonlySetting(adv, t("계정"), s.username || t("(미설정)"));
+		const adv = this.group(t("panel.advanced_info"), t("panel.for_troubleshooting_usually_no_need_to"));
+		this.readonlySetting(adv, "CouchDB URL", s.couchdbUrl || t("settings.not_set"));
+		this.readonlySetting(adv, "Mirror DB", s.remoteDb || t("settings.not_set"));
+		this.readonlySetting(adv, t("settings.account"), s.username || t("settings.not_set"));
 	}
 
 	// --- 공통: 동기화 옵션 ---
 	private renderSyncOptions(s: ClassSyncSettings): void {
-		const g = this.group(t("동기화"));
+		const g = this.group(t("settings.sync"));
 
 		g.addSetting((set) =>
 			set
-				.setName(t("자동 동기화"))
-				.setDesc(t("끄면 수동 동기화만 하며, 변경은 즉시 적용됩니다."))
+				.setName(t("settings.auto_sync"))
+				.setDesc(t("settings.when_off_only_manual_sync_runs"))
 				.addToggle((tg) =>
 					tg.setValue(s.autoSync).onChange(async (v) => {
 						s.autoSync = v;
@@ -483,8 +481,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("첨부파일 동기화"))
-				.setDesc(t("이미지·PDF 등 비markdown 파일도 동기화합니다."))
+				.setName(t("settings.sync_attachments"))
+				.setDesc(t("settings.also_syncs_non_markdown_files_such"))
 				.addToggle((tg) =>
 					tg.setValue(s.syncAssets).onChange(async (v) => {
 						s.syncAssets = v;
@@ -495,8 +493,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("첨부 최대 크기 (MB)"))
-				.setDesc(t("이 크기를 넘는 첨부는 동기화하지 않습니다(0=무제한)."))
+				.setName(t("settings.max_attachment_size_mb"))
+				.setDesc(t("settings.attachments_larger_than_this_are_not"))
 				.addText((txt) =>
 					txt.setValue(String(s.maxAttachmentMB)).onChange(async (v) => {
 						const n = parseInt(v, 10);
@@ -508,8 +506,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("백그라운드 시 동기화 일시정지"))
-				.setDesc(t("앱이 가려지면 원격 동기화를 멈추고 복귀 시 재개해 배터리·네트워크를 아낍니다."))
+				.setName(t("settings.pause_sync_in_background"))
+				.setDesc(t("settings.pauses_remote_sync_when_the_app"))
 				.addToggle((tg) =>
 					tg.setValue(s.pauseWhenHidden).onChange(async (v) => {
 						s.pauseWhenHidden = v;
@@ -520,8 +518,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("모바일 업로드 지연 (ms)"))
-				.setDesc(t("모바일에서 편집 후 업로드까지의 지연으로, 길수록 배터리를 아낍니다(데스크톱은 영향 없음)."))
+				.setName(t("settings.mobile_upload_delay_ms"))
+				.setDesc(t("settings.delay_from_edit_to_upload_on"))
 				.addText((txt) =>
 					txt.setValue(String(s.mobileDebounceMs)).onChange(async (v) => {
 						const n = parseInt(v, 10);
@@ -533,13 +531,13 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("삭제 정책"))
-				.setDesc(t("삭제·이름변경 시 상대 vault의 옛 파일을 어떻게 처리할지 정합니다."))
+				.setName(t("settings.delete_policy"))
+				.setDesc(t("settings.decides_how_the_old_file_in"))
 				.addDropdown((dd) =>
 					dd
-						.addOption("archive", t("보관 폴더로 이동"))
-						.addOption("propagate-delete", t("즉시 삭제"))
-						.addOption("ignore-delete", t("삭제 무시"))
+						.addOption("archive", t("settings.move_to_archive_folder"))
+						.addOption("propagate-delete", t("settings.delete_immediately"))
+						.addOption("ignore-delete", t("settings.ignore_deletion"))
 						.setValue(s.deletePolicy)
 						.onChange(async (v) => {
 							s.deletePolicy = v as ClassSyncSettings["deletePolicy"];
@@ -550,8 +548,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("삭제 정합 최대 건수"))
-				.setDesc(t("전체 동기화 때 한 번에 자동 삭제 전파할 최대 파일 수. 초과하면 보류하고 경고합니다(폴더 오설정 사고 방지). 0=자동(소수 기준)."))
+				.setName(t("sync.max_delete_reconcile"))
+				.setDesc(t("sync.max_files_to_auto_propagate_as"))
 				.addText((txt) => {
 					txt.setPlaceholder("0").setValue(String(s.deleteReconcileMax ?? 0));
 					txt.inputEl.type = "number";
@@ -565,8 +563,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("버전 히스토리"))
-				.setDesc(t("마크다운 편집·삭제·충돌 해소 시점의 내용을 스냅샷으로 저장해 ‘버전 기록 열기’ 명령으로 되돌릴 수 있습니다(서버에 저장·복제)."))
+				.setName(t("version.version_history"))
+				.setDesc(t("version.snapshots_markdown_content_on_edit_delete"))
 				.addToggle((tg) =>
 					tg.setValue(s.versionHistory !== false).onChange(async (v) => {
 						s.versionHistory = v;
@@ -577,8 +575,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("버전 보존 개수"))
-				.setDesc(t("파일당 보존할 최대 버전 수(기본 10). ‘최근 N개 또는 N일’ 중 하나라도 만족하면 유지합니다."))
+				.setName(t("version.versions_to_keep"))
+				.setDesc(t("version.max_versions_kept_per_file_default"))
 				.addText((txt) => {
 					txt.setPlaceholder("10").setValue(String(s.versionMaxCount ?? 10));
 					txt.inputEl.type = "number";
@@ -592,8 +590,8 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("버전 보존 일수"))
-				.setDesc(t("이 기간 안의 버전은 개수를 넘어도 보존합니다(기본 30일)."))
+				.setName(t("version.days_to_keep_versions"))
+				.setDesc(t("version.versions_within_this_period_are_kept"))
 				.addText((txt) => {
 					txt.setPlaceholder("30").setValue(String(s.versionMaxAgeDays ?? 30));
 					txt.inputEl.type = "number";
@@ -607,14 +605,14 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("보관 폴더"))
-				.setDesc(t("‘보관 폴더로 이동’ 정책에서 삭제 파일이 모이며, 여기서 지우면 DB에서도 영구 삭제됩니다."))
+				.setName(t("settings.archive_folder"))
+				.setDesc(t("settings.deleted_files_collect_here_under_the"))
 				.addText((txt) =>
-					txt.setPlaceholder(t("_삭제됨")).setValue(s.archiveFolder).onChange(async (v) => {
+					txt.setPlaceholder(t("settings.deleted")).setValue(s.archiveFolder).onChange(async (v) => {
 						const v2 = v.trim();
 						if (!this.okFolder(v2)) return;
 						if (v2 && foldersOverlap(v2, s.conflictFolder)) {
-							new Notice(t("보관 폴더와 충돌 폴더가 겹칩니다. 다른 경로를 쓰세요."));
+							new Notice(t("settings.archive_and_conflict_folders_overlap_use"));
 							return;
 						}
 						s.archiveFolder = v2 || "_삭제됨";
@@ -625,14 +623,14 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("충돌 폴더"))
-				.setDesc(t("충돌 시 원격 버전이 꺼내지는 폴더로, ‘충돌 목록 열기’ 명령으로 해소합니다."))
+				.setName(t("settings.conflict_folder"))
+				.setDesc(t("settings.folder_where_the_remote_version_is"))
 				.addText((txt) =>
-					txt.setPlaceholder(t("_충돌")).setValue(s.conflictFolder).onChange(async (v) => {
+					txt.setPlaceholder(t("settings.conflict")).setValue(s.conflictFolder).onChange(async (v) => {
 						const v2 = v.trim();
 						if (!this.okFolder(v2)) return;
 						if (v2 && foldersOverlap(v2, s.archiveFolder)) {
-							new Notice(t("보관 폴더와 충돌 폴더가 겹칩니다. 다른 경로를 쓰세요."));
+							new Notice(t("settings.archive_and_conflict_folders_overlap_use"));
 							return;
 						}
 						s.conflictFolder = v2 || "_충돌";
@@ -643,14 +641,14 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
-				.setName(t("제외 폴더"))
-				.setDesc(t("동기화에서 제외할 폴더를 쉼표로 구분해 입력합니다."))
+				.setName(t("settings.excluded_folders"))
+				.setDesc(t("settings.enter_folders_to_exclude_from_sync"))
 				.addText((txt) =>
 					txt.setValue(s.excludeFolders.join(", ")).onChange(async (v) => {
 						const folders = v.split(",").map((x) => x.trim()).filter((x) => x.length > 0);
 						const bad = folders.find((f) => !validateFolderName(f));
 						if (bad) {
-							new Notice(t("잘못된 폴더 경로입니다: {path} (‘..’·절대경로·.obsidian 불가)", { path: bad }));
+							new Notice(t("settings.invalid_folder_path_no_absolute_paths", { path: bad }));
 							return;
 						}
 						s.excludeFolders = folders;
@@ -662,16 +660,16 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 	// --- 설정 백업/이전 + 적용/초기화 ---
 	private renderBackup(): void {
-		const g = this.group(t("백업 / 기기 이전"));
+		const g = this.group(t("settings.backup_device_transfer"));
 		g.addSetting((set) =>
 			set
-				.setName(t("설정 내보내기 / 가져오기"))
-				.setDesc(t("학생·공유 공간·옵션을 JSON으로 백업하거나 다른 기기로 옮깁니다(비밀번호·토큰 제외)."))
+				.setName(t("settings.export_import_settings"))
+				.setDesc(t("settings.back_up_students_shared_spaces_and"))
 				.addButton((b) =>
-					b.setButtonText(t("내보내기")).onClick(() => new ExportModal(this.app, this.host.exportSettingsJson()).open()),
+					b.setButtonText(t("common.export")).onClick(() => new ExportModal(this.app, this.host.exportSettingsJson()).open()),
 				)
 				.addButton((b) =>
-					b.setButtonText(t("가져오기")).onClick(() =>
+					b.setButtonText(t("common.import")).onClick(() =>
 						new ImportModal(this.app, async (json) => {
 							await this.host.importSettingsJson(json);
 							this.display();
@@ -682,15 +680,15 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 	}
 
 	private renderApplyAndReset(s: ClassSyncSettings): void {
-		const g = this.group(t("초기화"));
+		const g = this.group(t("common.reset_2"));
 
 		// 서버 데이터 초기화 — 교사 전용, 파괴적. 백엔드를 처음 상태로.
 		if (s.role === "teacher") {
 			g.addSetting((set) =>
 				set
-					.setName(t("서버 데이터 초기화"))
-					.setDesc(t("서버의 모든 학생·공유 데이터베이스를 삭제해 백엔드를 초기화합니다(되돌릴 수 없음 · Yjs는 수동 안내)."))
-					.addButton((b) => b.setButtonText(t("초기화…")).setWarning().onClick(() => this.host.openResetModal())),
+					.setName(t("settings.reset_server_data"))
+					.setDesc(t("settings.deletes_all_student_and_shared_databases"))
+					.addButton((b) => b.setButtonText(t("settings.reset")).setWarning().onClick(() => this.host.openResetModal())),
 			);
 		}
 
@@ -698,10 +696,10 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		if (s.setupComplete) {
 			g.addSetting((set) =>
 				set
-					.setName(t("역할 재설정 (로컬 초기화)"))
-					.setDesc(t("교사↔학생 역할 변경이나 재시작용 — 로컬 체크포인트·캐시를 비우고 역할을 다시 고릅니다(서버 데이터·vault 파일은 유지)."))
+					.setName(t("settings.reset_role_local_reset"))
+					.setDesc(t("settings.for_switching_between_teacher_and_student"))
 					.addButton((b) =>
-						b.setButtonText(t("재설정")).setWarning().onClick(async () => {
+						b.setButtonText(t("common.reset")).setWarning().onClick(async () => {
 							await this.host.resetSetup();
 							this.display();
 						}),
@@ -722,7 +720,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 	private okFolder(value: string): boolean {
 		if (!value) return true;
 		if (!validateFolderName(value)) {
-			new Notice(t("잘못된 폴더 경로입니다: {path} (‘..’·절대경로·.obsidian 불가)", { path: value }));
+			new Notice(t("settings.invalid_folder_path_no_absolute_paths", { path: value }));
 			return false;
 		}
 		return true;
@@ -768,7 +766,7 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 	private passwordSetting(group: SettingGroup): void {
 		const s = this.host.settings;
 		group.addSetting((set) =>
-			set.setName(t("관리자 비밀번호")).addText((txt) => {
+			set.setName(t("settings.admin_password")).addText((txt) => {
 				// Secret Storage 우선 저장(평문 data.json 회피), 미지원 환경만 평문 폴백.
 				txt.setPlaceholder("********").setValue(getSecretValue(this.host.app, COUCH_PASSWORD_ID, s.password)).onChange(async (v) => {
 					const val = v.trim();
