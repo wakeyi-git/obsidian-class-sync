@@ -6,6 +6,7 @@ import { SyncStatusSection } from "./panel/SyncStatusSection";
 import { DeploySection } from "./panel/DeploySection";
 import { ManageSection } from "./panel/ManageSection";
 import { DeletedRecoverySection } from "./panel/DeletedRecoverySection";
+import { VersionHistorySection } from "./panel/VersionHistorySection";
 import { LogSection } from "./panel/LogSection";
 import { t } from "../i18n";
 
@@ -25,6 +26,8 @@ function tabLabel(tab: PanelTab): string {
 			return t("관리");
 		case "recovery":
 			return t("삭제 복구");
+		case "history":
+			return t("버전 기록");
 		case "log":
 			return t("로그");
 	}
@@ -57,8 +60,8 @@ export class ClassSyncPanelView extends ItemView {
 	private tabs(): PanelTab[] {
 		const teacher = this.host.settings.role === "teacher";
 		return teacher
-			? ["setup", "feedback", "deploy", "sync", "manage", "recovery", "log"]
-			: ["feedback", "sync", "manage", "recovery", "log"];
+			? ["setup", "feedback", "deploy", "sync", "manage", "recovery", "history", "log"]
+			: ["feedback", "sync", "manage", "recovery", "history", "log"];
 	}
 
 	async onOpen(): Promise<void> {
@@ -129,6 +132,8 @@ export class ClassSyncPanelView extends ItemView {
 				return new ManageSection(this.host);
 			case "recovery":
 				return new DeletedRecoverySection(this.host);
+			case "history":
+				return new VersionHistorySection(this.host);
 			case "log":
 				return new LogSection(this.host.logger);
 			case "sync":

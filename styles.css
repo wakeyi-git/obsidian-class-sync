@@ -828,3 +828,57 @@
 	white-space: pre-wrap;
 	word-break: break-word;
 }
+
+/* 버전 기록 패널 탭 */
+.class-sync-version-empty {
+	color: var(--text-muted);
+	font-size: 13px;
+	padding: 12px 4px;
+}
+
+.class-sync-version-target {
+	font-size: 11px;
+	color: var(--text-accent);
+	font-weight: 600;
+	margin: 6px 0;
+	word-break: break-all;
+}
+
+.class-sync-version-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.class-sync-version-time {
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.class-sync-version-badge {
+	margin-left: auto;
+	padding: 1px 6px;
+	border-radius: 4px;
+	font-size: 11px;
+	font-weight: 600;
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+}
+
+.class-sync-version-meta {
+	font-size: 11px;
+	color: var(--text-muted);
+	margin: 4px 0;
+}
+
+.class-sync-version-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 6px;
+}
+
+.class-sync-version-actions button {
+	font-size: 11px;
+	padding: 2px 8px;
+}

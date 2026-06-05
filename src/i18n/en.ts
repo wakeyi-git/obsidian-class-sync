@@ -688,4 +688,7 @@ export const EN: Record<string, string> = {
 	"현재 백업 후 복원": "Back up current, then restore",
 	"버전 복원됨: {when}": "Version restored: {when}",
 	"복원할 수 없습니다.": "Cannot restore.",
+	"노트를 열면 버전 기록이 표시됩니다.": "Open a note to see its version history.",
+	"버전 기록을 불러오지 못했습니다.": "Failed to load version history.",
+	"{who} {by} · {device}": "{who} {by} · {device}",
 };

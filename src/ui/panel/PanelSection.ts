@@ -6,10 +6,11 @@ import { LinkStatus } from "../../core/sync/MirrorContext";
 import { DeletedItem, RestoreResult, RestoreOptions, DeleteModifyChoice } from "../../core/sync/RestoreManager";
 import { PurgeSnapshot } from "../../core/sync/recentPurge";
 import { DeleteModifyItem } from "../../core/sync/deleteModifyQueue";
+import { VersionDoc } from "../../core/model/types";
 import { CopyOptions, CopyResult, CopyPlan } from "../../modes/teacher/BulkCopy";
 
 /** 통합 패널 탭 식별자. */
-export type PanelTab = "setup" | "feedback" | "deploy" | "sync" | "manage" | "recovery" | "log";
+export type PanelTab = "setup" | "feedback" | "deploy" | "sync" | "manage" | "recovery" | "history" | "log";
 
 /** 동기화 상태 표 한 행(링크별). */
 export interface DashboardRow extends LinkStatus {
@@ -62,6 +63,9 @@ export interface PanelHost {
 	listRecentPurges(): Promise<PurgeRow[]>;
 	undoPurge(remoteDb: string, id: string): Promise<RestoreResult>;
 	clearPurge(remoteDb: string, id: string): Promise<void>;
+	// 버전 히스토리 (보고서 §1 P2)
+	versionHistoryFor(localPath: string): Promise<VersionDoc[]>;
+	restoreVersion(localPath: string, versionDocId: string, opts: { backupCurrent?: boolean }): Promise<"restored" | "missing">;
 }
 
 /** 링크 라벨이 붙은 삭제/수정 충돌 항목. */
