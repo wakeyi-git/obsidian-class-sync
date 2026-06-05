@@ -77,4 +77,32 @@ describe("삭제 파일 복구 (RestoreManager)", () => {
 		expect((await dev.asset("img/p.png"))?.deleted).toBe(false);
 		expect(dev.vault.has("img/p.png")).toBe(true);
 	});
+
+	it("첨부: 같은 이름 존재 시 (복구본)으로 복구하고 원래 tombstone 정리", async () => {
+		cluster = new Cluster();
+		const dev = cluster.device({ deviceId: "d", role: "teacher", remoteDb: "mirror_s1" });
+		const restorer = new RestoreManager(dev.ctx, dev.uploader);
+
+		const data = new TextEncoder().encode("ORIG").buffer;
+		dev.vault.seedBinary("img/p.png", data);
+		await dev.uploader.uploadPath("img/p.png");
+		await dev.vault.delete(dev.vault.getAbstractFileByPath("img/p.png") as any);
+		await dev.uploader.tombstonePath("img/p.png");
+
+		// archive 사본(복구 가능) + 원래 위치에 같은 이름의 새 파일(충돌)
+		dev.vault.seedBinary(dev.ctx.archiveLocalPath("img/p.png"), data);
+		dev.vault.seedBinary("img/p.png", new TextEncoder().encode("NEW").buffer);
+
+		expect(await restorer.restore("img/p.png", { collision: "keep-both" })).toBe("restored");
+		// (복구본)으로 복구되고 기존 파일은 유지
+		expect(dev.vault.has("img/p.복구본.png")).toBe(true);
+		expect(await dev.asset("img/p.복구본.png")).toBeTruthy();
+		expect(bytes(await dev.ctx.readVaultBinary("img/p.복구본.png"))).toEqual(bytes(data));
+		// P2-a: 원래 tombstone은 삭제 목록에서 사라진다.
+		expect((await restorer.listDeleted()).some((i) => i.dbPath === "img/p.png")).toBe(false);
+	});
 });
+
+function bytes(b: ArrayBuffer | null): number[] {
+	return b ? Array.from(new Uint8Array(b)) : [];
+}
