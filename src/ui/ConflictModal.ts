@@ -27,6 +27,7 @@ export class ConflictModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		this.modalEl.addClass("class-sync-conflict-modal");
 		await this.render();
 	}
 
@@ -74,6 +75,7 @@ export class ConflictModal extends Modal {
 			else this.renderDiff(card, row.info);
 
 			const actions = new Setting(card)
+				.setClass("class-sync-conflict-actions")
 				.addButton((b) =>
 					b.setButtonText(isAsset ? t("원격본 열기") : t("비교(열기)")).onClick(() => this.host.openConflictFiles(row)),
 				)

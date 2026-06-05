@@ -776,6 +776,32 @@
 	margin: 4px 0;
 }
 
+/* 충돌 모달: 버튼이 많아 가로로 넘치므로 넓히고 버튼을 줄바꿈 */
+.class-sync-conflict-modal {
+	width: min(820px, 92vw);
+}
+
+.class-sync-conflict-actions {
+	flex-wrap: wrap;
+	border-top: none;
+	padding-top: 4px;
+}
+
+.class-sync-conflict-actions .setting-item-info {
+	display: none;
+}
+
+.class-sync-conflict-actions .setting-item-control {
+	flex-wrap: wrap;
+	justify-content: flex-start;
+	gap: 6px;
+	width: 100%;
+}
+
+.class-sync-conflict-actions .setting-item-control button {
+	font-size: 12px;
+}
+
 /* 버전 히스토리 */
 .class-sync-version-list {
 	max-height: 60vh;
