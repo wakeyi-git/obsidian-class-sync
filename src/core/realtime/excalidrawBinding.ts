@@ -52,6 +52,10 @@ export class ExcalidrawBinding {
 		// 로컬 포인터 → 커서(awareness) 브로드캐스트. y-excalidraw가 원격 collaborators로 렌더(이름·색).
 		if (this.awareness && this.containerEl) {
 			this.onPointerMove = (e: PointerEvent) => {
+				// 터치/펜(태블릿·모바일)에서는 브로드캐스트하지 않는다. onPointerUpdate가 awareness를 바꾸면
+				// y-excalidraw가 매번 updateScene({collaborators})로 캔버스를 재렌더하는데, 이 재렌더가
+				// 더블탭(텍스트 입력) 제스처를 리셋해 모바일에서 텍스트를 못 넣게 만든다. 참가자 표시는 칩이 담당.
+				if (e.pointerType && e.pointerType !== "mouse") return;
 				const now = Date.now();
 				if (now - this.lastSent < 40) return;
 				this.lastSent = now;
@@ -59,7 +63,7 @@ export class ExcalidrawBinding {
 				if (!pt) return;
 				this.inner.onPointerUpdate({ pointer: { x: pt.x, y: pt.y, tool: "pointer" }, button: "up" });
 			};
-			this.containerEl.addEventListener("pointermove", this.onPointerMove);
+			this.containerEl.addEventListener("pointermove", this.onPointerMove, { passive: true });
 		}
 
 		// 참가자 칩 오버레이: 포인터(커서)에 의존하지 않고 현재 편집자 이름을 항상 표시.
