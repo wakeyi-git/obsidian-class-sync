@@ -1,20 +1,25 @@
 import { MirrorContext } from "./MirrorContext";
-import { NoteDoc, noteId } from "../model/types";
+import { NoteDoc, AssetDoc, noteId, assetId } from "../model/types";
 import { sha256 } from "../hash/hash";
+import { insertLabelBeforeExt } from "../path/path";
 import { t } from "../../i18n";
 
 // both = 두 버전 보관(로컬 최종), both-remote = 두 버전 보관(원격 최종).
 export type ResolveChoice = "local" | "remote" | "both" | "both-remote";
 
 export interface ConflictInfo {
+	kind: "note" | "asset";
 	remoteDb: string;
 	studentId: string;
 	dbPath: string;
 	localPath: string;
 	conflictPath: string; // _충돌/... 원격본 경로
-	localContent: string | null;
-	remoteContent: string;
+	localContent: string | null; // note 전용(asset은 null)
+	remoteContent: string; // note 전용(asset은 "")
 	remoteMeta: { by: string; role: string; at: string };
+	// asset 전용
+	mime?: string;
+	size?: number;
 }
 
 /**
@@ -42,8 +47,14 @@ export class ConflictManager {
 		}
 	}
 
-	/** 현재 충돌 목록. */
+	/** 현재 충돌 목록(노트 + 첨부). */
 	async list(): Promise<ConflictInfo[]> {
+		const out = await this.listNotes();
+		out.push(...(await this.listAssets()));
+		return out;
+	}
+
+	private async listNotes(): Promise<ConflictInfo[]> {
 		const ctx = this.ctx;
 		const items = await ctx.pouch.listConflicts();
 		const out: ConflictInfo[] = [];
@@ -54,6 +65,7 @@ export class ConflictManager {
 			const remote = await this.pickRemoteLeaf(dbPath, doc, conflictRevs);
 			if (!remote) continue;
 			out.push({
+				kind: "note",
 				remoteDb: ctx.remoteDb,
 				studentId: ctx.studentId,
 				dbPath,
@@ -67,8 +79,34 @@ export class ConflictManager {
 		return out;
 	}
 
+	/** 첨부(asset) 충돌 목록. 원격본은 applier가 _충돌/에 materialize해 둔 사본을 보여준다. */
+	private async listAssets(): Promise<ConflictInfo[]> {
+		const ctx = this.ctx;
+		if (!ctx.settings.syncAssets) return [];
+		const items = await ctx.pouch.listAssetConflicts();
+		const out: ConflictInfo[] = [];
+		for (const { doc } of items) {
+			const dbPath = doc.path;
+			out.push({
+				kind: "asset",
+				remoteDb: ctx.remoteDb,
+				studentId: ctx.studentId,
+				dbPath,
+				localPath: ctx.toLocalPath(dbPath),
+				conflictPath: ctx.conflictLocalPath(dbPath),
+				localContent: null,
+				remoteContent: "",
+				remoteMeta: { by: doc.lastModifiedBy, role: doc.lastModifiedRole, at: doc.updatedAt },
+				mime: doc.mime,
+				size: doc.size,
+			});
+		}
+		return out;
+	}
+
 	/** 선택대로 해소: 내용 확정(winner 위 새 리비전) + 나머지 리프 제거 + 충돌본 삭제. */
 	async resolve(dbPath: string, choice: ResolveChoice): Promise<void> {
+		if (!this.ctx.isMarkdown(dbPath)) return this.resolveAsset(dbPath, choice);
 		const ctx = this.ctx;
 		const id = noteId(dbPath);
 		const winner = await ctx.pouch.getWithConflicts<NoteDoc>(id);
@@ -112,6 +150,58 @@ export class ConflictManager {
 
 		await this.removeConflictCopy(dbPath);
 		ctx.logger.ok(t("충돌 해소({choice}): {path}", { choice, path: dbPath }), true);
+	}
+
+	/**
+	 * 첨부(asset) 충돌 해소. 원격본은 applier가 _충돌/에 보존한 바이너리 사본을 출처로 쓴다.
+	 * local=로컬 유지, remote=원격 적용, both=원격 사본을 동기화 위치에 보관(로컬 최종).
+	 */
+	private async resolveAsset(dbPath: string, choice: ResolveChoice): Promise<void> {
+		const ctx = this.ctx;
+		const id = assetId(dbPath);
+		const winner = await ctx.pouch.getWithConflicts<AssetDoc>(id);
+		if (!winner || !winner._conflicts || winner._conflicts.length === 0) {
+			ctx.logger.info(t("이미 해소된 충돌: {path}", { path: dbPath }));
+			await this.removeConflictCopy(dbPath);
+			return;
+		}
+		const conflictRevs = winner._conflicts;
+		const localPath = ctx.toLocalPath(dbPath);
+		const localBin = await ctx.readVaultBinary(localPath);
+		const remoteBin = await ctx.readVaultBinary(ctx.conflictLocalPath(dbPath)); // materialize된 원격 사본
+
+		const remoteFinal = choice === "remote" || choice === "both-remote";
+
+		// "두 버전 보관": 최종이 아닌 쪽을 동기화되는 사본으로 보관.
+		if ((choice === "both" || choice === "both-remote") && remoteBin && localBin) {
+			const keepPath = ctx.toLocalPath(insertLabelBeforeExt(dbPath, t("충돌본")));
+			await ctx.writeVaultBinary(keepPath, remoteFinal ? localBin : remoteBin);
+		}
+
+		const chosen = remoteFinal ? (remoteBin ?? localBin) : (localBin ?? remoteBin);
+		if (chosen == null) {
+			ctx.logger.warn(t("첨부 충돌 해소 실패: 양쪽 바이너리가 없습니다 — {path}", { path: dbPath }));
+			return;
+		}
+
+		// 원격을 최종으로 선택하면 라이브 파일도 갱신(에코는 guard로 차단).
+		if (remoteFinal && remoteBin) {
+			ctx.guard.mark(localPath, await sha256(remoteBin));
+			await ctx.writeVaultBinary(localPath, remoteBin);
+			ctx.guard.releaseAfterDelay(localPath);
+		}
+
+		// DB collapse: 선택 바이너리를 winner 위 새 리비전으로 + 나머지 리프 제거.
+		await ctx.pouch.putAsset(await ctx.buildAssetDoc(dbPath, chosen, winner.version), chosen);
+		for (const rev of conflictRevs) {
+			try {
+				await ctx.pouch.removeRev(id, rev);
+			} catch {
+				/* 이미 제거됨 등 무시 */
+			}
+		}
+		await this.removeConflictCopy(dbPath);
+		ctx.logger.ok(t("첨부 충돌 해소({choice}): {path}", { choice, path: dbPath }), true);
 	}
 
 	// --- 내부 ---

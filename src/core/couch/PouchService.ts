@@ -184,6 +184,24 @@ export class PouchService {
 		return out;
 	}
 
+	/** _conflicts(리비전 충돌)가 있는 asset(첨부) 문서 목록. 첨부 충돌 해소 UI용. */
+	async listAssetConflicts(): Promise<Array<{ doc: AssetDoc; winnerRev: string; conflictRevs: string[] }>> {
+		const res = await this.localDb().allDocs<AssetDoc>({
+			include_docs: true,
+			conflicts: true,
+			startkey: "asset:",
+			endkey: "asset:￿",
+		});
+		const out: Array<{ doc: AssetDoc; winnerRev: string; conflictRevs: string[] }> = [];
+		for (const row of res.rows) {
+			const doc = row.doc as (AssetDoc & { _rev?: string; _conflicts?: string[] }) | undefined;
+			if (doc && Array.isArray(doc._conflicts) && doc._conflicts.length > 0) {
+				out.push({ doc, winnerRev: doc._rev ?? "", conflictRevs: doc._conflicts });
+			}
+		}
+		return out;
+	}
+
 	/** prefix로 시작하는 로컬 문서 전체(예: 피드백 feedback:<dbPath>:). */
 	async allDocsByPrefix<T extends PouchDocBase>(prefix: string): Promise<T[]> {
 		const res = await this.localDb().allDocs<T>({

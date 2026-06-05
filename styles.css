@@ -710,3 +710,60 @@
 	font-size: 11px;
 	padding: 2px 8px;
 }
+
+/* 충돌 diff 뷰 */
+.class-sync-diff-bar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 4px 0;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.class-sync-diff-ws {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: auto;
+	cursor: pointer;
+}
+
+.class-sync-diff {
+	max-height: 320px;
+	overflow: auto;
+	margin: 4px 0 0;
+	padding: 6px 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-primary);
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.class-sync-diff-line {
+	padding: 0 8px;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-family: var(--font-monospace);
+}
+
+.class-sync-diff-line.is-add {
+	background: rgba(64, 160, 64, 0.18);
+	color: var(--text-normal);
+}
+
+.class-sync-diff-line.is-remove {
+	background: rgba(200, 64, 64, 0.18);
+	color: var(--text-normal);
+}
+
+.class-sync-diff-line.is-equal {
+	color: var(--text-muted);
+}
+
+.class-sync-conflict-assetmeta {
+	font-size: 12px;
+	color: var(--text-muted);
+	margin: 4px 0;
+}

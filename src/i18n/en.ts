@@ -604,6 +604,17 @@ export const EN: Record<string, string> = {
 
 	"두 버전 보관(로컬 최종)": "Keep both (local as final)",
 	"두 버전 보관(원격 최종)": "Keep both (remote as final)",
+	"충돌본": "conflicted",
+	"첨부 충돌 해소 실패: 양쪽 바이너리가 없습니다 — {path}":
+		"Failed to resolve attachment conflict: neither side has binary data — {path}",
+	"첨부 충돌 해소({choice}): {path}": "Attachment conflict resolved ({choice}): {path}",
+	"원격본 열기": "Open remote copy",
+	"크기 미상": "size unknown",
+	"첨부파일 · {mime} · {size} (로컬 유지/원격 적용 또는 두 버전 보관)":
+		"Attachment · {mime} · {size} (keep local / apply remote / keep both)",
+	"형식 미상": "format unknown",
+	"− 로컬에만 {removed} · ＋ 원격에만 {added}": "− local only {removed} · ＋ remote only {added}",
+	"공백 차이 무시": "Ignore whitespace",
 
 	// === 삭제 파일 복구 (recovery) ===
 	"삭제 복구": "Recover deleted",
