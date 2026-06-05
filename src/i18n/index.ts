@@ -75,9 +75,20 @@ export function t(key: I18nKey, vars?: Record<string, string | number | boolean>
 	return raw.replace(/\{(\w+)\}/g, (_, n: string) => (n in vars ? String(vars[n]) : `{${n}}`));
 }
 
-/** 활성 로케일(BCP 47) 기준 날짜 포맷(Intl). 기본: 중간 길이 날짜 + 짧은 시간. */
+/**
+ * 활성 로케일(BCP 47) 기준 날짜 포맷(Intl). 기본: 날짜 + 시:분.
+ * 기본 옵션은 ES2018 DateTimeFormatOptions에 존재하는 필드만 써서 lib 버전에 무관하게 타입 안전하다
+ * (dateStyle/timeStyle는 ES2020+ 타입이라 회피).
+ */
 export function formatDate(value: number | Date, opts?: Intl.DateTimeFormatOptions): string {
-	return new Intl.DateTimeFormat(currentLocaleTag(), opts ?? { dateStyle: "medium", timeStyle: "short" }).format(value);
+	const fallback: Intl.DateTimeFormatOptions = {
+		year: "numeric",
+		month: "short",
+		day: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+	};
+	return new Intl.DateTimeFormat(currentLocaleTag(), opts ?? fallback).format(value);
 }
 
 /** 활성 로케일(BCP 47) 기준 숫자 포맷(Intl). */
