@@ -70,7 +70,8 @@ export class ConflictModal extends Modal {
 				.addButton((b) => b.setButtonText(t("비교(열기)")).onClick(() => this.host.openConflictFiles(row)))
 				.addButton((b) => b.setButtonText(t("로컬 유지")).setCta().onClick(() => this.act(row, "local")))
 				.addButton((b) => b.setButtonText(t("원격 적용")).onClick(() => this.act(row, "remote")))
-				.addButton((b) => b.setButtonText(t("두 버전 보관")).onClick(() => this.act(row, "both")));
+				.addButton((b) => b.setButtonText(t("두 버전 보관(로컬 최종)")).onClick(() => this.act(row, "both")))
+				.addButton((b) => b.setButtonText(t("두 버전 보관(원격 최종)")).onClick(() => this.act(row, "both-remote")));
 		}
 	}
 

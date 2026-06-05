@@ -3,10 +3,11 @@ import { Logger } from "../../core/log/Logger";
 import { FeedbackStore } from "../../core/feedback/FeedbackStore";
 import { ClassSyncSettings, SharedSpace } from "../../settings/types";
 import { LinkStatus } from "../../core/sync/MirrorContext";
+import { DeletedItem, RestoreResult, RestoreOptions } from "../../core/sync/RestoreManager";
 import { CopyOptions, CopyResult, CopyPlan } from "../../modes/teacher/BulkCopy";
 
 /** 통합 패널 탭 식별자. */
-export type PanelTab = "setup" | "feedback" | "deploy" | "sync" | "manage" | "log";
+export type PanelTab = "setup" | "feedback" | "deploy" | "sync" | "manage" | "recovery" | "log";
 
 /** 동기화 상태 표 한 행(링크별). */
 export interface DashboardRow extends LinkStatus {
@@ -47,6 +48,12 @@ export interface PanelHost {
 	/** 배포 미리보기(dry-run). */
 	bulkCopyPreview(sourcePath: string, opts: CopyOptions, studentIds: string[]): Promise<CopyPlan & { error?: string }>;
 	deployShared(space: SharedSpace): Promise<void>;
+	/** 모든 링크의 삭제된(tombstone) 파일 목록. 복구 패널용(보고서 §2 P1). */
+	listDeletedFiles(): Promise<DeletedItem[]>;
+	/** 삭제 파일 복구(remoteDb로 담당 링크 라우팅). */
+	restoreDeleted(remoteDb: string, dbPath: string, opts?: RestoreOptions): Promise<RestoreResult>;
+	/** 삭제 파일 영구 삭제(purge). */
+	purgeDeleted(remoteDb: string, dbPath: string): Promise<"purged" | "skipped">;
 }
 
 /** 탭 콘텐츠 렌더러. 탭 전환 시 render→dispose 로 교체된다(구독·interval은 dispose에서 해제). */

@@ -3,6 +3,7 @@ import { PouchService, ReplicationHandlers } from "../couch/PouchService";
 import { MirrorContext } from "./MirrorContext";
 import { MirrorApplier } from "./MirrorApplier";
 import { ConflictManager, ConflictInfo, ResolveChoice } from "./ConflictManager";
+import { RestoreManager, DeletedItem, RestoreResult, RestoreOptions } from "./RestoreManager";
 import { Uploader, UploadResult } from "./Uploader";
 import { LocalWatcher } from "./LocalWatcher";
 import { LocalApplier } from "./LocalApplier";
@@ -36,6 +37,7 @@ export class MirrorSync {
 	readonly ctx: MirrorContext;
 	private readonly applier: MirrorApplier;
 	private readonly conflicts: ConflictManager;
+	private readonly restorer: RestoreManager;
 	private readonly uploader: Uploader;
 	private readonly watcher: LocalWatcher;
 	private readonly localApplier: LocalApplier;
@@ -57,6 +59,7 @@ export class MirrorSync {
 		this.conflicts = new ConflictManager(this.ctx);
 		this.applier = new MirrorApplier(this.ctx, this.conflicts);
 		this.uploader = new Uploader(this.ctx);
+		this.restorer = new RestoreManager(this.ctx, this.uploader);
 		this.watcher = new LocalWatcher(this.ctx, this.uploader);
 		this.localApplier = new LocalApplier(this.ctx, this.applier, opts.onConfigChange);
 		this.fullSyncRunner = new FullSync(this.ctx, this.applier, this.uploader);
@@ -90,6 +93,17 @@ export class MirrorSync {
 
 	resolveConflict(dbPath: string, choice: ResolveChoice): Promise<void> {
 		return this.conflicts.resolve(dbPath, choice);
+	}
+
+	// --- 삭제 파일 복구 (보고서 §2 P1) ---
+	listDeleted(): Promise<DeletedItem[]> {
+		return this.restorer.listDeleted();
+	}
+	restoreDeleted(dbPath: string, opts?: RestoreOptions): Promise<RestoreResult> {
+		return this.restorer.restore(dbPath, opts);
+	}
+	purgeDeleted(dbPath: string): Promise<"purged" | "skipped"> {
+		return this.restorer.purge(dbPath);
 	}
 
 	async start(): Promise<void> {

@@ -622,3 +622,91 @@
 	color: var(--text-faint);
 	margin-right: 6px;
 }
+
+/* 삭제 파일 복구 탭 */
+.class-sync-recovery-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.class-sync-recovery-list {
+	padding: 8px 12px;
+	overflow-y: auto;
+}
+
+.class-sync-recovery-empty {
+	color: var(--text-muted);
+	font-size: 13px;
+	padding: 12px 4px;
+}
+
+.class-sync-recovery-group {
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--text-muted);
+	margin: 10px 0 2px;
+	text-transform: uppercase;
+}
+
+.class-sync-recovery-card {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 8px 10px;
+	margin: 8px 0;
+	background: var(--background-secondary);
+}
+
+.class-sync-recovery-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.class-sync-recovery-path {
+	font-weight: 600;
+	color: var(--text-normal);
+	word-break: break-all;
+}
+
+.class-sync-recovery-badge {
+	margin-left: auto;
+	padding: 1px 6px;
+	border-radius: 4px;
+	font-size: 11px;
+	font-weight: 600;
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+}
+
+.class-sync-recovery-badge.is-warn {
+	background: var(--background-modifier-error);
+	color: var(--text-on-accent);
+}
+
+.class-sync-recovery-meta {
+	font-size: 11px;
+	color: var(--text-muted);
+	margin: 4px 0;
+}
+
+.class-sync-recovery-note {
+	font-size: 12px;
+	color: var(--text-error);
+	margin: 4px 0;
+}
+
+.class-sync-recovery-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 6px;
+}
+
+.class-sync-recovery-actions button {
+	font-size: 11px;
+	padding: 2px 8px;
+}

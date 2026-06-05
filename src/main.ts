@@ -22,6 +22,7 @@ import { promptAddFeedback } from "./ui/FeedbackView";
 import { ClassSyncPanelView, PANEL_VIEW_TYPE } from "./ui/PanelView";
 import { PanelHost, PanelTab, DashboardRow } from "./ui/panel/PanelSection";
 import { MirrorSync } from "./core/sync/MirrorSync";
+import { DeletedItem, RestoreResult, RestoreOptions } from "./core/sync/RestoreManager";
 import { testConnection } from "./core/sync/connectionTest";
 import { runDiagnostics } from "./core/sync/diagnostics";
 import { CouchAdmin } from "./core/couch/CouchAdmin";
@@ -785,6 +786,31 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 
 	openConflictModal(): void {
 		new ConflictModal(this.app, this).open();
+	}
+
+	// --- 삭제 파일 복구 (보고서 §2 P1) ---
+	async listDeletedFiles(): Promise<DeletedItem[]> {
+		const out: DeletedItem[] = [];
+		for (const sync of this.mode?.getSyncs() ?? []) {
+			try {
+				out.push(...(await sync.listDeleted()));
+			} catch {
+				/* 조회 실패한 링크는 건너뜀 */
+			}
+		}
+		return out;
+	}
+
+	restoreDeleted(remoteDb: string, dbPath: string, opts?: RestoreOptions): Promise<RestoreResult> {
+		const sync = (this.mode?.getSyncs() ?? []).find((s) => s.remoteDb === remoteDb);
+		if (!sync) return Promise.resolve("unrecoverable" as RestoreResult);
+		return sync.restoreDeleted(dbPath, opts);
+	}
+
+	purgeDeleted(remoteDb: string, dbPath: string): Promise<"purged" | "skipped"> {
+		const sync = (this.mode?.getSyncs() ?? []).find((s) => s.remoteDb === remoteDb);
+		if (!sync) return Promise.resolve("skipped");
+		return sync.purgeDeleted(dbPath);
 	}
 
 	/** 통합 패널 활성화(우측 사이드바). tab을 주면 해당 탭으로 전환. */

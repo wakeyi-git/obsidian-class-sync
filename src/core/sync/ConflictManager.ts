@@ -3,7 +3,8 @@ import { NoteDoc, noteId } from "../model/types";
 import { sha256 } from "../hash/hash";
 import { t } from "../../i18n";
 
-export type ResolveChoice = "local" | "remote" | "both";
+// both = 두 버전 보관(로컬 최종), both-remote = 두 버전 보관(원격 최종).
+export type ResolveChoice = "local" | "remote" | "both" | "both-remote";
 
 export interface ConflictInfo {
 	remoteDb: string;
@@ -81,15 +82,17 @@ export class ConflictManager {
 		const live = await ctx.readVaultFile(localPath);
 		const remote = await this.pickRemoteLeaf(dbPath, winner, conflictRevs);
 
-		// "두 버전 보관": 원격을 별도 파일로 저장(동기화됨)
-		if (choice === "both" && remote) {
+		// "두 버전 보관": 최종이 아닌 쪽을 별도 파일로 저장(동기화됨).
+		// both=로컬 최종(원격을 사본으로), both-remote=원격 최종(로컬을 사본으로).
+		if ((choice === "both" || choice === "both-remote") && remote) {
+			const keepContent = choice === "both-remote" ? (live ?? winner.content) : remote.content;
 			const keepPath = ctx.toLocalPath(dbPath.replace(/\.md$/i, ` ${t("(충돌본)")}.md`));
-			await ctx.writeVaultFile(keepPath, remote.content);
+			await ctx.writeVaultFile(keepPath, keepContent);
 			ctx.logger.ok(t("충돌 두 버전 보관: {path}", { path: keepPath }));
 		}
 
-		// 확정할 내용
-		const chosen = choice === "remote" && remote ? remote.content : (live ?? winner.content);
+		// 확정할 내용(최종본)
+		const chosen = (choice === "remote" || choice === "both-remote") && remote ? remote.content : (live ?? winner.content);
 
 		// live vault 갱신 (원격 적용 시 내용이 바뀌므로 guard로 에코 차단)
 		ctx.guard.mark(localPath, await sha256(chosen));

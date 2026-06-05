@@ -601,4 +601,33 @@ export const EN: Record<string, string> = {
 	"Teacher Mode 시작 — 학생 {students}명, 공유 {shared}개": "Teacher Mode started — {students} students, {shared} shared",
 	"학생/공유 공간이 없습니다. 설정에서 추가하세요.": "No students or shared spaces. Add them in settings.",
 	"Teacher Mode 정지.": "Teacher Mode stopped.",
+
+	"두 버전 보관(로컬 최종)": "Keep both (local as final)",
+	"두 버전 보관(원격 최종)": "Keep both (remote as final)",
+
+	// === 삭제 파일 복구 (recovery) ===
+	"삭제 복구": "Recover deleted",
+	"삭제 복구: {path}": "Recovered: {path}",
+	"삭제된 파일을 원래 위치로 되돌리거나 영구 삭제합니다. 같은 이름이 있으면 ‘(복구본)’으로 복구됩니다.":
+		"Restore deleted files to their original location, or permanently delete them. If a same-named file exists, it is restored as ‘(recovered)’.",
+	"삭제된 파일이 없습니다.": "No deleted files.",
+	"첨부": "Attachment",
+	"노트": "Note",
+	"(시각 미상)": "(time unknown)",
+	"{who} {by} 삭제 · {when}": "Deleted by {who} {by} · {when}",
+	"원래 위치로 복구": "Restore to original location",
+	"첨부 원본이 없어 복구 불가(‘_삭제됨/’ 사본이 있는 기기에서 복구하세요).":
+		"Cannot recover — attachment binary is gone (restore from a device that has the ‘_삭제됨/’ copy).",
+	"복구할 내용이 없습니다.": "No content to recover.",
+	"영구 삭제": "Delete permanently",
+	"내용 열기": "Open content",
+	"복구됨: {path}": "Recovered: {path}",
+	"복구할 수 없습니다: {path}": "Cannot recover: {path}",
+	"이미 같은 파일이 있어 건너뜀: {path}": "Skipped — a same file already exists: {path}",
+	"영구 삭제: {path}": "Delete permanently: {path}",
+	"서버 DB에서 이 문서를 완전히 제거합니다. 되돌릴 수 없습니다.":
+		"Permanently removes this document from the server DB. This cannot be undone.",
+	"영구 삭제됨: {path}": "Permanently deleted: {path}",
+	"미리볼 사본이 없습니다. ‘원래 위치로 복구’ 후 확인하세요.":
+		"No copy to preview. Restore to original location first, then check.",
 };

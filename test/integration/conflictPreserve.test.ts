@@ -69,5 +69,13 @@ describe("충돌 보존 (preserve-local)", () => {
 		// 원격(라이브와 다른) 리프를 _충돌/에 보존
 		const conflictPath = b.ctx.conflictLocalPath("c.md");
 		expect(b.vault.textOf(conflictPath)).toBe("A-edit2");
+
+		// 해소: '두 버전 보관(원격 최종)' → 로컬을 사본으로 보존하고 원격을 최종본으로.
+		await b.conflicts.resolve("c.md", "both-remote");
+		expect(b.vault.textOf("c.md")).toBe("A-edit2"); // 최종 = 원격
+		expect(b.vault.textOf("c (충돌본).md")).toBe("B-edit"); // 로컬 사본 보존
+		// _conflicts collapse 확인
+		const after = await b.ctx.pouch.getWithConflicts<any>(noteId("c.md"));
+		expect(after?._conflicts ?? []).toHaveLength(0);
 	});
 });
