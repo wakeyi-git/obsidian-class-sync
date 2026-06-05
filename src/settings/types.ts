@@ -129,6 +129,13 @@ export interface ClassSyncSettings {
 	 * 0/미설정 = 자동(max(5, manifest의 50%)). 의도적으로 많은 파일을 삭제했다면 값을 올린다.
 	 */
 	deleteReconcileMax?: number;
+
+	/** 사용자용 버전 히스토리(마크다운 스냅샷) 사용 여부. 보고서 §1 P1. */
+	versionHistory?: boolean;
+	/** 파일당 최대 보존 버전 수(0=무제한 아님, 기본 10). */
+	versionMaxCount?: number;
+	/** 버전 최대 보존 일수(기본 30). 최근 N개 또는 N일 합집합으로 유지. */
+	versionMaxAgeDays?: number;
 }
 
 export const DEFAULT_SETTINGS: ClassSyncSettings = {
@@ -162,6 +169,9 @@ export const DEFAULT_SETTINGS: ClassSyncSettings = {
 	conflictPolicy: "preserve-local",
 	deletePolicy: "archive",
 	deleteReconcileMax: 0,
+	versionHistory: true,
+	versionMaxCount: 10,
+	versionMaxAgeDays: 30,
 	realtimeEnabled: false,
 	yjsServerUrl: "",
 	yjsToken: "",

@@ -64,6 +64,7 @@ export class Uploader {
 
 		const doc = await ctx.buildNoteDoc(dbPath, content, existing?.version ?? 0);
 		await ctx.pouch.put(doc);
+		await ctx.versions.snapshot(dbPath, content, "modify", doc.version); // 버전 히스토리(편집 시점)
 		this.markUploaded(dbPath);
 		return "uploaded";
 	}
@@ -121,6 +122,11 @@ export class Uploader {
 		const id = ctx.isMarkdown(dbPath) ? noteId(dbPath) : assetId(dbPath);
 		const existing = await ctx.pouch.get<NoteDoc | AssetDoc>(id);
 		if (!existing || existing.deleted) return "skipped";
+
+		// 삭제 직전 내용을 버전 히스토리에 보존(마크다운).
+		if (ctx.isMarkdown(dbPath) && (existing as NoteDoc).content != null) {
+			await ctx.versions.snapshot(dbPath, (existing as NoteDoc).content, "delete", existing.version ?? 0);
+		}
 
 		const now = Date.now();
 		const doc: any = {

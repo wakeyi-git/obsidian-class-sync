@@ -1,6 +1,6 @@
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { ClassSyncSettings, DEFAULT_SETTINGS, Role, StudentConfig, SharedSpace } from "./settings/types";
-import { SHARES_DOC_ID, RTCONFIG_DOC_ID } from "./core/model/types";
+import { SHARES_DOC_ID, RTCONFIG_DOC_ID, VersionDoc } from "./core/model/types";
 import { ClassSyncSettingTab, SettingsHost } from "./settings/SettingsTab";
 import { Logger } from "./core/log/Logger";
 import { CoreServices } from "./core/CoreServices";
@@ -11,6 +11,7 @@ import { TFile, TFolder } from "obsidian";
 import { RoleSetupModal } from "./ui/RoleSetupModal";
 import { InviteModal } from "./ui/InviteModal";
 import { ConflictModal, ConflictRow, ConflictHost } from "./ui/ConflictModal";
+import { VersionHistoryModal } from "./ui/VersionHistoryModal";
 import { ResolveChoice } from "./core/sync/ConflictManager";
 import { BulkCopy, CopyOptions, CopyResult, CopyPlan } from "./modes/teacher/BulkCopy";
 import { RealtimeManager } from "./core/realtime/RealtimeManager";
@@ -688,6 +689,29 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			name: t("공유 공간 새로고침"),
 			callback: () => this.refreshShares(),
 		});
+		this.addCommand({
+			id: "class-sync-version-history",
+			name: t("버전 기록 열기"),
+			checkCallback: (checking: boolean) => {
+				const file = this.app.workspace.getActiveFile();
+				const ok = !!file && file.extension === "md" && !!this.syncForLocalPath(file.path);
+				if (ok && !checking) new VersionHistoryModal(this.app, this, file!.path).open();
+				return ok;
+			},
+		});
+	}
+
+	// --- 버전 히스토리 (보고서 §1 P1) ---
+	async versionHistoryFor(localPath: string): Promise<VersionDoc[]> {
+		const sync = this.syncForLocalPath(localPath);
+		if (!sync) return [];
+		const dbPath = sync.ctx.toDbPath(localPath);
+		return dbPath ? sync.listVersions(dbPath) : [];
+	}
+
+	restoreVersion(localPath: string, versionDocId: string, opts: { backupCurrent?: boolean }): Promise<"restored" | "missing"> {
+		const sync = this.syncForLocalPath(localPath);
+		return sync ? sync.restoreVersion(versionDocId, opts) : Promise.resolve("missing");
 	}
 
 	// --- 패널 버튼/명령 공용 동작 (PanelHost) ---

@@ -775,3 +775,30 @@
 	color: var(--text-muted);
 	margin: 4px 0;
 }
+
+/* 버전 히스토리 */
+.class-sync-version-list {
+	max-height: 60vh;
+	overflow-y: auto;
+}
+
+.class-sync-version-card {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 4px 10px;
+	margin: 8px 0;
+	background: var(--background-secondary);
+}
+
+.class-sync-version-preview {
+	max-height: 280px;
+	overflow: auto;
+	margin: 4px 0 8px;
+	padding: 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-primary);
+	font-size: 12px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}

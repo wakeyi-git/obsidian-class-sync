@@ -565,6 +565,48 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 
 		g.addSetting((set) =>
 			set
+				.setName(t("버전 히스토리"))
+				.setDesc(t("마크다운 편집·삭제·충돌 해소 시점의 내용을 스냅샷으로 저장해 ‘버전 기록 열기’ 명령으로 되돌릴 수 있습니다(서버에 저장·복제)."))
+				.addToggle((tg) =>
+					tg.setValue(s.versionHistory !== false).onChange(async (v) => {
+						s.versionHistory = v;
+						await this.host.saveSettings();
+					}),
+				),
+		);
+
+		g.addSetting((set) =>
+			set
+				.setName(t("버전 보존 개수"))
+				.setDesc(t("파일당 보존할 최대 버전 수(기본 10). ‘최근 N개 또는 N일’ 중 하나라도 만족하면 유지합니다."))
+				.addText((txt) => {
+					txt.setPlaceholder("10").setValue(String(s.versionMaxCount ?? 10));
+					txt.inputEl.type = "number";
+					txt.onChange(async (v) => {
+						const n = parseInt(v, 10);
+						s.versionMaxCount = Number.isFinite(n) && n > 0 ? n : 10;
+						await this.host.saveSettings();
+					});
+				}),
+		);
+
+		g.addSetting((set) =>
+			set
+				.setName(t("버전 보존 일수"))
+				.setDesc(t("이 기간 안의 버전은 개수를 넘어도 보존합니다(기본 30일)."))
+				.addText((txt) => {
+					txt.setPlaceholder("30").setValue(String(s.versionMaxAgeDays ?? 30));
+					txt.inputEl.type = "number";
+					txt.onChange(async (v) => {
+						const n = parseInt(v, 10);
+						s.versionMaxAgeDays = Number.isFinite(n) && n > 0 ? n : 30;
+						await this.host.saveSettings();
+					});
+				}),
+		);
+
+		g.addSetting((set) =>
+			set
 				.setName(t("보관 폴더"))
 				.setDesc(t("‘보관 폴더로 이동’ 정책에서 삭제 파일이 모이며, 여기서 지우면 DB에서도 영구 삭제됩니다."))
 				.addText((txt) =>

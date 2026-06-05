@@ -126,6 +126,7 @@ export class RestoreManager {
 		await ctx.writeVaultFile(target, content);
 		ctx.guard.releaseAfterDelay(target);
 		await ctx.pouch.put(fresh);
+		await ctx.versions.snapshot(targetDb, content, "restore", fresh.version); // 복구 시점 버전 기록
 	}
 
 	/** DB 문서 영구 삭제(purge). */

@@ -120,6 +120,10 @@ export class ConflictManager {
 		const live = await ctx.readVaultFile(localPath);
 		const remote = await this.pickRemoteLeaf(dbPath, winner, conflictRevs);
 
+		// 충돌 해소 직전 로컬·원격 내용을 버전 히스토리에 보존(잘못 해소해도 되돌릴 수 있게).
+		if (live != null) await ctx.versions.snapshot(dbPath, live, "conflict", winner.version);
+		if (remote) await ctx.versions.snapshot(dbPath, remote.content, "conflict", winner.version);
+
 		// "두 버전 보관": 최종이 아닌 쪽을 별도 파일로 저장(동기화됨).
 		// both=로컬 최종(원격을 사본으로), both-remote=원격 최종(로컬을 사본으로).
 		if ((choice === "both" || choice === "both-remote") && remote) {

@@ -61,6 +61,36 @@ export function assetId(dbPath: string): string {
 	return `asset:${dbPath}`;
 }
 
+/** 사용자용 버전 히스토리 스냅샷(마크다운 전용). 보고서 §1 P1. 링크 DB에 저장되어 복제된다. */
+export type VersionKind = "modify" | "delete" | "conflict" | "restore";
+
+export interface VersionDoc extends PouchDocBase {
+	type: "version";
+	schemaVersion: number;
+	classId: string;
+	studentId: string;
+	path: string; // dbPath
+	versionOf: number; // 스냅샷이 담은 note.version
+	content: string;
+	contentHash: string;
+	kind: VersionKind;
+	createdAt: string; // ISO
+	createdAtMs: number;
+	createdBy: string;
+	role: "student" | "teacher";
+	deviceId: string;
+}
+
+/** 버전 문서 id: version:<dbPath>:<14자리 0패딩 ms>. prefix 조회·사전식 정렬 가능. */
+export function versionId(dbPath: string, createdAtMs: number): string {
+	return `version:${dbPath}:${String(createdAtMs).padStart(14, "0")}`;
+}
+
+/** 한 파일의 버전 문서 prefix(allDocsByPrefix용). */
+export function versionPrefix(dbPath: string): string {
+	return `version:${dbPath}:`;
+}
+
 /** 학생이 속한 공유 공간 목록. 교사가 학생 개인 mirror DB에 기록 → 학생이 자동으로 공유 링크 생성. */
 export interface SharesDoc extends PouchDocBase {
 	type: "shares";

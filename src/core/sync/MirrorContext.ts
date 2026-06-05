@@ -4,6 +4,7 @@ import { PouchService } from "../couch/PouchService";
 import { NoteDoc, AssetDoc, assetId } from "../model/types";
 import { sha256 } from "../hash/hash";
 import { dbPathToLocal, localPathToDb, normalizePath, validateVaultPath, insertLabelBeforeExt } from "../path/path";
+import { VersionStore } from "./VersionStore";
 import { t } from "../../i18n";
 
 /** 파일명에 쓸 수 없는 문자를 _로 치환. */
@@ -29,6 +30,9 @@ export interface LinkStatus {
 export class MirrorContext {
 	/** 이 링크의 실시간 상태(대시보드용). 컴포넌트들이 직접 갱신한다. */
 	readonly status: LinkStatus = { state: "idle" };
+
+	/** 사용자용 버전 히스토리(마크다운 스냅샷). 보고서 §1 P1. */
+	readonly versions: VersionStore = new VersionStore(this);
 
 	constructor(
 		public readonly core: CoreServices,

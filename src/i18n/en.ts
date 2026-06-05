@@ -661,4 +661,31 @@ export const EN: Record<string, string> = {
 	"목록에서 지우기": "Remove from list",
 	"되돌림: {path}": "Undone: {path}",
 	"되돌릴 수 없습니다: {path}": "Cannot undo: {path}",
+
+	// === 버전 히스토리 (Phase 4) ===
+	"버전 스냅샷 기록 실패: {path} — {err}": "Failed to record version snapshot: {path} — {err}",
+	"버전 복원: {path}": "Version restored: {path}",
+	"버전 기록 열기": "Open version history",
+	"버전 히스토리": "Version history",
+	"마크다운 편집·삭제·충돌 해소 시점의 내용을 스냅샷으로 저장해 ‘버전 기록 열기’ 명령으로 되돌릴 수 있습니다(서버에 저장·복제).":
+		"Snapshots markdown content on edit/delete/conflict-resolution so you can restore via the ‘Open version history’ command (stored and replicated on the server).",
+	"버전 보존 개수": "Versions to keep",
+	"파일당 보존할 최대 버전 수(기본 10). ‘최근 N개 또는 N일’ 중 하나라도 만족하면 유지합니다.":
+		"Max versions kept per file (default 10). Kept if within either ‘last N versions’ or ‘last N days’.",
+	"버전 보존 일수": "Days to keep versions",
+	"이 기간 안의 버전은 개수를 넘어도 보존합니다(기본 30일).":
+		"Versions within this period are kept even beyond the count limit (default 30 days).",
+	"수정": "Edit",
+	"삭제 직전": "Before delete",
+	"충돌 해소 직전": "Before conflict resolution",
+	"복구": "Restore",
+	"버전 기록": "Version history",
+	"저장된 버전이 없습니다. (편집·삭제·충돌 해소 시 기록됩니다.)":
+		"No saved versions. (Recorded on edit / delete / conflict resolution.)",
+	"{kind} · {who} {by} · {device}": "{kind} · {who} {by} · {device}",
+	"미리보기 닫기": "Close preview",
+	"이 버전으로 복원": "Restore this version",
+	"현재 백업 후 복원": "Back up current, then restore",
+	"버전 복원됨: {when}": "Version restored: {when}",
+	"복원할 수 없습니다.": "Cannot restore.",
 };

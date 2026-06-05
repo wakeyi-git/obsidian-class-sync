@@ -6,6 +6,7 @@ import { ConflictManager, ConflictInfo, ResolveChoice } from "./ConflictManager"
 import { RestoreManager, DeletedItem, RestoreResult, RestoreOptions, DeleteModifyChoice } from "./RestoreManager";
 import { PurgeSnapshot } from "./recentPurge";
 import { DeleteModifyItem } from "./deleteModifyQueue";
+import { VersionDoc } from "../model/types";
 import { Uploader, UploadResult } from "./Uploader";
 import { LocalWatcher } from "./LocalWatcher";
 import { LocalApplier } from "./LocalApplier";
@@ -123,6 +124,14 @@ export class MirrorSync {
 	}
 	resolveDeleteModify(dbPath: string, choice: DeleteModifyChoice): Promise<void> {
 		return this.restorer.resolveDeleteModify(dbPath, choice);
+	}
+
+	// --- 버전 히스토리 (보고서 §1 P1) ---
+	listVersions(dbPath: string): Promise<VersionDoc[]> {
+		return this.ctx.versions.list(dbPath);
+	}
+	restoreVersion(versionDocId: string, opts: { backupCurrent?: boolean }): Promise<"restored" | "missing"> {
+		return this.ctx.versions.restoreVersion(versionDocId, opts);
 	}
 
 	async start(): Promise<void> {
