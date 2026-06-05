@@ -29,6 +29,9 @@ export class ExcalidrawBinding {
 	private onPointerMove: ((e: PointerEvent) => void) | null = null;
 	private lastSent = 0;
 	private touchTimer: ReturnType<typeof setTimeout> | null = null;
+	private touchDownX = 0;
+	private touchDownY = 0;
+	private touchDragging = false;
 	private chips: PresenceChips | null = null;
 
 	constructor(
@@ -56,26 +59,53 @@ export class ExcalidrawBinding {
 				const pt = this.toScene(clientX, clientY);
 				if (pt) this.inner.onPointerUpdate({ pointer: { x: pt.x, y: pt.y, tool: "pointer" }, button: "up" });
 			};
-			this.onPointerMove = (e: PointerEvent) => {
-				if (e.pointerType && e.pointerType !== "mouse") {
-					// 터치/펜(태블릿·모바일): onPointerUpdate→awareness 변경→y-excalidraw가 매번
-					// updateScene({collaborators})로 재렌더하는데, 더블탭 사이에 끼면 제스처가 리셋돼
-					// 텍스트 입력이 안 된다. 더블탭 윈도우(~300ms)를 지난 뒤에만 갱신하는 트레일링 디바운스로,
-					// 제스처는 방해하지 않으면서 터치한 위치에 포인터·이름은 표시한다.
-					const { clientX, clientY } = e;
-					if (this.touchTimer) clearTimeout(this.touchTimer);
-					this.touchTimer = setTimeout(() => {
-						this.touchTimer = null;
-						broadcast(clientX, clientY);
-					}, 350);
-					return;
-				}
+			const throttledBroadcast = (clientX: number, clientY: number): void => {
 				const now = Date.now();
 				if (now - this.lastSent < 40) return;
 				this.lastSent = now;
-				broadcast(e.clientX, e.clientY);
+				broadcast(clientX, clientY);
 			};
-			// pointerdown도 함께 받아 정지 탭(이동 없는 터치)도 위치를 잡는다.
+			const scheduleTrailing = (clientX: number, clientY: number): void => {
+				if (this.touchTimer) clearTimeout(this.touchTimer);
+				this.touchTimer = setTimeout(() => {
+					this.touchTimer = null;
+					broadcast(clientX, clientY);
+				}, 350);
+			};
+			const DRAG_THRESHOLD = 10; // px — 이 거리를 넘으면 드래그/스와이프로 보고 즉시 브로드캐스트
+			this.onPointerMove = (e: PointerEvent) => {
+				if (e.pointerType && e.pointerType !== "mouse") {
+					// 터치/펜(태블릿·모바일). onPointerUpdate→awareness 변경→y-excalidraw가 매번
+					// updateScene({collaborators})로 재렌더하는데, 더블탭 두 탭 사이에 끼면 제스처가 리셋돼
+					// 텍스트 입력이 안 된다. 그래서:
+					//  - 드래그/스와이프(시작점에서 일정 거리 이상 이동) → 즉시(throttle) 브로드캐스트(끊김 없음).
+					//  - 탭 범위의 미세 이동 → 더블탭 윈도우(~300ms)를 지난 뒤 갱신하는 트레일링 디바운스(제스처 보존).
+					if (e.type === "pointerdown") {
+						this.touchDownX = e.clientX;
+						this.touchDownY = e.clientY;
+						this.touchDragging = false;
+						scheduleTrailing(e.clientX, e.clientY); // 이동 없는 정지 탭도 위치를 잡는다
+						return;
+					}
+					if (!this.touchDragging) {
+						const dx = e.clientX - this.touchDownX;
+						const dy = e.clientY - this.touchDownY;
+						if (dx * dx + dy * dy > DRAG_THRESHOLD * DRAG_THRESHOLD) this.touchDragging = true;
+					}
+					if (this.touchDragging) {
+						if (this.touchTimer) {
+							clearTimeout(this.touchTimer);
+							this.touchTimer = null;
+						}
+						throttledBroadcast(e.clientX, e.clientY);
+					} else {
+						scheduleTrailing(e.clientX, e.clientY);
+					}
+					return;
+				}
+				throttledBroadcast(e.clientX, e.clientY);
+			};
+			// pointerdown도 함께 받아 정지 탭(이동 없는 터치)의 시작점/위치를 잡는다.
 			this.containerEl.addEventListener("pointermove", this.onPointerMove, { passive: true });
 			this.containerEl.addEventListener("pointerdown", this.onPointerMove, { passive: true });
 		}
