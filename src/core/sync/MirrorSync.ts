@@ -150,12 +150,11 @@ export class MirrorSync {
 		}
 		this.ctx.status.state = "syncing";
 
-		// 실시간 동기화를 켜기 전에, vault의 미반영 편집을 먼저 로컬 DB로 올린다.
-		// (앱이 꺼져 있거나 autoSync가 꺼진 동안 생긴 편집 포함.)
-		// 이래야 들어오는 원격 변경과 PouchDB 충돌(_conflicts)이 제대로 생겨,
-		// 로컬 편집이 원격 버전에 덮이지 않는다. 기술문서 §17.2.
+		// 실시간 동기화를 켜기 전에 시작 정합을 수행한다(기술문서 §17.2).
+		// 미반영 로컬 편집을 먼저 올리되, 삭제 정합은 pull 이후에만 해서 다른 기기의 원격 수정을
+		// stale tombstone으로 밀지 않는다(run("up")의 조기 tombstone 문제 회피).
 		try {
-			await this.fullSyncRunner.run("up");
+			await this.fullSyncRunner.runStartup();
 		} catch (e) {
 			this.ctx.logger.error(
 				t("시작 시 업로드 정합 실패: {err}", { err: e instanceof Error ? e.message : String(e) }),

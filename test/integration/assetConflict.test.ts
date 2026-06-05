@@ -69,4 +69,46 @@ describe("첨부 충돌 (asset conflict)", () => {
 		const after = await b.ctx.pouch.getWithConflicts<any>(assetId("img/p.png"));
 		expect(after?._conflicts ?? []).toHaveLength(0);
 	});
+
+	// 로컬 branch가 winner가 되는 경우: _충돌/에 보존되는 '원격본'이 실제 원격 바이너리여야 한다(보고서 P1).
+	async function makeLocalWinsConflict() {
+		cluster = new Cluster();
+		const a = cluster.device({ deviceId: "a", role: "teacher", remoteDb: "mirror_s1" });
+		const b = cluster.device({ deviceId: "b", role: "student", remoteDb: "mirror_s1" });
+
+		a.vault.seedBinary("img/p.png", buf("BASE"));
+		await a.uploader.uploadPath("img/p.png");
+		await a.push();
+		await b.pull();
+
+		// a: 1회 수정(gen2, 원격본)
+		a.vault.seedBinary("img/p.png", buf("A-remote"));
+		await a.uploader.uploadPath("img/p.png");
+		await a.push();
+
+		// b: 2회 수정(gen3)으로 b(로컬)가 winner가 되도록
+		b.vault.seedBinary("img/p.png", buf("B1"));
+		await b.uploader.uploadPath("img/p.png");
+		b.vault.seedBinary("img/p.png", buf("B-local-final"));
+		await b.uploader.uploadPath("img/p.png");
+
+		await b.pull(); // a gen2 vs b gen3 → b(로컬)가 winner
+		const doc = await b.ctx.pouch.getWithConflicts<any>(assetId("img/p.png"));
+		expect(doc?._conflicts?.length).toBeGreaterThan(0);
+		await b.applier.applyAsset(doc);
+		return { b };
+	}
+
+	it("로컬이 winner여도 _충돌/에 보존되는 건 실제 원격(A) 바이너리", async () => {
+		const { b } = await makeLocalWinsConflict();
+		const conflictPath = b.ctx.conflictLocalPath("img/p.png");
+		// 수정 전이라면 winner(=로컬 B-local-final)가 저장돼 버그. 수정 후엔 원격 A-remote.
+		expect(bytes(await b.ctx.readVaultBinary(conflictPath))).toEqual(bytes(buf("A-remote")));
+	});
+
+	it("로컬 winner 상태에서 '원격 적용' → live가 실제 원격 바이너리로 바뀜", async () => {
+		const { b } = await makeLocalWinsConflict();
+		await b.conflicts.resolve("img/p.png", "remote");
+		expect(bytes(await b.ctx.readVaultBinary("img/p.png"))).toEqual(bytes(buf("A-remote")));
+	});
 });

@@ -82,6 +82,32 @@ export class FullSync {
 		ctx.logger.ok(t("전체 동기화 완료 ({direction}).", { direction }), true);
 	}
 
+	/**
+	 * 자동 시작 정합. MirrorSync.start가 live replication 직전에 호출한다.
+	 *
+	 * run("up")과 달리 **삭제 정합 전에 pull을 먼저** 해서, 오프라인 동안 다른 기기가 수정한 파일을
+	 * stale tombstone으로 push하지 않는다(보고서 P1). 흐름: 로컬 업로드 → pull → reconcile(최신 기준) → push.
+	 * vault 반영(download)은 이후 live replication + LocalApplier가 증분으로 담당하므로 생략한다.
+	 */
+	async runStartup(): Promise<void> {
+		const ctx = this.ctx;
+		ctx.logger.info(t("시작 정합 — {db}", { db: ctx.remoteDb }));
+		const baseline = await loadManifest(ctx.pouch);
+
+		await this.upload(); // 미반영 로컬 편집을 먼저 로컬 DB로(원격 변경과 _conflicts가 제대로 생기도록)
+		try {
+			const pulled = await ctx.pouch.replicatePullOnce(); // 최신 원격을 먼저 받아 stale 판단 방지
+			await this.reconcileDeletions(baseline);
+			const pushed = await ctx.pouch.replicatePushOnce();
+			ctx.logger.info(t("시작 정합 완료: ↑{pushed} ↓{pulled} 문서", { pushed, pulled }));
+		} catch (e) {
+			ctx.logger.error(t("시작 정합 실패: {err}", { err: e instanceof Error ? e.message : String(e) }), true);
+		}
+
+		await this.writeManifestSnapshot();
+		await ctx.core.flushPersist();
+	}
+
 	private async download(): Promise<void> {
 		const ctx = this.ctx;
 		let applied = 0;

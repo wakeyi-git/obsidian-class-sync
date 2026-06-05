@@ -6,7 +6,7 @@ import { StudentBulkImportModal } from "../ui/StudentBulkImportModal";
 import { validateFolderName, foldersOverlap } from "../core/path/path";
 import { validateSettings, SettingsIssue } from "./validateSettings";
 import { sharedSpaceStatus } from "./sharedSpaceStatus";
-import { getSecretValue, setSecretValue, YJS_SECRET_ID, YJS_TOKEN_ID } from "../core/secret";
+import { getSecretValue, setSecretValue, YJS_SECRET_ID, YJS_TOKEN_ID, COUCH_PASSWORD_ID } from "../core/secret";
 import { t } from "../i18n";
 
 // SettingGroup.listEl은 Obsidian 런타임에 1.11.0부터 존재하지만(공식 @since 1.11.0),
@@ -769,8 +769,15 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		const s = this.host.settings;
 		group.addSetting((set) =>
 			set.setName(t("관리자 비밀번호")).addText((txt) => {
-				txt.setPlaceholder("********").setValue(s.password).onChange(async (v) => {
-					s.password = v;
+				// Secret Storage 우선 저장(평문 data.json 회피), 미지원 환경만 평문 폴백.
+				txt.setPlaceholder("********").setValue(getSecretValue(this.host.app, COUCH_PASSWORD_ID, s.password)).onChange(async (v) => {
+					const val = v.trim();
+					if (setSecretValue(this.host.app, COUCH_PASSWORD_ID, val)) {
+						s.passwordSet = true;
+						s.password = "";
+					} else {
+						s.password = val;
+					}
 					await this.host.saveSettings();
 				});
 				txt.inputEl.type = "password";

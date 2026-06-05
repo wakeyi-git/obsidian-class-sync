@@ -112,6 +112,8 @@ export interface ClassSyncSettings {
 	/** 비밀값이 secretStorage에 저장됐는지 표시(평문 아님, data.json에 안전). UI/검증용. */
 	yjsSecretSet?: boolean;
 	yjsTokenSet?: boolean;
+	/** CouchDB 비밀번호가 Secret Storage로 이전됨(평문 비움). UI 표시용. */
+	passwordSet?: boolean;
 	/** 공간 토큰 만료(일). 0/미설정=무만료. 주기적 재배포로 폐기하려면 값을 둔다. */
 	yjsTokenTtlDays?: number;
 

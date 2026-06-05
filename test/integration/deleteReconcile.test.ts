@@ -2,6 +2,7 @@
 // 보고서 권장: 신규/빈 vault에서 서버 문서가 삭제로 오판되지 않는지 / 오프라인 삭제가 manifest 기준으로만 tombstone 되는지.
 import { describe, it, expect, afterEach } from "vitest";
 import { Cluster } from "../harness/env";
+import { listDeleteModify } from "../../src/core/sync/deleteModifyQueue";
 
 describe("삭제 정합 (delete reconcile)", () => {
 	let cluster: Cluster;
@@ -91,5 +92,29 @@ describe("삭제 정합 (delete reconcile)", () => {
 
 		// rev가 기준선과 달라졌으므로 보존되어야 한다(tombstone 금지).
 		expect((await a.note("x.md"))?.deleted).toBe(false);
+	});
+
+	it("시작 정합(runStartup)은 pull 후 정합 — 다른 기기 수정분을 stale tombstone하지 않음", async () => {
+		cluster = new Cluster();
+		const a = cluster.device({ deviceId: "a", role: "teacher", remoteDb: "mirror_s1" });
+		const b = cluster.device({ deviceId: "b", role: "student", remoteDb: "mirror_s1" });
+
+		a.vault.seed("x.md", "v1");
+		await a.sync("both"); // a 기준선(R1)
+
+		// 다른 기기 b가 원격에서 R2로 수정(a는 아직 pull 안 함)
+		await b.pull();
+		b.vault.seed("x.md", "v2");
+		await b.uploader.uploadPath("x.md");
+		await b.push();
+
+		// a는 오프라인 동안 로컬에서만 삭제(아직 R2 미수신)
+		await a.vault.delete(a.vault.getAbstractFileByPath("x.md") as any);
+
+		// 자동 시작 경로: pull 먼저 → reconcile → stale tombstone 방지.
+		await a.fullSync.runStartup();
+
+		expect((await a.note("x.md"))?.deleted).toBe(false); // tombstone 안 됨
+		expect((await listDeleteModify(a.ctx.pouch)).map((e) => e.dbPath)).toContain("x.md"); // 삭제/수정 충돌로 보존
 	});
 });

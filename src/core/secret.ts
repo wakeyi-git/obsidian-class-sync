@@ -8,6 +8,22 @@ import { App, SecretStorage } from "obsidian";
 
 export const YJS_SECRET_ID = "class-sync-yjs-secret";
 export const YJS_TOKEN_ID = "class-sync-yjs-token";
+/** 활성 CouchDB 계정 비밀번호(교사 admin / 학생 본인). replication·프로비저닝에 사용. */
+export const COUCH_PASSWORD_ID = "class-sync-couch-password";
+
+/** 학생별 비밀번호 Secret Storage 키(교사 보유분). id는 소문자-영숫자-대시로 정규화. */
+export function studentPasswordId(studentId: string): string {
+	const safe = studentId.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+	return `class-sync-student-pw-${safe}`;
+}
+
+export function getStudentPassword(app: App, studentId: string, fallback: string | undefined): string {
+	return getSecretValue(app, studentPasswordId(studentId), fallback);
+}
+
+export function setStudentPassword(app: App, studentId: string, password: string): boolean {
+	return setSecretValue(app, studentPasswordId(studentId), password);
+}
 
 function store(app: App): SecretStorage | undefined {
 	return app.secretStorage as SecretStorage | undefined;

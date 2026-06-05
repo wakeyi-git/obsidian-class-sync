@@ -25,8 +25,8 @@ git push origin 0.8.0
 > 태그는 반드시 **`v` 없이** 버전 숫자만 사용(예: `0.8.0`). Obsidian이 자산을 그 태그에서 찾는다.
 > `main.js`는 `.gitignore`에 있으므로 저장소에 커밋하지 않고 릴리스 자산으로만 배포한다(표준 패턴).
 
-수동으로 만들 경우: `npm install && npm run build` 후 GitHub 릴리스를 만들어
-`main.js`, `manifest.json`, `styles.css` 세 파일을 자산으로 첨부한다.
+수동으로 만들 경우: `npm ci && npm run build` 후 GitHub 릴리스를 만들어
+`main.js`, `manifest.json`, `styles.css` 세 파일을 자산으로 첨부한다(자동 workflow와 동일하게 `npm ci`로 lockfile 재현성 확보).
 
 ## 3. 최초 1회: 커뮤니티 목록 등록 PR
 

@@ -3,6 +3,7 @@ import { ClassSyncSettings } from "../settings/types";
 import { Logger } from "./log/Logger";
 import { RemoteApplyGuard } from "./guard/RemoteApplyGuard";
 import { PouchService } from "./couch/PouchService";
+import { getSecretValue, COUCH_PASSWORD_ID } from "./secret";
 
 /**
  * 역할 공통 core 서비스. 기술문서 §3 / §23.2.
@@ -40,7 +41,9 @@ export class CoreServices {
 	createPouch(dbName?: string): PouchService {
 		const s = this.settings;
 		const db = dbName ?? s.remoteDb;
-		return new PouchService(s.couchdbUrl, db, s.username, s.password, this.localDbName(db));
+		// 비밀번호는 Secret Storage 우선, 미지원 환경은 평문 폴백.
+		const password = getSecretValue(this.app, COUCH_PASSWORD_ID, s.password);
+		return new PouchService(s.couchdbUrl, db, s.username, password, this.localDbName(db));
 	}
 
 	/**

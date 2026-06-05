@@ -16,7 +16,16 @@ import { ResolveChoice } from "./core/sync/ConflictManager";
 import { BulkCopy, CopyOptions, CopyResult, CopyPlan } from "./modes/teacher/BulkCopy";
 import { RealtimeManager } from "./core/realtime/RealtimeManager";
 import { mintSpaceToken } from "./core/realtime/spaceToken";
-import { getSecretValue, setSecretValue, hasSecretStorage, YJS_SECRET_ID, YJS_TOKEN_ID } from "./core/secret";
+import {
+	getSecretValue,
+	setSecretValue,
+	hasSecretStorage,
+	YJS_SECRET_ID,
+	YJS_TOKEN_ID,
+	COUCH_PASSWORD_ID,
+	getStudentPassword,
+	setStudentPassword,
+} from "./core/secret";
 import { realtimeEditorExtension } from "./core/realtime/editorBinding";
 import { FeedbackStore } from "./core/feedback/FeedbackStore";
 import { promptAddFeedback } from "./ui/FeedbackView";
@@ -57,6 +66,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		await this.loadSettings();
 		initI18n(this.settings.language); // 모든 t() 이전에 로케일 확정
 		this.migrateSecrets(); // 평문 yjsSecret/yjsToken을 Secret Storage로 1회 이전(교사)
+		this.migrateCouchPassword(); // 평문 CouchDB 비밀번호(활성 + 학생별)를 Secret Storage로 1회 이전
 
 		this.core = new CoreServices(this.app, this.settings, this.logger);
 		this.core.save = () => this.saveData(this.settings);
@@ -137,6 +147,32 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			changed = true;
 		}
 		if (changed) void this.saveSettings();
+	}
+
+	/** 평문 CouchDB 비밀번호를 Secret Storage로 1회 이전(교사 admin/학생 본인 + 교사 보유 학생별). data.json 평문 제거. */
+	private migrateCouchPassword(): void {
+		if (!hasSecretStorage(this.app)) return;
+		const s = this.settings;
+		let changed = false;
+		if (s.password) {
+			if (setSecretValue(this.app, COUCH_PASSWORD_ID, s.password)) {
+				s.passwordSet = true;
+				s.password = "";
+				changed = true;
+			}
+		}
+		for (const st of s.students) {
+			if (st.password && st.studentId && setStudentPassword(this.app, st.studentId, st.password)) {
+				st.password = undefined;
+				changed = true;
+			}
+		}
+		if (changed) void this.saveSettings();
+	}
+
+	/** 활성 CouchDB 비밀번호(Secret Storage 우선, 평문 폴백). */
+	private couchPassword(): string {
+		return getSecretValue(this.app, COUCH_PASSWORD_ID, this.settings.password);
 	}
 
 	async saveSettings(): Promise<void> {
@@ -237,7 +273,8 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	async inviteStudent(student: StudentConfig): Promise<boolean> {
 		await this.activatePanel("log");
 		const s = this.settings;
-		if (!s.couchdbUrl || !s.username || !s.password) {
+		const adminPw = this.couchPassword();
+		if (!s.couchdbUrl || !s.username || !adminPw) {
 			this.logger.warn(t("관리자 계정(CouchDB URL/사용자/비밀번호)을 먼저 입력하세요."), true);
 			return false;
 		}
@@ -249,19 +286,24 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		if (!student.username) student.username = student.studentId;
 		if (!student.remoteDb) student.remoteDb = `mirror_${student.studentId}`;
 		if (!student.localRoot) student.localRoot = student.studentName || student.studentId;
-		if (!student.password) student.password = genPassword();
+		// 학생 비밀번호: Secret Storage 우선 → 평문 폴백 → 없으면 생성.
+		let studentPw = getStudentPassword(this.app, student.studentId, student.password);
+		if (!studentPw) studentPw = genPassword();
 
 		this.logger.info(t("학생 프로비저닝: {id} → {db}", { id: student.studentId, db: student.remoteDb }));
-		const admin = new CouchAdmin(s.couchdbUrl, s.username, s.password);
+		const admin = new CouchAdmin(s.couchdbUrl, s.username, adminPw);
 		const res = await admin.provisionStudent({
 			username: student.username,
-			password: student.password,
+			password: studentPw,
 			remoteDb: student.remoteDb,
 		});
 		if (!res.ok) {
 			this.logger.error(t("프로비저닝 실패: {err}", { err: res.error ?? "" }), true);
 			return false;
 		}
+		// 성공 → Secret Storage 보관 + 평문 클리어(미지원 환경은 평문 폴백 유지).
+		if (setStudentPassword(this.app, student.studentId, studentPw)) student.password = undefined;
+		else student.password = studentPw;
 		student.provisioned = true;
 		await this.saveSettings();
 		this.requestApply(); // 새 학생 링크를 자동으로 동기화에 반영
@@ -275,7 +317,7 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			studentName: student.studentName,
 			remoteDb: student.remoteDb,
 			username: student.username,
-			password: student.password,
+			password: studentPw,
 		};
 		new InviteModal(this.app, payload).open();
 		return true;
@@ -293,12 +335,16 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			this.logger.warn(t("학생 ID를 입력하세요."), true);
 			return;
 		}
-		const prev = student.password;
-		student.password = genPassword(); // 새 비밀번호 후보
+		const prev = getStudentPassword(this.app, student.studentId, student.password);
+		const next = genPassword();
+		// 새 비밀번호를 먼저 보관(inviteStudent가 Secret Storage/평문에서 읽으므로) → 재프로비저닝.
+		if (!setStudentPassword(this.app, student.studentId, next)) student.password = next;
 		this.logger.info(t("비밀번호 재발급(이전 초대 무효): {id}", { id: student.studentId }), true);
 		const ok = await this.inviteStudent(student); // 재프로비저닝(_users 갱신) + 새 초대 표시
 		if (!ok) {
-			student.password = prev; // 서버 실패 → 로컬 되돌림(이전 비밀번호/초대 유지)
+			// 서버 실패 → 이전 비밀번호로 되돌림(이전 초대 유지).
+			if (!setStudentPassword(this.app, student.studentId, prev)) student.password = prev;
+			else student.password = undefined;
 			this.logger.warn(t("비밀번호 재발급 실패 — 이전 비밀번호를 유지합니다."), true);
 		}
 	}
@@ -311,14 +357,14 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			this.logger.warn(t("교사 모드에서만 사용할 수 있습니다."), true);
 			return;
 		}
-		if (!s.couchdbUrl || !s.username || !s.password) {
+		if (!s.couchdbUrl || !s.username || !this.couchPassword()) {
 			this.logger.warn(t("관리자 계정을 먼저 입력하세요."), true);
 			return;
 		}
 		if (!space.remoteDb) space.remoteDb = `share_${space.id}`;
 		if (!space.folder) space.folder = space.name || space.id;
 
-		const admin = new CouchAdmin(s.couchdbUrl, s.username, s.password);
+		const admin = new CouchAdmin(s.couchdbUrl, s.username, this.couchPassword());
 		const memberUsers = space.members
 			.map((sid) => s.students.find((st) => st.studentId === sid)?.username)
 			.filter((u): u is string => !!u);
@@ -389,7 +435,13 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		s.userId = payload.studentId;
 		s.displayName = payload.studentName;
 		s.username = payload.username;
-		s.password = payload.password;
+		// 받은 학생 비밀번호는 Secret Storage에 보관(data.json 평문 회피). 미지원 환경만 평문 폴백.
+		if (setSecretValue(this.app, COUCH_PASSWORD_ID, payload.password)) {
+			s.passwordSet = true;
+			s.password = "";
+		} else {
+			s.password = payload.password;
+		}
 		s.remoteDb = payload.remoteDb;
 		s.localRoot = ""; // 학생 vault 전체
 		s.lastSeqByDb = {};
@@ -499,11 +551,11 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			this.logger.warn(t("교사 모드에서만 사용할 수 있습니다."), true);
 			return;
 		}
-		if (!s.couchdbUrl || !s.username || !s.password) {
+		if (!s.couchdbUrl || !s.username || !this.couchPassword()) {
 			this.logger.warn(t("관리자 계정을 먼저 입력하세요."), true);
 			return;
 		}
-		const admin = new CouchAdmin(s.couchdbUrl, s.username, s.password);
+		const admin = new CouchAdmin(s.couchdbUrl, s.username, this.couchPassword());
 		const chk = await admin.checkAdmin();
 		if (!chk.ok) {
 			this.logger.error(t("관리자 인증 실패: {err}", { err: chk.error ?? "" }), true);

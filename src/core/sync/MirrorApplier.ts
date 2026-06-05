@@ -165,7 +165,7 @@ export class MirrorApplier {
 
 		const local = await ctx.readVaultBinary(localPath);
 		const localHash = local == null ? null : await sha256(local);
-		if (localHash === doc.contentHash) return "skipped-same";
+		const hasConflict = !!doc._conflicts && doc._conflicts.length > 0;
 
 		// 업로드 대기 중인 로컬 편집이면 덮지 않되, 다른 기기의 원격 바이너리는 곧 덮여 사라지므로 _충돌/에 보존.
 		if (ctx.isPending(doc.path)) {
@@ -173,11 +173,14 @@ export class MirrorApplier {
 			return "skipped-pending";
 		}
 
-		const hasConflict = !!doc._conflicts && doc._conflicts.length > 0;
+		// 충돌(_conflicts)이면 winner가 live와 같아도(로컬 branch가 winner) 실제 원격 리프를 _충돌/에 보존.
+		// (skipped-same보다 먼저 — winner==live로 조기 반환하면 원격본이 영영 보존되지 않는다. 보고서 P1.)
 		if (hasConflict) {
 			await this.preserveRemoteAsset(doc, localPath);
 			return "conflict";
 		}
+
+		if (localHash === doc.contentHash) return "skipped-same";
 		if (doc.lastModifiedDeviceId === ctx.settings.deviceId) return "skipped-self";
 
 		const data = await ctx.pouch.getAssetBinary(assetId(doc.path));
@@ -194,12 +197,33 @@ export class MirrorApplier {
 	}
 
 	/**
-	 * pending/충돌로 원격 바이너리가 곧 로컬 업로드에 덮일 때, 현재(=원격) 바이너리를 _충돌/에 보존.
+	 * winner + conflict 리프 중 **live 로컬 바이너리와 다른(원격)** 리프의 바이너리를 고른다.
+	 * winner가 로컬 branch면 winner는 로컬본이므로, conflict 리프에서 실제 원격본을 찾는다(마크다운 pickRemoteLeaf와 동형).
+	 */
+	private async pickRemoteAssetBinary(doc: AssetDoc & { _conflicts?: string[] }, localPath: string): Promise<ArrayBuffer | null> {
+		const ctx = this.ctx;
+		const id = assetId(doc.path);
+		const live = await ctx.readVaultBinary(localPath);
+		const liveHash = live == null ? null : await sha256(live);
+		const differs = async (bin: ArrayBuffer | null): Promise<boolean> =>
+			bin != null && (liveHash == null || (await sha256(bin)) !== liveHash);
+
+		const winnerBin = await ctx.pouch.getAssetBinary(id);
+		if (await differs(winnerBin)) return winnerBin; // winner가 원격본인 일반적 경우
+		for (const rev of doc._conflicts ?? []) {
+			const bin = await ctx.pouch.getAssetBinaryRev(id, rev);
+			if (await differs(bin)) return bin; // winner가 로컬이면 conflict 리프에서 원격본을 찾는다
+		}
+		return winnerBin; // 모든 리프가 live와 동일 → 보여줄 원격본 없음(폴백)
+	}
+
+	/**
+	 * pending/충돌로 원격 바이너리가 곧 로컬 업로드에 덮일 때, **실제 원격** 바이너리를 _충돌/에 보존.
 	 * 바이너리는 비교/병합 UI가 없으므로 파일로 꺼내 두고 경고만 1회 남긴다.
 	 */
-	private async preserveRemoteAsset(doc: AssetDoc, localPath: string): Promise<void> {
+	private async preserveRemoteAsset(doc: AssetDoc & { _conflicts?: string[] }, localPath: string): Promise<void> {
 		const ctx = this.ctx;
-		const data = await ctx.pouch.getAssetBinary(assetId(doc.path));
+		const data = await this.pickRemoteAssetBinary(doc, localPath);
 		if (data == null) return;
 		try {
 			await ctx.writeVaultBinary(ctx.conflictLocalPath(doc.path), data);

@@ -279,6 +279,19 @@ export class PouchService {
 		}
 	}
 
+	/** 특정 리비전의 asset 첨부 바이너리 조회(충돌 leaf 비교용 — 실제 원격본 선택). */
+	async getAssetBinaryRev(id: string, rev: string): Promise<ArrayBuffer | null> {
+		try {
+			const blob: any = await this.localDb().getAttachment(id, "data", { rev } as any);
+			if (!blob) return null;
+			if (typeof blob.arrayBuffer === "function") return await blob.arrayBuffer();
+			return blob as ArrayBuffer;
+		} catch (e: any) {
+			if (e?.status === 404) return null;
+			throw e;
+		}
+	}
+
 	/** asset 문서 전체(메타데이터). */
 	async allAssets(): Promise<AssetDoc[]> {
 		const res = await this.localDb().allDocs({
