@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22.x"
+
+      - name: Install
+        run: npm ci
+
+      - name: Version consistency
+        run: npm run version:check
+
+      - name: Test
+        run: npm run test
+
+      - name: Check i18n (en/ko parity)
+        run: npm run i18n:check
+
+      - name: Build
+        run: npm run build

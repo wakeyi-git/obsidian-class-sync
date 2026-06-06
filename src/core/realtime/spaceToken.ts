@@ -36,6 +36,14 @@ async function hmacB64Url(secret: string, message: string): Promise<string> {
 	return bytesToB64Url(new Uint8Array(sig));
 }
 
+/**
+ * HMAC 시크릿이 없을 때 stale 공간 토큰을 제거(순수). 시크릿을 비우거나 legacy 전역 토큰으로 전환했는데
+ * 옛 `sp.token`이 남아 shares 문서로 학생에게 재배포되는 것을 막는다(보고서 P1).
+ */
+export function clearSpaceTokens(spaces: Array<{ token?: string }>): void {
+	for (const sp of spaces) delete sp.token;
+}
+
 /** 공간 토큰 발급(교사). secret은 서버 YJS_SECRET와 동일해야 한다. */
 export async function mintSpaceToken(secret: string, claims: SpaceTokenClaims): Promise<string> {
 	const payload: Record<string, unknown> = { c: claims.classId, s: claims.spaceId };

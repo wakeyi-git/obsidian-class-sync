@@ -193,6 +193,7 @@ token payload carries `classId`·`spaceId` (+ optional expiry) and the server ve
 `class_<c>/share/<s>/`, so a leaked token only grants access to **that space's room** (not the whole class). Changing the
 secret/members and redeploying refreshes tokens, and **'Space token expiry (days)'** sets a TTL. The teacher's tokens/secret
 are stored in Obsidian Secret Storage. (A legacy mode with a single `YJS_TOKEN` and no secret is also supported, but has no per-space isolation.)
+The token is sent over WSS (not exposed in transit); to keep it out of reverse-proxy/CDN/monitoring access logs, see [guide §9.1](docs/Yjs%20서버%20운영/yjs-server-synology.md).
 
 **Excalidraw drawings** also support **element-level realtime co-editing** in shared folders (add/move/delete, named/colored
 cursors, image sync). The [Excalidraw plugin](https://github.com/zsviczian/obsidian-excalidraw-plugin) must be installed

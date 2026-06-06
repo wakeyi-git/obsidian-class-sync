@@ -368,7 +368,11 @@
 		"delete_shared_space": "Delete shared space: {name}",
 		"removes_this_shared_space_from_the": "Removes this shared space from the list.\nServer data (the shared DB) is kept — only the sync link is removed.\nTo also delete server data, use ‘Reset server data’ in the Manage tab.",
 		"delete_student": "Delete student: {name}",
-		"removes_this_student_from_the_list": "Removes this student from the list.\nServer data (account & mirror DB) is kept — only the sync link is removed.\nTo also delete server data, use ‘Reset server data’ in the Manage tab."
+		"removes_this_student_from_the_list": "Removes this student from the list.\nServer data (account & mirror DB) is kept — only the sync link is removed.\nTo also delete server data, use ‘Reset server data’ in the Manage tab.",
+		"invalid_student_id": "Invalid student ID: {value} (use lowercase letters/digits/_/-; start with a letter or digit)",
+		"invalid_username": "Invalid account name: {value} (use lowercase letters/digits/_/-)",
+		"invalid_mirror_db_name": "Invalid Mirror DB name: {value} (use lowercase letters/digits/_/-)",
+		"invalid_share_db_name": "Invalid shared DB name: {value} (use lowercase letters/digits/_/-)"
 	},
 	"invite": {
 		"invite_student": "Invite student — {name}",
@@ -486,7 +490,9 @@
 		"class_sync_no_students_add_students": "Class Sync: No students. Add students in settings.",
 		"class_sync_open_a_file_to": "Class Sync: Open a file to copy first.",
 		"class_sync_target_not_found": "Class Sync: Target not found.",
-		"realtime": "🟢 Realtime {n}"
+		"realtime": "🟢 Realtime {n}",
+		"invalid_id_or_db_name": "Student ID/account/DB name doesn't meet CouchDB rules (lowercase letters/digits/_/-): {id}",
+		"invalid_share_db_name": "Shared DB name doesn't meet CouchDB rules: {db}"
 	},
 	"sync": {
 		"conflict_held_preserve_local_both_sides": "Conflict held (preserve-local): {path} — both sides edited divergently. Keeping local; remote copy saved to _conflict/. Resolve it from 'Conflicts'.",

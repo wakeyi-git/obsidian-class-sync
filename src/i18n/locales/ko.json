@@ -368,7 +368,11 @@
 		"delete_shared_space": "공유 공간 삭제: {name}",
 		"removes_this_shared_space_from_the": "이 공유 공간을 목록에서 제거합니다.\n서버 데이터(공유 DB)는 유지되며 동기화 링크만 사라집니다.\n서버까지 지우려면 관리 탭의 ‘서버 데이터 초기화’를 사용하세요.",
 		"delete_student": "학생 삭제: {name}",
-		"removes_this_student_from_the_list": "이 학생을 목록에서 제거합니다.\n서버 데이터(계정·Mirror DB)는 유지되며 동기화 링크만 사라집니다.\n서버까지 지우려면 관리 탭의 ‘서버 데이터 초기화’를 사용하세요."
+		"removes_this_student_from_the_list": "이 학생을 목록에서 제거합니다.\n서버 데이터(계정·Mirror DB)는 유지되며 동기화 링크만 사라집니다.\n서버까지 지우려면 관리 탭의 ‘서버 데이터 초기화’를 사용하세요.",
+		"invalid_student_id": "학생 ID 형식 오류: {value} (소문자·숫자·_·- 만, 소문자/숫자로 시작)",
+		"invalid_username": "계정 이름 형식 오류: {value} (소문자·숫자·_·- 만)",
+		"invalid_mirror_db_name": "Mirror DB 이름 형식 오류: {value} (소문자·숫자·_·- 만)",
+		"invalid_share_db_name": "공유 DB 이름 형식 오류: {value} (소문자·숫자·_·- 만)"
 	},
 	"invite": {
 		"invite_student": "학생 초대 — {name}",
@@ -486,7 +490,9 @@
 		"class_sync_no_students_add_students": "Class Sync: 학생이 없습니다. 설정에서 학생을 추가하세요.",
 		"class_sync_open_a_file_to": "Class Sync: 복사할 파일을 먼저 여세요.",
 		"class_sync_target_not_found": "Class Sync: 대상을 찾을 수 없습니다.",
-		"realtime": "🟢 실시간 {n}명"
+		"realtime": "🟢 실시간 {n}명",
+		"invalid_id_or_db_name": "학생 ID/계정/DB 이름이 CouchDB 규칙(소문자·숫자·_·-)에 맞지 않습니다: {id}",
+		"invalid_share_db_name": "공유 DB 이름이 CouchDB 규칙에 맞지 않습니다: {db}"
 	},
 	"sync": {
 		"conflict_held_preserve_local_both_sides": "충돌 보류(preserve-local): {path} — 양쪽 분기 편집. 로컬 유지, 원격본을 _충돌/에 저장. '충돌 목록'에서 해소하세요.",

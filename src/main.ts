@@ -15,7 +15,8 @@ import { VersionHistoryModal } from "./ui/VersionHistoryModal";
 import { ResolveChoice } from "./core/sync/ConflictManager";
 import { BulkCopy, CopyOptions, CopyResult, CopyPlan } from "./modes/teacher/BulkCopy";
 import { RealtimeManager } from "./core/realtime/RealtimeManager";
-import { mintSpaceToken } from "./core/realtime/spaceToken";
+import { mintSpaceToken, clearSpaceTokens } from "./core/realtime/spaceToken";
+import { isValidCouchName } from "./core/path/path";
 import {
 	getSecretValue,
 	setSecretValue,
@@ -286,6 +287,11 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		if (!student.username) student.username = student.studentId;
 		if (!student.remoteDb) student.remoteDb = `mirror_${student.studentId}`;
 		if (!student.localRoot) student.localRoot = student.studentName || student.studentId;
+		// CouchDB 이름 규칙 위반은 프로비저닝 HTTP 에러 전에 막는다(보고서 P2).
+		if (!isValidCouchName(student.studentId) || !isValidCouchName(student.username) || !isValidCouchName(student.remoteDb)) {
+			this.logger.warn(t("command.invalid_id_or_db_name", { id: student.studentId }), true);
+			return false;
+		}
 		// 학생 비밀번호: Secret Storage 우선 → 평문 폴백 → 없으면 생성.
 		let studentPw = getStudentPassword(this.app, student.studentId, student.password);
 		if (!studentPw) studentPw = genPassword();
@@ -363,6 +369,10 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		}
 		if (!space.remoteDb) space.remoteDb = `share_${space.id}`;
 		if (!space.folder) space.folder = space.name || space.id;
+		if (!isValidCouchName(space.remoteDb)) {
+			this.logger.warn(t("command.invalid_share_db_name", { db: space.remoteDb }), true);
+			return;
+		}
 
 		const admin = new CouchAdmin(s.couchdbUrl, s.username, this.couchPassword());
 		const memberUsers = space.members
@@ -391,6 +401,9 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			for (const sp of s.sharedSpaces) {
 				sp.token = await mintSpaceToken(yjsSecret, { classId: s.classId, spaceId: sp.id, exp: ttl });
 			}
+		} else {
+			// 시크릿 없음(legacy 전역 토큰/시크릿 제거 중) → 옛 공간 토큰을 비워 stale 재배포 방지.
+			clearSpaceTokens(s.sharedSpaces);
 		}
 		await this.saveSettings();
 

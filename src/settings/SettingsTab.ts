@@ -28,6 +28,14 @@ function issueMessage(i: SettingsIssue): string {
 			return t("panel.duplicate_account_username", { value: String(i.params?.value) });
 		case "dup-remoteDb":
 			return t("panel.duplicate_mirror_db_name", { value: String(i.params?.value) });
+		case "bad-studentId":
+			return t("panel.invalid_student_id", { value: String(i.params?.value) });
+		case "bad-username":
+			return t("panel.invalid_username", { value: String(i.params?.value) });
+		case "bad-remoteDb":
+			return t("panel.invalid_mirror_db_name", { value: String(i.params?.value) });
+		case "bad-shareDb":
+			return t("panel.invalid_share_db_name", { value: String(i.params?.value) });
 		case "folder-overlap":
 			return t("panel.folder_overlap_and_double_sync_confusion", { a: String(i.params?.a), b: String(i.params?.b) });
 		case "couch-url":

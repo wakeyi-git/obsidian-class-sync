@@ -48,6 +48,15 @@ export function validateFolderName(folder: string): boolean {
 	return validateVaultPath(folder);
 }
 
+/**
+ * CouchDB DB/계정 이름으로 안전한지(보수적 규칙: 소문자·숫자로 시작, 이후 소문자·숫자·`_`·`-`).
+ * 학생 ID/계정/Mirror·공유 DB 이름에 적용해, 프로비저닝 HTTP 에러 전에 설정 단계에서 막는다(보고서 권장).
+ * 빈 값은 검사 대상이 아니다(호출 측에서 제외).
+ */
+export function isValidCouchName(name: string): boolean {
+	return /^[a-z0-9][a-z0-9_-]*$/.test(name);
+}
+
 /** 두 폴더 경로가 같거나 한쪽이 다른 쪽을 포함(중첩)하면 true. 빈 값은 겹침 아님. */
 export function foldersOverlap(a: string, b: string): boolean {
 	const x = normalizePath(a);
