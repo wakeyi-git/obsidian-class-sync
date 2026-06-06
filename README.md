@@ -31,7 +31,7 @@ Highlights:
 ### Requirements
 - **Obsidian 1.11.4+** (desktop and mobile). 1.11.4 is required because the plugin uses the Secret Storage API.
 - **Self-hosted CouchDB** (e.g. Synology NAS) — the required central server. [Setup](#couchdb-setup-synology-nas-docker-example).
-- **Yjs WebSocket server** — only needed for realtime co-editing. Per-space HMAC tokens (`YJS_SECRET`) recommended.
+- **Yjs WebSocket server** — only needed for realtime co-editing. Per-space HMAC tokens (`YJS_SECRET`) recommended (server files + guide in [`server/`](server/)).
 - **Excalidraw plugin** — only needed for realtime co-editing of Excalidraw drawings (that feature auto-disables if not installed).
 
 ---
@@ -172,14 +172,24 @@ operational badge (not deployed / deployed / members changed — redeploy needed
 > **Optional / advanced.** The core of Class Sync is CouchDB **file sync**, which works fully without realtime.
 > Get file sync working first, then enable realtime only when needed.
 
-Co-edit shared-folder notes character-by-character (Yjs). A separate **Yjs WebSocket server** is required;
-once the teacher enters the server URL and token in
-settings and deploys a shared space, it propagates to students automatically. Opening a shared-folder note in edit mode
-connects a realtime session and shows each other's cursors/names. While editing, Yjs is authoritative; when the note
-closes, a snapshot is saved to CouchDB so offline members get it. Enabling **In-session snapshot interval (sec)** in
-settings also persists the body to CouchDB periodically before closing, so non-realtime/offline members get the latest
-sooner (only one leader writes, preventing conflicts). A **participant chip** (name + color) is always shown at the
-bottom-right of the editing area so you can see who's co-editing even without a mouse (same for markdown and Excalidraw).
+Co-edit shared-folder notes character-by-character (Yjs). A separate **Yjs WebSocket server** (independent of CouchDB
+file sync) is required; once the teacher enters the server URL and space secret in settings and deploys a shared space,
+it propagates to students automatically. Opening a shared-folder note in edit mode connects a realtime session and shows
+each other's cursors/names. While editing, Yjs is authoritative; when the note closes, a snapshot is saved to CouchDB so
+offline members get it (someone who joins the session later also receives the latest shared content immediately).
+Enabling **In-session snapshot interval (sec)** in settings also persists the body to CouchDB periodically before
+closing, so non-realtime/offline members get the latest sooner (only one leader writes, preventing conflicts). A
+**participant chip** (name + color) is always shown at the bottom-right of the editing area so you can see who's
+co-editing even without a mouse (same for markdown and Excalidraw); on touch devices you can double-tap to enter text
+and the pointer follows your swipe immediately.
+
+**Yjs server setup (brief).** The server files live in [`server/`](server/).
+1. `cd server && docker compose up -d --build` (LevelDB persistence in `./data`).
+2. Put the output of `openssl rand -hex 32` in both the server's **`YJS_SECRET`** env var and the plugin's **'Yjs space
+   secret (HMAC)'** — same value (issues per-space signed tokens; a leak only grants that space's room).
+3. **Don't expose port 1234 directly** — put it behind an HTTPS reverse proxy (`wss://`, forwarding WebSocket headers).
+4. The token is a `?token=` query, so **mask query strings in proxy/CDN/monitoring access logs** (Synology DSM:
+   `server/disable-yjs-accesslog.sh`). Full steps in [`server/README.md`](server/README.md).
 
 **Realtime token security** — set `YJS_SECRET` on the server and the same value in the plugin's **'Yjs space secret (HMAC)'**;
 then each time the teacher deploys a space, a **per-shared-space signed token** is issued and delivered to students. The
@@ -187,7 +197,7 @@ token payload carries `classId`·`spaceId` (+ optional expiry) and the server ve
 `class_<c>/share/<s>/`, so a leaked token only grants access to **that space's room** (not the whole class). Changing the
 secret/members and redeploying refreshes tokens, and **'Space token expiry (days)'** sets a TTL. The teacher's tokens/secret
 are stored in Obsidian Secret Storage. (A legacy mode with a single `YJS_TOKEN` and no secret is also supported, but has no per-space isolation.)
-The token is sent over WSS (not exposed in transit); keep it out of reverse-proxy/CDN/monitoring access logs (mask query strings).
+The token is sent over WSS (not exposed in transit); keep it out of reverse-proxy/CDN/monitoring access logs by masking query strings (see [`server/README.md`](server/README.md)).
 
 **Excalidraw drawings** also support **element-level realtime co-editing** in shared folders (add/move/delete, named/colored
 cursors, image sync). The [Excalidraw plugin](https://github.com/zsviczian/obsidian-excalidraw-plugin) must be installed
