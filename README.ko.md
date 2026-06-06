@@ -30,8 +30,8 @@ TeacherVault/
 
 ### 요구사항
 - **Obsidian 1.11.4 이상** (데스크톱·모바일 모두 지원). Secret Storage API 사용으로 1.11.4가 필요합니다.
-- **자가 호스팅 CouchDB** (시놀로지 NAS 등) — 필수 중앙 서버. [설정 방법](server/README.md#couchdb-필수).
-- **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택. 공유 공간별 HMAC 토큰(`YJS_SECRET`) 권장 ([설정](server/README.md#yjs-실시간-서버-선택), 구동 파일은 [`server/yjs/`](server/yjs/)).
+- **자가 호스팅 CouchDB** (시놀로지 NAS 등) — 필수 중앙 서버. [설정 방법](server/README.ko.md#couchdb-필수).
+- **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택. 공유 공간별 HMAC 토큰(`YJS_SECRET`) 권장 ([설정](server/README.ko.md#yjs-실시간-서버-선택), 구동 파일은 [`server/yjs/`](server/yjs/)).
 - **Excalidraw 플러그인** — Excalidraw 그림 실시간 공동 편집을 쓸 때만 선택(미설치 시 해당 기능만 자동 비활성).
 
 ---
@@ -101,7 +101,7 @@ Class Sync는 **독립적인 두 서버**를 씁니다 — **CouchDB**(파일 �
 나눠 둘 수 있습니다. 유일한 필수 조건은 **모든 클라이언트(교사 + 모든 학생)가 각각에 HTTPS/WSS로 닿을 수 있어야** 한다는
 것입니다.
 
-자세한 구축 방법은 **[`server/README.md`](server/README.md)** 에 있습니다 — Docker 명령, 호스팅 선택지
+자세한 구축 방법은 **[`server/README.ko.md`](server/README.ko.md)** 에 있습니다 — Docker 명령, 호스팅 선택지
 (NAS / 라즈베리파이 / VPS / PaaS / Cloudant), 구조와 제약, 실시간 서버 보안(리버스 프록시 `wss://`, `YJS_SECRET`,
 접근 로그 마스킹). 실시간 서버 구동 파일은 [`server/yjs/`](server/yjs/)에 있습니다.
 
@@ -176,7 +176,7 @@ Class Sync는 **독립적인 두 서버**를 씁니다 — **CouchDB**(파일 �
 태블릿·모바일에서도 누가 함께 편집 중인지 보입니다(마크다운·Excalidraw 동일). 터치 기기에서는 더블탭으로
 텍스트를 입력할 수 있고, 손가락으로 스와이프하면 포인터가 즉시 따라갑니다.
 
-Yjs 서버를 띄우는 방법은 **[`server/README.md` → Yjs 실시간 서버](server/README.md#yjs-실시간-서버-선택)**(구동 파일은 [`server/yjs/`](server/yjs/))를 참고하세요.
+Yjs 서버를 띄우는 방법은 **[`server/README.ko.md` → Yjs 실시간 서버](server/README.ko.md#yjs-실시간-서버-선택)**(구동 파일은 [`server/yjs/`](server/yjs/))를 참고하세요.
 
 **실시간 토큰 보안** — 서버에 `YJS_SECRET`을 설정하고 플러그인 설정의 **'Yjs 공간 시크릿(HMAC)'** 에 같은 값을
 넣으면, 교사가 공간을 배포할 때마다 **공유 공간별 서명 토큰**이 발급되어 학생에게 전달됩니다. 토큰 payload에
@@ -248,7 +248,7 @@ Vault  ◄──(LocalWatcher / LocalApplier)──►  로컬 PouchDB  ◄─�
   유출이 의심되면 교사가 학생 카드의 **'비밀번호 재발급'** 으로 비밀번호를 회전해 **이전 초대를 즉시 무효화**합니다.
 - **실시간 토큰**은 공유 공간별 **HMAC 서명 토큰**으로 발급되어, 유출돼도 해당 공간 room에만 접근됩니다
   (`classId`·`spaceId` 바인딩 + 선택 만료). 서버는 `CHANGE_ME` 같은 placeholder/너무 짧은 시크릿이면 기동을 거부하고,
-  토큰은 WSS로 전송되므로 전송 중 노출이 없습니다(서버/프록시 로그의 `?token=` 쿼리 마스킹은 [`server/README.md`](server/README.md) 참고).
+  토큰은 WSS로 전송되므로 전송 중 노출이 없습니다(서버/프록시 로그의 `?token=` 쿼리 마스킹은 [`server/README.ko.md`](server/README.ko.md) 참고).
 - **Yjs 토큰·공간 시크릿**(교사)은 **Obsidian Secret Storage**(vault별 보관소)에 저장되어 `data.json`에 평문으로 남지 않습니다. 기존 평문 값은 업그레이드 시 자동 이전됩니다.
 - **설정 내보내기**는 자격증명을 제외합니다 — 관리자 비밀번호, 학생 비밀번호, `yjsToken`, `yjsSecret`, 공간 토큰, 기기 고유값.
 - 교사 관리자 자격증명은 교사 기기에만 저장되며, 학생은 admin 권한을 일절 다루지 않습니다.
