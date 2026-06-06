@@ -1,5 +1,7 @@
 # Class Sync — Yjs realtime server
 
+> 🌐 **한국어**: [`README.ko.md`](README.ko.md)
+
 A small **Yjs WebSocket server** for Class Sync's optional realtime co-editing. File sync runs on CouchDB and works
 without this; run this only if you want character-level realtime editing of shared-folder notes (and Excalidraw).
 
