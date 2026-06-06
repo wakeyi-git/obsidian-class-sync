@@ -1,6 +1,6 @@
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import { ClassSyncSettings, DEFAULT_SETTINGS, Role, StudentConfig, SharedSpace } from "./settings/types";
-import { SHARES_DOC_ID, RTCONFIG_DOC_ID, VersionDoc } from "./core/model/types";
+import { SHARES_DOC_ID, RTCONFIG_DOC_ID, VersionDoc, SharesDoc } from "./core/model/types";
 import { ClassSyncSettingTab, SettingsHost } from "./settings/SettingsTab";
 import { Logger } from "./core/log/Logger";
 import { CoreServices } from "./core/CoreServices";
@@ -311,7 +311,10 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		if (setStudentPassword(this.app, student.studentId, studentPw)) student.password = undefined;
 		else student.password = studentPw;
 		student.provisioned = true;
+		// 실시간/공유 설정을 학생 DB에 기록(개인 mirror 실시간 토큰 포함) — 공유 공간 배포 없이도 실시간이 동작.
+		await this.mintMirrorToken(student);
 		await this.saveSettings();
+		await this.writeStudentSync(admin, student);
 		this.requestApply(); // 새 학생 링크를 자동으로 동기화에 반영
 		this.logger.ok(t("command.provisioning_complete_account_db_permissions", { id: student.studentId }), true);
 
@@ -405,27 +408,93 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 			// 시크릿 없음(legacy 전역 토큰/시크릿 제거 중) → 옛 공간 토큰을 비워 stale 재배포 방지.
 			clearSpaceTokens(s.sharedSpaces);
 		}
+		// 개인 mirror 실시간 토큰도 같은 타이밍에 재발급(허용 학생만, 시크릿 없으면 비움 → stale 방지).
+		for (const st of s.students) await this.mintMirrorToken(st);
 		await this.saveSettings();
 
 		// 모든 학생의 shares + rtconfig 문서 갱신(추가/제거 학생 모두 반영)
-		for (const st of s.students) {
-			const spaces = s.sharedSpaces
-				.filter((sp) => sp.members.includes(st.studentId))
-				.map((sp) => ({ id: sp.id, name: sp.name, remoteDb: sp.remoteDb, folder: sp.folder, token: sp.token }));
-			const r = await admin.putDoc(st.remoteDb, { _id: SHARES_DOC_ID, type: "shares", spaces });
-			if (!r.ok) this.logger.error(t("command.failed_to_write_shares", { id: st.studentId, err: r.error ?? "" }));
-			const rc = await admin.putDoc(st.remoteDb, {
-				_id: RTCONFIG_DOC_ID,
-				type: "rtconfig",
-				enabled: s.realtimeEnabled,
-				url: s.yjsServerUrl,
-				token: getSecretValue(this.app, YJS_TOKEN_ID, s.yjsToken),
-				snapshotSec: s.realtimeSnapshotSec,
-			});
-			if (!rc.ok) this.logger.error(t("command.failed_to_write_rtconfig", { id: st.studentId, err: rc.error ?? "" }));
-		}
+		for (const st of s.students) await this.writeStudentSync(admin, st);
 
 		this.logger.ok(t("command.shared_space_deployment_complete", { name: space.name }), true);
+		await this.restartMode();
+	}
+
+	/**
+	 * 개인 mirror 실시간 토큰 발급/회수(교사). realtime 허용 + yjsSecret 있을 때만 발급, 아니면 비운다.
+	 * spaceId=mirror-<studentId>이라 서버의 share 룸 prefix(class_<c>/share/<s>/) 검증을 그대로 통과한다.
+	 */
+	private async mintMirrorToken(student: StudentConfig): Promise<void> {
+		const s = this.settings;
+		const yjsSecret = getSecretValue(this.app, YJS_SECRET_ID, s.yjsSecret);
+		if (student.realtime && yjsSecret) {
+			const ttl =
+				s.yjsTokenTtlDays && s.yjsTokenTtlDays > 0
+					? Math.floor(Date.now() / 1000) + s.yjsTokenTtlDays * 86400
+					: undefined;
+			student.realtimeToken = await mintSpaceToken(yjsSecret, {
+				classId: s.classId,
+				spaceId: `mirror-${student.studentId}`,
+				exp: ttl,
+			});
+		} else {
+			delete student.realtimeToken;
+		}
+	}
+
+	/** 한 학생의 shares + rtconfig 문서 기록(공유 공간 멤버십 + 개인 mirror 실시간 공간). */
+	private async writeStudentSync(admin: CouchAdmin, st: StudentConfig): Promise<void> {
+		const s = this.settings;
+		const spaces: SharesDoc["spaces"] = s.sharedSpaces
+			.filter((sp) => sp.members.includes(st.studentId))
+			.map((sp) => ({ id: sp.id, name: sp.name, remoteDb: sp.remoteDb, folder: sp.folder, token: sp.token, kind: "share" }));
+		// 개인 mirror 1:1 실시간(folder=""=학생 vault 전체). 동기화 링크는 안 만들고 room/token 용도로만.
+		if (st.realtime && st.realtimeToken) {
+			spaces.push({ id: `mirror-${st.studentId}`, name: st.studentName, remoteDb: st.remoteDb, folder: "", token: st.realtimeToken, kind: "mirror" });
+		}
+		const r = await admin.putDoc(st.remoteDb, { _id: SHARES_DOC_ID, type: "shares", spaces });
+		if (!r.ok) this.logger.error(t("command.failed_to_write_shares", { id: st.studentId, err: r.error ?? "" }));
+		const rc = await admin.putDoc(st.remoteDb, {
+			_id: RTCONFIG_DOC_ID,
+			type: "rtconfig",
+			enabled: s.realtimeEnabled,
+			url: s.yjsServerUrl,
+			token: getSecretValue(this.app, YJS_TOKEN_ID, s.yjsToken),
+			snapshotSec: s.realtimeSnapshotSec,
+		});
+		if (!rc.ok) this.logger.error(t("command.failed_to_write_rtconfig", { id: st.studentId, err: rc.error ?? "" }));
+	}
+
+	/**
+	 * 한 학생의 개인 mirror 실시간 허용/해제 적용(학생 카드 토글용).
+	 * 토큰 발급/회수 + 해당 학생 shares/rtconfig 기록 + 모드 재시작. 공유 공간 없이도 동작한다.
+	 */
+	async deployStudentRealtime(student: StudentConfig): Promise<void> {
+		if (this.settings.role !== "teacher") return;
+		await this.activatePanel("log");
+		const s = this.settings;
+		const adminPw = this.couchPassword();
+		if (!s.couchdbUrl || !s.username || !adminPw) {
+			this.logger.warn(t("command.enter_the_admin_account_couchdb_url"), true);
+			return;
+		}
+		if (!student.provisioned || !student.remoteDb) {
+			this.logger.warn(t("command.invite_the_student_first", { id: student.studentId }), true);
+			return;
+		}
+		if (student.realtime && !getSecretValue(this.app, YJS_SECRET_ID, s.yjsSecret)) {
+			this.logger.warn(t("command.realtime_needs_yjs_secret"), true);
+		}
+		await this.mintMirrorToken(student);
+		await this.saveSettings();
+		const admin = new CouchAdmin(s.couchdbUrl, s.username, adminPw);
+		await this.writeStudentSync(admin, student);
+		this.logger.ok(
+			t("command.student_realtime_updated", {
+				id: student.studentId,
+				state: student.realtime ? t("common.on") : t("common.off"),
+			}),
+			true,
+		);
 		await this.restartMode();
 	}
 

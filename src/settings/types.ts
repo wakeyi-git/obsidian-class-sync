@@ -30,6 +30,10 @@ export interface StudentConfig {
 	username: string; // 학생 CouchDB 계정명. 기본 studentId
 	password?: string; // 프로비저닝 시 생성 (교사 기기 한정 비밀)
 	provisioned?: boolean; // CouchDB 계정/DB/권한 생성 완료 여부
+	/** 개인 mirror 폴더에서 교사↔이 학생 1:1 실시간 공동 편집 허용(기본 off). 기술문서 §19. */
+	realtime?: boolean;
+	/** mirror 실시간 서명 토큰(HMAC). 배포 시 발급되어 학생 shares 문서로 전달된다(교사 기기 한정). */
+	realtimeToken?: string;
 }
 
 /**

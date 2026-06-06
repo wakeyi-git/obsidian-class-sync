@@ -54,8 +54,11 @@ export class StudentMode implements ClassSyncMode {
 			const s = this.core.settings;
 			await this.applyRtConfig(); // 교사가 배포한 실시간 설정 수신
 			const spaces = await this.readShares();
-			this.core.sharedSpaces = spaces.map((sp) => ({ id: sp.id, folder: sp.folder, token: sp.token }));
-			const sharedFolders = spaces.map((sp) => sp.folder);
+			// 실시간(RealtimeManager)은 mirror 공간까지 모두 참조.
+			this.core.sharedSpaces = spaces.map((sp) => ({ id: sp.id, folder: sp.folder, token: sp.token, kind: sp.kind }));
+			// 동기화 링크는 공유 공간(kind!=="mirror")만 만든다 — mirror는 개인 mirror로 이미 동기화되므로 중복 금지.
+			const linkSpaces = spaces.filter((sp) => sp.kind !== "mirror");
+			const sharedFolders = linkSpaces.map((sp) => sp.folder);
 			const allRoots = [s.localRoot, ...sharedFolders];
 
 			// 기존 링크 중지 후 재구성
@@ -74,8 +77,8 @@ export class StudentMode implements ClassSyncMode {
 				}),
 			);
 
-			// 공유 공간 (학생 본인 자격, _security로 접근 허용됨)
-			for (const sp of spaces) {
+			// 공유 공간 (학생 본인 자격, _security로 접근 허용됨). mirror 공간은 제외(개인 mirror가 담당).
+			for (const sp of linkSpaces) {
 				this.syncs.push(
 					new MirrorSync(this.core, {
 						studentId: s.userId,
@@ -88,7 +91,7 @@ export class StudentMode implements ClassSyncMode {
 			}
 
 			for (const sync of this.syncs) await sync.start();
-			this.core.logger.ok(t("mode.student_mode_started_personal_shared", { count: spaces.length }), true);
+			this.core.logger.ok(t("mode.student_mode_started_personal_shared", { count: linkSpaces.length }), true);
 		} catch (e) {
 			this.core.logger.error(
 				t("mode.failed_to_reconcile_shared_spaces", { error: e instanceof Error ? e.message : String(e) }),

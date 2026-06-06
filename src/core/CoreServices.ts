@@ -20,8 +20,9 @@ export class CoreServices {
 	/** 실시간 세션 중인 파일 판단(RealtimeManager 주입). 공존: 라이브 에디터를 덮지 않게. */
 	isRealtimeActive: (localPath: string) => boolean = () => false;
 
-	/** 현재 사용자의 공유 공간(교사=설정, 학생=shares 문서). 모드가 런타임에 채운다. RealtimeManager가 참조. */
-	sharedSpaces: Array<{ id: string; folder: string; token?: string }> = [];
+	/** 현재 사용자의 공유 공간(교사=설정, 학생=shares 문서). 모드가 런타임에 채운다. RealtimeManager가 참조.
+	 * kind="mirror"는 학생 개인 mirror의 1:1 실시간 공간(folder=""=학생 vault 전체일 수 있음). */
+	sharedSpaces: Array<{ id: string; folder: string; token?: string; kind?: "share" | "mirror" }> = [];
 
 	/** 피드백 문서(§19.5) 변경 알림. main이 FeedbackStore에 연결. 링크의 LocalApplier가 호출. */
 	onFeedbackChange: () => void = () => {};

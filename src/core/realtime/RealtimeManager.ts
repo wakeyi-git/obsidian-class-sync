@@ -8,6 +8,7 @@ import { PresenceChips } from "./presenceChips";
 import { clientColor } from "./clientColor";
 import { getSecretValue, YJS_TOKEN_ID } from "../secret";
 import { ExcalidrawBinding, ExcalidrawImperativeApi } from "./excalidrawBinding";
+import { relUnder, roomName, pickSpace } from "./room";
 import { t } from "../../i18n";
 
 interface Session {
@@ -55,7 +56,7 @@ export class RealtimeManager {
 		private app: App,
 		private core: CoreServices,
 		/** 현재 사용자의 공유 공간 목록(교사=설정, 학생=shares). main이 주입. */
-		private getSpaces: () => Array<{ id: string; folder: string; token?: string }>,
+		private getSpaces: () => Array<{ id: string; folder: string; token?: string; kind?: "share" | "mirror" }>,
 		/** 로컬 경로 → 담당 동기화 링크(스냅샷 쓰기용). main이 현재 mode 기준으로 주입. */
 		private getSyncForPath: (localPath: string) => SnapshotTarget | undefined = () => undefined,
 	) {}
@@ -144,7 +145,7 @@ export class RealtimeManager {
 
 		const room = this.roomFor(path, space);
 		if (!room) return undefined;
-		const dbPath = path.slice(space.folder.length + 1);
+		const dbPath = this.relUnder(path, space.folder) ?? path;
 
 		// 공간별 토큰(HMAC 모드)이 있으면 그것을, 없으면 레거시 전역 토큰(Secret Storage/평문)을 쓴다.
 		const token = space.token || getSecretValue(this.app, YJS_TOKEN_ID, this.settings.yjsToken);
@@ -524,23 +525,22 @@ export class RealtimeManager {
 		session.ydoc.destroy();
 	}
 
-	/** 파일의 room 이름(모든 멤버가 동일해야 함). */
-	private roomFor(localPath: string, space: { id: string; folder: string }): string | null {
-		if (localPath !== space.folder && !localPath.startsWith(space.folder + "/")) return null;
-		const dbPath = localPath.slice(space.folder.length + 1);
-		return `class_${this.settings.classId}/share/${space.id}/${dbPath}`;
+	/** folder 기준 상대경로(dbPath). 순수 로직은 room.ts. */
+	private relUnder(localPath: string, folder: string): string | null {
+		return relUnder(localPath, folder);
 	}
 
-	/** 파일 경로가 속한 공유 공간(있으면). 보관/충돌/제외 폴더 아래 파일은 실시간 대상이 아니다. */
+	/** 파일의 room 이름(모든 멤버가 동일해야 함). mirror 공간도 spaceId(mirror-<id>)로 같은 share 네임스페이스를 쓴다. */
+	private roomFor(localPath: string, space: { id: string; folder: string }): string | null {
+		return roomName(this.settings.classId, space.id, localPath, space.folder);
+	}
+
+	/**
+	 * 파일 경로가 속한 공간(있으면). 보관/충돌/제외 폴더 아래 파일은 실시간 대상이 아니다.
+	 * 겹치면 가장 구체적인(folder가 가장 긴) 공간을 택한다 — mirror(folder="")가 하위 공유 폴더를 가리지 않게.
+	 */
 	private spaceFor(localPath: string): { id: string; folder: string; token?: string } | null {
-		for (const sp of this.getSpaces()) {
-			if (!sp.folder) continue;
-			if (localPath === sp.folder || localPath.startsWith(sp.folder + "/")) {
-				if (this.isExcludedFromRealtime(localPath, sp.folder)) return null;
-				return sp;
-			}
-		}
-		return null;
+		return pickSpace(this.getSpaces(), localPath, (folder) => this.isExcludedFromRealtime(localPath, folder));
 	}
 
 	/**
@@ -549,7 +549,8 @@ export class RealtimeManager {
 	 */
 	private isExcludedFromRealtime(localPath: string, folder: string): boolean {
 		const s = this.settings;
-		const rel = localPath === folder ? "" : localPath.slice(folder.length + 1);
+		const rel = this.relUnder(localPath, folder);
+		if (rel === null) return false;
 		const under = (base: string): boolean => !!base && (rel === base || rel.startsWith(base + "/"));
 		if (under(s.archiveFolder) || under(s.conflictFolder)) return true;
 		for (const f of s.excludeFolders) {

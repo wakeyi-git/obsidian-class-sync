@@ -61,6 +61,7 @@ export interface SettingsHost extends Plugin {
 	rotateStudentPassword(student: StudentConfig): Promise<void>;
 	ingestInvite(code: string): Promise<void>;
 	deployShared(space: SharedSpace): Promise<void>;
+	deployStudentRealtime(student: StudentConfig): Promise<void>;
 	exportSettingsJson(): string;
 	importSettingsJson(json: string): Promise<{ ok: boolean; error?: string }>;
 	openResetModal(): void;
@@ -424,6 +425,21 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		// 비우면 초대 시점에 학생 ID로 자동 채움 (계정=ID, DB=mirror_<ID>, 폴더=이름/ID)
 		this.studentField(card, t("settings.mirror_db_auto_if_empty"), st, "remoteDb", t("settings.mirror_studentid"));
 		this.studentField(card, t("settings.folder_auto_if_empty"), st, "localRoot", t("settings.name_or_studentid"));
+
+		// 개인 mirror 1:1 실시간 공동 편집(교사↔이 학생). 초대(프로비저닝) 후에만 노출.
+		if (st.provisioned) {
+			new Setting(card)
+				.setName(t("settings.realtime_mirror"))
+				.setDesc(t("settings.realtime_mirror_desc"))
+				.addToggle((tg) =>
+					tg.setValue(!!st.realtime).onChange(async (v) => {
+						st.realtime = v;
+						await this.host.saveSettings();
+						await this.host.deployStudentRealtime(st);
+						this.display();
+					}),
+				);
+		}
 
 		card.createEl("div", {
 			cls: "class-sync-student-status",

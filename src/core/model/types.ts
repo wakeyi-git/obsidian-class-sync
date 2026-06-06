@@ -94,7 +94,19 @@ export function versionPrefix(dbPath: string): string {
 /** 학생이 속한 공유 공간 목록. 교사가 학생 개인 mirror DB에 기록 → 학생이 자동으로 공유 링크 생성. */
 export interface SharesDoc extends PouchDocBase {
 	type: "shares";
-	spaces: Array<{ id: string; name: string; remoteDb: string; folder: string; token?: string }>;
+	spaces: Array<{
+		id: string;
+		name: string;
+		remoteDb: string;
+		folder: string;
+		token?: string;
+		/**
+		 * 공간 종류. "share"(기본)=공유 공간(별도 share_* DB·폴더 링크 생성).
+		 * "mirror"=학생 개인 mirror 자체의 1:1 실시간 공간 — 학생은 이미 개인 mirror를 동기화하므로
+		 * 별도 링크를 만들지 않고 실시간(room/token) 용도로만 쓴다.
+		 */
+		kind?: "share" | "mirror";
+	}>;
 }
 
 export const SHARES_DOC_ID = "shares";

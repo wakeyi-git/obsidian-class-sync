@@ -45,8 +45,16 @@ export class TeacherMode implements ClassSyncMode {
 				}),
 		);
 		this.syncs = [...studentSyncs, ...sharedSyncs];
-		// 실시간(RealtimeManager)이 참조할 공유 폴더 목록
-		core.sharedSpaces = shared.map((sp) => ({ id: sp.id, folder: sp.folder, token: sp.token }));
+		// 실시간(RealtimeManager)이 참조할 공간 목록: 공유 공간 + 실시간 허용 학생의 개인 mirror(1:1).
+		// mirror 공간은 학생 폴더(localRoot)를 그대로 folder로 쓰고 spaceId=mirror-<id>로 구분한다.
+		// 별도 동기화 링크는 만들지 않는다(이미 studentSyncs가 그 폴더를 동기화하므로).
+		const mirrorSpaces = students
+			.filter((st) => st.realtime && st.realtimeToken)
+			.map((st) => ({ id: `mirror-${st.studentId}`, folder: st.localRoot, token: st.realtimeToken, kind: "mirror" as const }));
+		core.sharedSpaces = [
+			...shared.map((sp) => ({ id: sp.id, folder: sp.folder, token: sp.token, kind: "share" as const })),
+			...mirrorSpaces,
+		];
 	}
 
 	async start(): Promise<void> {
