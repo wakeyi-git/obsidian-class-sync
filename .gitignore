@@ -8,5 +8,8 @@ node_modules/
 # obsidian
 data.json
 
+# docs (로컬 전용 — 저장소에 포함하지 않음)
+docs/
+
 # os
 .DS_Store

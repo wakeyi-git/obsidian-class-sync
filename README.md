@@ -28,12 +28,10 @@ Highlights:
 - **Operational UX** — teacher **onboarding wizard** ('Get started' checklist), **bulk student import** (paste/CSV), **deploy preview (dry-run) + per-student result & retry-failed**, an **action-oriented dashboard** (action cards + narrow-screen card layout), and inline settings validation (duplicate ID / URL / folder-overlap warnings).
 - **Operational convenience** — settings export/import (credentials excluded), full diagnostics (server · read/write permissions · realtime), mobile power-saving (pause background sync · pre-check large files), and a configurable max-delete-reconcile limit.
 
-> See [`docs/기술문서.md`](docs/기술문서.md) (Korean) for the full design.
-
 ### Requirements
 - **Obsidian 1.11.4+** (desktop and mobile). 1.11.4 is required because the plugin uses the Secret Storage API.
 - **Self-hosted CouchDB** (e.g. Synology NAS) — the required central server. [Setup](#couchdb-setup-synology-nas-docker-example).
-- **Yjs WebSocket server** — only needed for realtime co-editing. Per-space HMAC tokens (`YJS_SECRET`) recommended ([docs/Yjs 서버 운영/yjs-server-synology.md](docs/Yjs%20서버%20운영/yjs-server-synology.md)).
+- **Yjs WebSocket server** — only needed for realtime co-editing. Per-space HMAC tokens (`YJS_SECRET`) recommended.
 - **Excalidraw plugin** — only needed for realtime co-editing of Excalidraw drawings (that feature auto-disables if not installed).
 
 ---
@@ -93,9 +91,6 @@ Copy the three outputs to the path in ② above.
 
 > **Mobile (iOS/Android)**: put the same three files at the same path in your phone vault. If the vault syncs via
 > iCloud, files copied on desktop follow to the phone. After applying, fully quit and reopen the Obsidian app.
-
-> For release/submission steps see [docs/release-and-submit.md](docs/release-and-submit.md); for mobile checks see
-> [docs/mobile-test-checklist.md](docs/mobile-test-checklist.md).
 
 ---
 
@@ -175,11 +170,10 @@ operational badge (not deployed / deployed / members changed — redeploy needed
 
 ### Realtime co-editing
 > **Optional / advanced.** The core of Class Sync is CouchDB **file sync**, which works fully without realtime.
-> Get file sync working first, then enable realtime only when needed — full prerequisites, setup order, and
-> troubleshooting are in **[docs/realtime-advanced.md](docs/realtime-advanced.md)**.
+> Get file sync working first, then enable realtime only when needed.
 
-Co-edit shared-folder notes character-by-character (Yjs). A separate **Yjs WebSocket server** is required
-(see [docs/Yjs 서버 운영/yjs-server-synology.md](docs/Yjs%20서버%20운영/yjs-server-synology.md)); once the teacher enters the server URL and token in
+Co-edit shared-folder notes character-by-character (Yjs). A separate **Yjs WebSocket server** is required;
+once the teacher enters the server URL and token in
 settings and deploys a shared space, it propagates to students automatically. Opening a shared-folder note in edit mode
 connects a realtime session and shows each other's cursors/names. While editing, Yjs is authoritative; when the note
 closes, a snapshot is saved to CouchDB so offline members get it. Enabling **In-session snapshot interval (sec)** in
@@ -193,7 +187,7 @@ token payload carries `classId`·`spaceId` (+ optional expiry) and the server ve
 `class_<c>/share/<s>/`, so a leaked token only grants access to **that space's room** (not the whole class). Changing the
 secret/members and redeploying refreshes tokens, and **'Space token expiry (days)'** sets a TTL. The teacher's tokens/secret
 are stored in Obsidian Secret Storage. (A legacy mode with a single `YJS_TOKEN` and no secret is also supported, but has no per-space isolation.)
-The token is sent over WSS (not exposed in transit); to keep it out of reverse-proxy/CDN/monitoring access logs, see [guide §9.1](docs/Yjs%20서버%20운영/yjs-server-synology.md).
+The token is sent over WSS (not exposed in transit); keep it out of reverse-proxy/CDN/monitoring access logs (mask query strings).
 
 **Excalidraw drawings** also support **element-level realtime co-editing** in shared folders (add/move/delete, named/colored
 cursors, image sync). The [Excalidraw plugin](https://github.com/zsviczian/obsidian-excalidraw-plugin) must be installed
@@ -259,8 +253,7 @@ The teacher keeps one `MirrorSync` per student to sync many students at once.
   student card, **immediately invalidating the old invite**.
 - **Realtime tokens** are issued as per-space **HMAC-signed tokens**, so a leak only grants access to that space's room
   (`classId`·`spaceId` binding + optional expiry). The server refuses to start with a placeholder/too-short secret like
-  `CHANGE_ME`, and tokens travel over WSS so they aren't exposed in transit (mask query tokens in server/proxy logs —
-  see [guide §9.1](docs/Yjs%20서버%20운영/yjs-server-synology.md)).
+  `CHANGE_ME`, and tokens travel over WSS so they aren't exposed in transit (mask query tokens in server/proxy logs).
 - **Yjs token and space secret** (teacher) are stored in **Obsidian Secret Storage** (a per-vault store), not left in
   plaintext in `data.json`. Existing plaintext values are migrated automatically on upgrade.
 - **Settings export** excludes credentials — admin password, student passwords, `yjsToken`, `yjsSecret`, space tokens, and device-specific values.
