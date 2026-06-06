@@ -30,8 +30,8 @@ TeacherVault/
 
 ### 요구사항
 - **Obsidian 1.11.4 이상** (데스크톱·모바일 모두 지원). Secret Storage API 사용으로 1.11.4가 필요합니다.
-- **자가 호스팅 CouchDB** (시놀로지 NAS 등) — 필수 중앙 서버. [설정 방법](#couchdb-준비-시놀로지-nas-docker-예시).
-- **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택. 공유 공간별 HMAC 토큰(`YJS_SECRET`) 권장 (서버 구동 파일·안내는 [`server/`](server/)).
+- **자가 호스팅 CouchDB** (시놀로지 NAS 등) — 필수 중앙 서버. [설정 방법](#couchdb-필수).
+- **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택. 공유 공간별 HMAC 토큰(`YJS_SECRET`) 권장 ([설정](#yjs-실시간-서버-선택), 구동 파일은 [`server/`](server/)).
 - **Excalidraw 플러그인** — Excalidraw 그림 실시간 공동 편집을 쓸 때만 선택(미설치 시 해당 기능만 자동 비활성).
 
 ---
@@ -94,7 +94,10 @@ npm run build      # main.js 생성 (개발 중에는 npm run dev 로 watch)
 
 ---
 
-## CouchDB 준비 (시놀로지 NAS Docker 예시)
+## 서버 준비
+
+### CouchDB (필수)
+중앙 서버 (시놀로지 NAS Docker 예시):
 
 ```bash
 docker run -d --name couchdb -p 5984:5984 \
@@ -107,6 +110,17 @@ docker run -d --name couchdb -p 5984:5984 \
 3. CORS는 **선택 사항**입니다. 이 플러그인은 Obsidian `requestUrl`로 CORS를 우회하므로 없어도
    동작하지만, Fauxton 등 브라우저 도구를 쓰려면 켜두면 편합니다. Obsidian origin:
    - `app://obsidian.md` (데스크톱) · `capacitor://localhost` (iOS) · `http://localhost` (Android)
+
+### Yjs 실시간 서버 (선택)
+**실시간 공동 편집**에만 필요합니다 — 파일 동기화(CouchDB)와 독립적이라, 파일 동기화만 쓸 거면 건너뜁니다.
+서버 구동 파일은 [`server/`](server/) 폴더에 있습니다(자세한 단계는 [`server/README.md`](server/README.md)):
+
+1. `cd server && docker compose up -d --build` 로 컨테이너를 띄웁니다(영속 저장은 `./data`, LevelDB).
+2. `openssl rand -hex 32` 로 만든 값을 서버 환경변수 **`YJS_SECRET`** 과 플러그인 설정 **‘Yjs 공간 시크릿(HMAC)’**
+   에 **동일하게** 둡니다(공유 공간별 서명 토큰 발급 → 유출돼도 해당 공간 room만 접근).
+3. **포트 1234를 직접 열지 말고** HTTPS 리버스 프록시(`wss://`) 뒤에 둡니다(WebSocket Upgrade 헤더 전달).
+4. 토큰은 `?token=` 쿼리로 전달되므로 프록시/CDN/모니터링 **접근 로그에서 쿼리를 마스킹**합니다(시놀로지 DSM은
+   `server/disable-yjs-accesslog.sh` 참고).
 
 ---
 
@@ -179,13 +193,7 @@ docker run -d --name couchdb -p 5984:5984 \
 태블릿·모바일에서도 누가 함께 편집 중인지 보입니다(마크다운·Excalidraw 동일). 터치 기기에서는 더블탭으로
 텍스트를 입력할 수 있고, 손가락으로 스와이프하면 포인터가 즉시 따라갑니다.
 
-**Yjs 서버 준비(요약).** 서버 구동 파일은 [`server/`](server/) 폴더에 있습니다.
-1. `cd server && docker compose up -d --build` 로 컨테이너를 띄웁니다(영속 저장은 `./data`, LevelDB).
-2. `openssl rand -hex 32` 로 만든 값을 서버 환경변수 **`YJS_SECRET`** 과 플러그인 설정 **‘Yjs 공간 시크릿(HMAC)’**
-   에 **동일하게** 둡니다(공유 공간별 서명 토큰 발급 → 유출돼도 해당 공간 room만 접근).
-3. **포트 1234를 직접 열지 말고** HTTPS 리버스 프록시(`wss://`) 뒤에 둡니다(WebSocket Upgrade 헤더 전달).
-4. 토큰은 `?token=` 쿼리로 전달되므로 프록시/CDN/모니터링 **접근 로그에서 쿼리를 마스킹**합니다(시놀로지 DSM은
-   `server/disable-yjs-accesslog.sh` 참고). 자세한 단계는 [`server/README.md`](server/README.md).
+Yjs 서버를 띄우는 방법은 **[서버 준비 → Yjs 실시간 서버](#yjs-실시간-서버-선택)**(구동 파일은 [`server/`](server/))를 참고하세요.
 
 **실시간 토큰 보안** — 서버에 `YJS_SECRET`을 설정하고 플러그인 설정의 **'Yjs 공간 시크릿(HMAC)'** 에 같은 값을
 넣으면, 교사가 공간을 배포할 때마다 **공유 공간별 서명 토큰**이 발급되어 학생에게 전달됩니다. 토큰 payload에
