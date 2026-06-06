@@ -1,5 +1,6 @@
 import { Notice } from "obsidian";
 import { PanelHost, PanelSection, panelButton } from "./PanelSection";
+import { getSecretValue, COUCH_PASSWORD_ID } from "../../core/secret";
 import { t } from "../../i18n";
 
 interface Step {
@@ -38,11 +39,13 @@ export class SetupSection implements PanelSection {
 		const studentsWithId = s.students.filter((st) => st.studentId);
 		const provisioned = s.students.filter((st) => st.provisioned).length;
 		const synced = Object.keys(s.lastSeqByDb ?? {}).length > 0;
+		// 비밀번호는 Secret Storage로 이전돼 s.password가 비어 있을 수 있으므로 해석된 값을 본다.
+		const hasPassword = !!getSecretValue(this.host.app, COUCH_PASSWORD_ID, s.password);
 		return [
 			{
 				title: t("panel.1_server_connection"),
 				desc: t("panel.enter_the_couchdb_server_address_and"),
-				done: !!(s.couchdbUrl && s.username && s.password),
+				done: !!(s.couchdbUrl && s.username) && hasPassword,
 				actions: [
 					{ label: t("panel.open_settings"), run: () => this.host.openSettings(), cta: true },
 					{ label: t("settings.connection_test"), run: () => this.host.testConnection() },
