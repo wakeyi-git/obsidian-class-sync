@@ -124,12 +124,12 @@ docker run -d --name couchdb -p 5984:5984 \
 Only for **realtime co-editing** — independent of CouchDB file sync; skip it if you only need file sync. Server files
 are in [`server/`](server/) (full steps in [`server/README.md`](server/README.md)):
 
-1. `cd server && docker compose up -d --build` (LevelDB persistence in `./data`).
+1. `cd server/yjs && docker compose up -d --build` (LevelDB persistence in `./data`).
 2. Put the output of `openssl rand -hex 32` in both the server's **`YJS_SECRET`** env var and the plugin's **'Yjs space
    secret (HMAC)'** — same value (issues per-space signed tokens; a leak only grants that space's room).
 3. **Don't expose port 1234 directly** — put it behind an HTTPS reverse proxy (`wss://`, forwarding WebSocket headers).
 4. The token is a `?token=` query, so **mask query strings in proxy/CDN/monitoring access logs** (Synology DSM:
-   `server/disable-yjs-accesslog.sh`).
+   `server/yjs/disable-yjs-accesslog.sh`).
 
 ---
 
