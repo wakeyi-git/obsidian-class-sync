@@ -96,6 +96,15 @@ Copy the three outputs to the path in ② above.
 
 ## Server setup
 
+Class Sync uses **two independent servers**: CouchDB (file sync, required) and the Yjs server (realtime, optional).
+They **never talk to each other** — the plugin is the only client of both — so they don't need to share a host or a
+network. Put them on the same box for convenience, or on entirely different providers; the only hard requirement is
+that **every client (teacher + all students) can reach each one over HTTPS/WSS**.
+
+The examples below use a Synology NAS, but any Docker host works (another NAS, a home server/Raspberry Pi, a cloud VPS,
+or a PaaS). For **other hosting options, constraints, and the realtime server's details**, see
+[`server/README.md`](server/README.md).
+
 ### CouchDB (required)
 The central server (Synology NAS Docker example):
 
