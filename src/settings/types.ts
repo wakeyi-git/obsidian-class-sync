@@ -13,6 +13,8 @@ export interface SharedSpace {
 	folder: string; // 각 vault 내 폴더명
 	members: string[]; // studentId[]
 	provisioned?: boolean;
+	/** 이 공간에서 실시간 공동 편집을 쓸지(미설정/true=사용, false=끔). 끄면 토큰을 발급하지 않는다. 기술문서 §19. */
+	realtime?: boolean;
 	/** 이 공간의 실시간 서명 토큰(HMAC 모드). 배포 시 발급되어 shares 문서로 학생에 전달된다. */
 	token?: string;
 	/** 마지막 배포 시각(epoch ms). */

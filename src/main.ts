@@ -15,7 +15,7 @@ import { VersionHistoryModal } from "./ui/VersionHistoryModal";
 import { ResolveChoice } from "./core/sync/ConflictManager";
 import { BulkCopy, CopyOptions, CopyResult, CopyPlan } from "./modes/teacher/BulkCopy";
 import { RealtimeManager } from "./core/realtime/RealtimeManager";
-import { mintSpaceToken, clearSpaceTokens } from "./core/realtime/spaceToken";
+import { mintSpaceToken } from "./core/realtime/spaceToken";
 import { isValidCouchName } from "./core/path/path";
 import {
 	getSecretValue,
@@ -392,24 +392,9 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		space.lastDeployedAt = Date.now();
 		space.lastMemberSnapshot = [...space.members].sort();
 
-		// HMAC 모드(yjsSecret 설정): 배포 때마다 **모든** 공유 공간 토큰을 재발급한다. 이 배포에서 모든 학생의
-		// shares 문서가 다시 기록되므로, 시크릿 변경/TTL 만료 시 구 토큰이 그대로 다시 내려가는 일을 막는다.
-		// (유출 시 해당 공간 room만 접근 가능 — 학급 전체 아님.) 시크릿은 Secret Storage에서 읽는다.
-		const yjsSecret = getSecretValue(this.app, YJS_SECRET_ID, s.yjsSecret);
-		if (yjsSecret) {
-			const ttl =
-				s.yjsTokenTtlDays && s.yjsTokenTtlDays > 0
-					? Math.floor(Date.now() / 1000) + s.yjsTokenTtlDays * 86400
-					: undefined;
-			for (const sp of s.sharedSpaces) {
-				sp.token = await mintSpaceToken(yjsSecret, { classId: s.classId, spaceId: sp.id, exp: ttl });
-			}
-		} else {
-			// 시크릿 없음(legacy 전역 토큰/시크릿 제거 중) → 옛 공간 토큰을 비워 stale 재배포 방지.
-			clearSpaceTokens(s.sharedSpaces);
-		}
-		// 개인 mirror 실시간 토큰도 같은 타이밍에 재발급(허용 학생만, 시크릿 없으면 비움 → stale 방지).
-		for (const st of s.students) await this.mintMirrorToken(st);
+		// 배포 때마다 모든 실시간 토큰을 재발급한다(공유: realtime 플래그, 개인 mirror: student.realtime).
+		// 이 배포에서 모든 학생의 shares가 다시 기록되므로, 시크릿/멤버/플래그 변경 시 구 토큰 재유출을 막는다.
+		await this.mintRealtimeTokens();
 		await this.saveSettings();
 
 		// 모든 학생의 shares + rtconfig 문서 갱신(추가/제거 학생 모두 반영)
@@ -417,6 +402,28 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 
 		this.logger.ok(t("command.shared_space_deployment_complete", { name: space.name }), true);
 		await this.restartMode();
+	}
+
+	/**
+	 * 모든 실시간 서명 토큰을 재발급/회수(교사). 공유 공간은 realtime!==false일 때만, 개인 mirror는
+	 * student.realtime일 때만 발급한다. 시크릿이 없으면(legacy/제거 중) 모두 비워 stale 재배포를 막는다.
+	 * (유출 시 해당 공간 room만 접근 가능 — 학급 전체 아님.) 시크릿은 Secret Storage에서 읽는다.
+	 */
+	private async mintRealtimeTokens(): Promise<void> {
+		const s = this.settings;
+		const yjsSecret = getSecretValue(this.app, YJS_SECRET_ID, s.yjsSecret);
+		const ttl =
+			s.yjsTokenTtlDays && s.yjsTokenTtlDays > 0
+				? Math.floor(Date.now() / 1000) + s.yjsTokenTtlDays * 86400
+				: undefined;
+		for (const sp of s.sharedSpaces) {
+			if (yjsSecret && sp.realtime !== false) {
+				sp.token = await mintSpaceToken(yjsSecret, { classId: s.classId, spaceId: sp.id, exp: ttl });
+			} else {
+				delete sp.token;
+			}
+		}
+		for (const st of s.students) await this.mintMirrorToken(st);
 	}
 
 	/**
@@ -446,10 +453,10 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 		const s = this.settings;
 		const spaces: SharesDoc["spaces"] = s.sharedSpaces
 			.filter((sp) => sp.members.includes(st.studentId))
-			.map((sp) => ({ id: sp.id, name: sp.name, remoteDb: sp.remoteDb, folder: sp.folder, token: sp.token, kind: "share" }));
+			.map((sp) => ({ id: sp.id, name: sp.name, remoteDb: sp.remoteDb, folder: sp.folder, token: sp.token, kind: "share", realtime: sp.realtime !== false }));
 		// 개인 mirror 1:1 실시간(folder=""=학생 vault 전체). 동기화 링크는 안 만들고 room/token 용도로만.
 		if (st.realtime && st.realtimeToken) {
-			spaces.push({ id: `mirror-${st.studentId}`, name: st.studentName, remoteDb: st.remoteDb, folder: "", token: st.realtimeToken, kind: "mirror" });
+			spaces.push({ id: `mirror-${st.studentId}`, name: st.studentName, remoteDb: st.remoteDb, folder: "", token: st.realtimeToken, kind: "mirror", realtime: true });
 		}
 		const r = await admin.putDoc(st.remoteDb, { _id: SHARES_DOC_ID, type: "shares", spaces });
 		if (!r.ok) this.logger.error(t("command.failed_to_write_shares", { id: st.studentId, err: r.error ?? "" }));
@@ -465,36 +472,28 @@ export default class ClassSyncPlugin extends Plugin implements SettingsHost, Con
 	}
 
 	/**
-	 * 한 학생의 개인 mirror 실시간 허용/해제 적용(학생 카드 토글용).
-	 * 토큰 발급/회수 + 해당 학생 shares/rtconfig 기록 + 모드 재시작. 공유 공간 없이도 동작한다.
+	 * 실시간 토글(학생 개인 폴더/공유 공간/전체) 적용. 토큰 재발급 + 프로비저닝된 모든 학생의 shares/rtconfig
+	 * 재기록 + 모드 재시작. 공유 공간을 재배포(재프로비저닝)하지 않고 실시간 설정만 전파한다.
 	 */
-	async deployStudentRealtime(student: StudentConfig): Promise<void> {
+	async redeployRealtime(): Promise<void> {
 		if (this.settings.role !== "teacher") return;
-		await this.activatePanel("log");
 		const s = this.settings;
 		const adminPw = this.couchPassword();
 		if (!s.couchdbUrl || !s.username || !adminPw) {
 			this.logger.warn(t("command.enter_the_admin_account_couchdb_url"), true);
 			return;
 		}
-		if (!student.provisioned || !student.remoteDb) {
-			this.logger.warn(t("command.invite_the_student_first", { id: student.studentId }), true);
-			return;
-		}
-		if (student.realtime && !getSecretValue(this.app, YJS_SECRET_ID, s.yjsSecret)) {
+		const wantsRealtime = s.students.some((st) => st.realtime) || s.sharedSpaces.some((sp) => sp.realtime !== false && sp.members.length > 0);
+		if (s.realtimeEnabled && wantsRealtime && !getSecretValue(this.app, YJS_SECRET_ID, s.yjsSecret)) {
 			this.logger.warn(t("command.realtime_needs_yjs_secret"), true);
 		}
-		await this.mintMirrorToken(student);
+		await this.mintRealtimeTokens();
 		await this.saveSettings();
 		const admin = new CouchAdmin(s.couchdbUrl, s.username, adminPw);
-		await this.writeStudentSync(admin, student);
-		this.logger.ok(
-			t("command.student_realtime_updated", {
-				id: student.studentId,
-				state: student.realtime ? t("common.on") : t("common.off"),
-			}),
-			true,
-		);
+		for (const st of s.students) {
+			if (st.provisioned && st.remoteDb) await this.writeStudentSync(admin, st);
+		}
+		this.logger.ok(t("command.realtime_settings_applied"), true);
 		await this.restartMode();
 	}
 

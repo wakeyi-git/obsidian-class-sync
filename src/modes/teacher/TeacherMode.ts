@@ -52,7 +52,10 @@ export class TeacherMode implements ClassSyncMode {
 			.filter((st) => st.realtime && st.realtimeToken)
 			.map((st) => ({ id: `mirror-${st.studentId}`, folder: st.localRoot, token: st.realtimeToken, kind: "mirror" as const }));
 		core.sharedSpaces = [
-			...shared.map((sp) => ({ id: sp.id, folder: sp.folder, token: sp.token, kind: "share" as const })),
+			// 공유 공간은 realtime!==false인 것만 실시간 대상(파일 동기화 링크는 위에서 별도로 모두 구성됨).
+			...shared
+				.filter((sp) => sp.realtime !== false)
+				.map((sp) => ({ id: sp.id, folder: sp.folder, token: sp.token, kind: "share" as const })),
 			...mirrorSpaces,
 		];
 	}

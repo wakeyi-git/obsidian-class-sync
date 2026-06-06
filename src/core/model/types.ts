@@ -106,6 +106,8 @@ export interface SharesDoc extends PouchDocBase {
 		 * 별도 링크를 만들지 않고 실시간(room/token) 용도로만 쓴다.
 		 */
 		kind?: "share" | "mirror";
+		/** 이 공간에서 실시간 공동 편집을 쓸지(미설정/true=사용, false=끔). 파일 동기화와 무관. */
+		realtime?: boolean;
 	}>;
 }
 

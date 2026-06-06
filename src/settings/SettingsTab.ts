@@ -61,7 +61,7 @@ export interface SettingsHost extends Plugin {
 	rotateStudentPassword(student: StudentConfig): Promise<void>;
 	ingestInvite(code: string): Promise<void>;
 	deployShared(space: SharedSpace): Promise<void>;
-	deployStudentRealtime(student: StudentConfig): Promise<void>;
+	redeployRealtime(): Promise<void>;
 	exportSettingsJson(): string;
 	importSettingsJson(json: string): Promise<{ ok: boolean; error?: string }>;
 	openResetModal(): void;
@@ -283,6 +283,59 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 					});
 				}),
 		);
+
+		this.renderRealtimeTargets(rt, s);
+	}
+
+	/** 실시간 대상 선택: 학생 개인 폴더(전체+개별), 공유 공간(개별). 토글 즉시 토큰 재발급 + 전파. */
+	private renderRealtimeTargets(rt: SettingGroup, s: ClassSyncSettings): void {
+		// --- 학생 개인 폴더 1:1 실시간(교사↔해당 학생) ---
+		const students = s.students.filter((st) => st.studentId && st.provisioned);
+		rt.addSetting((set) => set.setName(t("settings.realtime_per_student")).setDesc(t("settings.realtime_per_student_desc")).setHeading());
+		if (students.length === 0) {
+			rt.addSetting((set) => set.setDesc(t("settings.realtime_invite_students_first")));
+		} else {
+			const allOn = students.every((st) => st.realtime);
+			rt.addSetting((set) =>
+				set.setName(t("settings.realtime_all_students")).addToggle((tg) =>
+					tg.setValue(allOn).onChange(async (v) => {
+						students.forEach((st) => (st.realtime = v));
+						await this.host.saveSettings();
+						await this.host.redeployRealtime();
+						this.display();
+					}),
+				),
+			);
+			for (const st of students) {
+				rt.addSetting((set) =>
+					set.setName(st.studentName || st.studentId).addToggle((tg) =>
+						tg.setValue(!!st.realtime).onChange(async (v) => {
+							st.realtime = v;
+							await this.host.saveSettings();
+							await this.host.redeployRealtime();
+							this.display();
+						}),
+					),
+				);
+			}
+		}
+
+		// --- 공유 공간 실시간(공간별) ---
+		if (s.sharedSpaces.length > 0) {
+			rt.addSetting((set) => set.setName(t("settings.realtime_shared")).setDesc(t("settings.realtime_shared_desc")).setHeading());
+			for (const sp of s.sharedSpaces) {
+				rt.addSetting((set) =>
+					set.setName(sp.name || sp.id).addToggle((tg) =>
+						tg.setValue(sp.realtime !== false).onChange(async (v) => {
+							sp.realtime = v;
+							await this.host.saveSettings();
+							await this.host.redeployRealtime();
+							this.display();
+						}),
+					),
+				);
+			}
+		}
 	}
 
 	private renderSharedCard(group: SettingGroup, sp: SharedSpace, index: number): void {
@@ -425,21 +478,6 @@ export class ClassSyncSettingTab extends PluginSettingTab {
 		// 비우면 초대 시점에 학생 ID로 자동 채움 (계정=ID, DB=mirror_<ID>, 폴더=이름/ID)
 		this.studentField(card, t("settings.mirror_db_auto_if_empty"), st, "remoteDb", t("settings.mirror_studentid"));
 		this.studentField(card, t("settings.folder_auto_if_empty"), st, "localRoot", t("settings.name_or_studentid"));
-
-		// 개인 mirror 1:1 실시간 공동 편집(교사↔이 학생). 초대(프로비저닝) 후에만 노출.
-		if (st.provisioned) {
-			new Setting(card)
-				.setName(t("settings.realtime_mirror"))
-				.setDesc(t("settings.realtime_mirror_desc"))
-				.addToggle((tg) =>
-					tg.setValue(!!st.realtime).onChange(async (v) => {
-						st.realtime = v;
-						await this.host.saveSettings();
-						await this.host.deployStudentRealtime(st);
-						this.display();
-					}),
-				);
-		}
 
 		card.createEl("div", {
 			cls: "class-sync-student-status",

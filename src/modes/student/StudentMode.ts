@@ -54,9 +54,12 @@ export class StudentMode implements ClassSyncMode {
 			const s = this.core.settings;
 			await this.applyRtConfig(); // 교사가 배포한 실시간 설정 수신
 			const spaces = await this.readShares();
-			// 실시간(RealtimeManager)은 mirror 공간까지 모두 참조.
-			this.core.sharedSpaces = spaces.map((sp) => ({ id: sp.id, folder: sp.folder, token: sp.token, kind: sp.kind }));
+			// 실시간(RealtimeManager)은 realtime!==false인 공간만(mirror는 항상 실시간 용도). 파일 동기화와 무관.
+			this.core.sharedSpaces = spaces
+				.filter((sp) => sp.kind === "mirror" || sp.realtime !== false)
+				.map((sp) => ({ id: sp.id, folder: sp.folder, token: sp.token, kind: sp.kind }));
 			// 동기화 링크는 공유 공간(kind!=="mirror")만 만든다 — mirror는 개인 mirror로 이미 동기화되므로 중복 금지.
+			// 실시간 on/off와 무관하게 모든 공유 공간을 동기화한다.
 			const linkSpaces = spaces.filter((sp) => sp.kind !== "mirror");
 			const sharedFolders = linkSpaces.map((sp) => sp.folder);
 			const allRoots = [s.localRoot, ...sharedFolders];
