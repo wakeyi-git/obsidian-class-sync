@@ -30,8 +30,8 @@ Highlights:
 
 ### Requirements
 - **Obsidian 1.11.4+** (desktop and mobile). 1.11.4 is required because the plugin uses the Secret Storage API.
-- **Self-hosted CouchDB** (e.g. Synology NAS) — the required central server. [Setup](#couchdb-required).
-- **Yjs WebSocket server** — only needed for realtime co-editing. Per-space HMAC tokens (`YJS_SECRET`) recommended ([setup](#yjs-realtime-server-optional), files in [`server/`](server/)).
+- **Self-hosted CouchDB** (e.g. Synology NAS) — the required central server. [Setup](server/README.md#couchdb-required).
+- **Yjs WebSocket server** — only needed for realtime co-editing. Per-space HMAC tokens (`YJS_SECRET`) recommended ([setup](server/README.md#yjs-realtime-server-optional), runtime files in [`server/yjs/`](server/yjs/)).
 - **Excalidraw plugin** — only needed for realtime co-editing of Excalidraw drawings (that feature auto-disables if not installed).
 
 ---
@@ -96,40 +96,15 @@ Copy the three outputs to the path in ② above.
 
 ## Server setup
 
-Class Sync uses **two independent servers**: CouchDB (file sync, required) and the Yjs server (realtime, optional).
-They **never talk to each other** — the plugin is the only client of both — so they don't need to share a host or a
-network. Put them on the same box for convenience, or on entirely different providers; the only hard requirement is
-that **every client (teacher + all students) can reach each one over HTTPS/WSS**.
+Class Sync uses **two independent servers** — **CouchDB** (file sync, required) and a **Yjs WebSocket server**
+(realtime co-editing, optional). They **never talk to each other** (the plugin is the only client of both), so they can
+share one box or run on entirely different providers; the only hard requirement is that **every client (teacher + all
+students) reaches each one over HTTPS/WSS**.
 
-The examples below use a Synology NAS, but any Docker host works (another NAS, a home server/Raspberry Pi, a cloud VPS,
-or a PaaS). For **other hosting options, constraints, and the realtime server's details**, see
-[`server/README.md`](server/README.md).
-
-### CouchDB (required)
-The central server (Synology NAS Docker example):
-
-```bash
-docker run -d --name couchdb -p 5984:5984 \
-  -e COUCHDB_USER=admin -e COUCHDB_PASSWORD='****' couchdb:3
-```
-
-1. HTTPS recommended (Synology reverse proxy + Let's Encrypt).
-2. Student accounts, mirror DBs, and permissions are **auto-created by the teacher from the plugin**, so no manual
-   work is needed (Teacher Mode provisions `_users` accounts + `mirror_*` DBs + `_security` with the admin account).
-3. CORS is **optional**. This plugin bypasses CORS via Obsidian's `requestUrl`, so it works without it, but enabling
-   it is handy for browser tools like Fauxton. Obsidian origins:
-   - `app://obsidian.md` (desktop) · `capacitor://localhost` (iOS) · `http://localhost` (Android)
-
-### Yjs realtime server (optional)
-Only for **realtime co-editing** — independent of CouchDB file sync; skip it if you only need file sync. Server files
-are in [`server/`](server/) (full steps in [`server/README.md`](server/README.md)):
-
-1. `cd server/yjs && docker compose up -d --build` (LevelDB persistence in `./data`).
-2. Put the output of `openssl rand -hex 32` in both the server's **`YJS_SECRET`** env var and the plugin's **'Yjs space
-   secret (HMAC)'** — same value (issues per-space signed tokens; a leak only grants that space's room).
-3. **Don't expose port 1234 directly** — put it behind an HTTPS reverse proxy (`wss://`, forwarding WebSocket headers).
-4. The token is a `?token=` query, so **mask query strings in proxy/CDN/monitoring access logs** (Synology DSM:
-   `server/yjs/disable-yjs-accesslog.sh`).
+Full setup lives in **[`server/README.md`](server/README.md)** — Docker commands, hosting options
+(NAS / Raspberry Pi / VPS / PaaS / Cloudant), the architecture and constraints, and the realtime server's security
+(reverse proxy `wss://`, `YJS_SECRET`, access-log masking). The realtime server's runtime files are in
+[`server/yjs/`](server/yjs/).
 
 ---
 
@@ -206,7 +181,7 @@ closing, so non-realtime/offline members get the latest sooner (only one leader 
 co-editing even without a mouse (same for markdown and Excalidraw); on touch devices you can double-tap to enter text
 and the pointer follows your swipe immediately.
 
-To run the Yjs server, see **[Server setup → Yjs realtime server](#yjs-realtime-server-optional)** (files in [`server/`](server/)).
+To run the Yjs server, see **[`server/README.md` → Yjs realtime server](server/README.md#yjs-realtime-server-optional)** (runtime files in [`server/yjs/`](server/yjs/)).
 
 **Realtime token security** — set `YJS_SECRET` on the server and the same value in the plugin's **'Yjs space secret (HMAC)'**;
 then each time the teacher deploys a space, a **per-shared-space signed token** is issued and delivered to students. The

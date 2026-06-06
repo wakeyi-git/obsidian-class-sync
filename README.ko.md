@@ -30,8 +30,8 @@ TeacherVault/
 
 ### 요구사항
 - **Obsidian 1.11.4 이상** (데스크톱·모바일 모두 지원). Secret Storage API 사용으로 1.11.4가 필요합니다.
-- **자가 호스팅 CouchDB** (시놀로지 NAS 등) — 필수 중앙 서버. [설정 방법](#couchdb-필수).
-- **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택. 공유 공간별 HMAC 토큰(`YJS_SECRET`) 권장 ([설정](#yjs-실시간-서버-선택), 구동 파일은 [`server/`](server/)).
+- **자가 호스팅 CouchDB** (시놀로지 NAS 등) — 필수 중앙 서버. [설정 방법](server/README.md#couchdb-필수).
+- **Yjs WebSocket 서버** — 실시간 공동 편집을 쓸 때만 선택. 공유 공간별 HMAC 토큰(`YJS_SECRET`) 권장 ([설정](server/README.md#yjs-실시간-서버-선택), 구동 파일은 [`server/yjs/`](server/yjs/)).
 - **Excalidraw 플러그인** — Excalidraw 그림 실시간 공동 편집을 쓸 때만 선택(미설치 시 해당 기능만 자동 비활성).
 
 ---
@@ -96,39 +96,14 @@ npm run build      # main.js 생성 (개발 중에는 npm run dev 로 watch)
 
 ## 서버 준비
 
-Class Sync는 **독립적인 두 서버**를 씁니다: CouchDB(파일 동기화, 필수)와 Yjs 서버(실시간, 선택). 두 서버는 **서로 통신하지
-않으며**(플러그인이 둘의 유일한 클라이언트), 같은 호스트·네트워크에 묶을 필요가 없습니다. 편의상 한 서버에 함께 둘 수도, 완전히
-다른 제공자에 나눠 둘 수도 있습니다. 유일한 필수 조건은 **모든 클라이언트(교사 + 모든 학생)가 각각에 HTTPS/WSS로 닿을 수 있어야**
-한다는 것입니다.
+Class Sync는 **독립적인 두 서버**를 씁니다 — **CouchDB**(파일 동기화, 필수)와 **Yjs WebSocket 서버**(실시간 공동 편집,
+선택). 두 서버는 **서로 통신하지 않으며**(플러그인이 둘의 유일한 클라이언트), 한 서버에 함께 두거나 완전히 다른 제공자에
+나눠 둘 수 있습니다. 유일한 필수 조건은 **모든 클라이언트(교사 + 모든 학생)가 각각에 HTTPS/WSS로 닿을 수 있어야** 한다는
+것입니다.
 
-아래 예시는 시놀로지 NAS 기준이지만, Docker가 도는 곳이면 어디든 됩니다(다른 NAS, 홈서버/라즈베리파이, 클라우드 VPS, PaaS).
-**다른 호스팅 방법·제약 사항·실시간 서버 상세**는 [`server/README.md`](server/README.md)를 참고하세요.
-
-### CouchDB (필수)
-중앙 서버 (시놀로지 NAS Docker 예시):
-
-```bash
-docker run -d --name couchdb -p 5984:5984 \
-  -e COUCHDB_USER=admin -e COUCHDB_PASSWORD='****' couchdb:3
-```
-
-1. HTTPS 권장 (시놀로지 리버스 프록시 + Let's Encrypt)
-2. 학생 계정·mirror DB·권한은 **교사가 플러그인에서 자동 생성**하므로 수동 작업 불필요
-   (교사 Teacher Mode의 관리자 계정으로 `_users` 계정 + `mirror_*` DB + `_security`를 프로비저닝).
-3. CORS는 **선택 사항**입니다. 이 플러그인은 Obsidian `requestUrl`로 CORS를 우회하므로 없어도
-   동작하지만, Fauxton 등 브라우저 도구를 쓰려면 켜두면 편합니다. Obsidian origin:
-   - `app://obsidian.md` (데스크톱) · `capacitor://localhost` (iOS) · `http://localhost` (Android)
-
-### Yjs 실시간 서버 (선택)
-**실시간 공동 편집**에만 필요합니다 — 파일 동기화(CouchDB)와 독립적이라, 파일 동기화만 쓸 거면 건너뜁니다.
-서버 구동 파일은 [`server/`](server/) 폴더에 있습니다(자세한 단계는 [`server/README.md`](server/README.md)):
-
-1. `cd server/yjs && docker compose up -d --build` 로 컨테이너를 띄웁니다(영속 저장은 `./data`, LevelDB).
-2. `openssl rand -hex 32` 로 만든 값을 서버 환경변수 **`YJS_SECRET`** 과 플러그인 설정 **‘Yjs 공간 시크릿(HMAC)’**
-   에 **동일하게** 둡니다(공유 공간별 서명 토큰 발급 → 유출돼도 해당 공간 room만 접근).
-3. **포트 1234를 직접 열지 말고** HTTPS 리버스 프록시(`wss://`) 뒤에 둡니다(WebSocket Upgrade 헤더 전달).
-4. 토큰은 `?token=` 쿼리로 전달되므로 프록시/CDN/모니터링 **접근 로그에서 쿼리를 마스킹**합니다(시놀로지 DSM은
-   `server/yjs/disable-yjs-accesslog.sh` 참고).
+자세한 구축 방법은 **[`server/README.md`](server/README.md)** 에 있습니다 — Docker 명령, 호스팅 선택지
+(NAS / 라즈베리파이 / VPS / PaaS / Cloudant), 구조와 제약, 실시간 서버 보안(리버스 프록시 `wss://`, `YJS_SECRET`,
+접근 로그 마스킹). 실시간 서버 구동 파일은 [`server/yjs/`](server/yjs/)에 있습니다.
 
 ---
 
@@ -201,7 +176,7 @@ docker run -d --name couchdb -p 5984:5984 \
 태블릿·모바일에서도 누가 함께 편집 중인지 보입니다(마크다운·Excalidraw 동일). 터치 기기에서는 더블탭으로
 텍스트를 입력할 수 있고, 손가락으로 스와이프하면 포인터가 즉시 따라갑니다.
 
-Yjs 서버를 띄우는 방법은 **[서버 준비 → Yjs 실시간 서버](#yjs-실시간-서버-선택)**(구동 파일은 [`server/`](server/))를 참고하세요.
+Yjs 서버를 띄우는 방법은 **[`server/README.md` → Yjs 실시간 서버](server/README.md#yjs-실시간-서버-선택)**(구동 파일은 [`server/yjs/`](server/yjs/))를 참고하세요.
 
 **실시간 토큰 보안** — 서버에 `YJS_SECRET`을 설정하고 플러그인 설정의 **'Yjs 공간 시크릿(HMAC)'** 에 같은 값을
 넣으면, 교사가 공간을 배포할 때마다 **공유 공간별 서명 토큰**이 발급되어 학생에게 전달됩니다. 토큰 payload에
